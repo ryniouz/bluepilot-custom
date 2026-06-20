@@ -131,33 +131,42 @@ def main() -> None:
 
       cloudlog.info(f"{len(panda_serials)} panda(s) found, connecting - {panda_serials}")
 
-      # When multiple pandas are present (e.g. red panda attached), USB enumeration
-      # order is non-deterministic — the internal tres can appear at any position.
-      # Mirror the AdventurePilot check_panda_support() pattern: try SPI first
-      # (no USB open needed), then fall back to is_internal() for USB pandas.
+      # POC (bp-6gb-rpc2): FULLY SWITCH PANDA ROLES.
+      # Normally the internal panda is forced to be primary (index 0). For the 6GB/Bronco
+      # red-panda-TX proof-of-concept we invert this: when an external red panda is attached
+      # alongside the internal panda, the EXTERNAL panda becomes the primary (index 0). That
+      # matters because pandad only ever runs a can_send thread for the primary panda
+      # (see pandad.cc), and safetyConfigs[0] (ford / TX-capable) is applied to the primary.
+      # Result: the external red panda gets the send thread + ford safety and can TRANSMIT on
+      # the PSCM intercept harness, while the internal panda is demoted to a noOutput monitor
+      # (safetyConfigs[1]). This only triggers when BOTH an internal and an external panda are
+      # present, so a normal single-panda setup is unaffected.
+      external_primary = False
       if HARDWARE.has_internal_panda() and len(panda_serials) > 1:
-        primary_serial = None
-        # 1. SPI panda (comma 3X / newer hardware) — always internal
         spi_serials = set(Panda.spi_list())
+        internal_serial = None
+        external_serials = []
         for s in panda_serials:
-          if s in spi_serials:
-            primary_serial = s
-            break
-        # 2. USB internal panda (TICI / tizi) — check is_internal() per serial
-        if primary_serial is None:
-          for s in panda_serials:
+          is_internal = s in spi_serials
+          if not is_internal:
+            # not an SPI panda — open it to check is_internal() (TICI/tizi USB internal panda)
             try:
               p = Panda(s)
-              if p.is_internal():
-                primary_serial = s
-                p.close()
-                break
+              is_internal = p.is_internal()
               p.close()
             except Exception:
               cloudlog.exception(f"Error checking panda {s} for internal status")
-        if primary_serial is not None:
-          panda_serials = [primary_serial] + [x for x in panda_serials if x != primary_serial]
-          cloudlog.info(f"Internal panda {primary_serial} identified, reordered list: {panda_serials}")
+          if is_internal and internal_serial is None:
+            internal_serial = s
+          else:
+            external_serials.append(s)
+        if internal_serial is not None and external_serials:
+          # External red panda(s) first (primary), internal panda last (secondary monitor)
+          panda_serials = external_serials + [internal_serial]
+          external_primary = True
+          cloudlog.warning(f"rpc2: external red panda {external_serials[0]} set as PRIMARY (TX); "
+                           f"internal panda {internal_serial} demoted to secondary noOutput monitor. "
+                           f"reordered list: {panda_serials}")
 
       # Flash the primary panda (tres / internal)
       panda_serial = panda_serials[0]
@@ -166,8 +175,11 @@ def main() -> None:
       # flash Rivian longitudinal upgrade panda
       flash_rivian_long(panda)
 
-      # Ensure internal panda is present if expected
-      if HARDWARE.has_internal_panda() and not panda.is_internal():
+      # Ensure internal panda is present if expected.
+      # rpc2: when external_primary is set we INTENTIONALLY made the external red panda the
+      # primary, so the primary won't be internal — skip the bail-out (the internal panda is
+      # still required, just as a secondary; it's flashed in the secondary loop below).
+      if HARDWARE.has_internal_panda() and not panda.is_internal() and not external_primary:
         cloudlog.error("Internal panda is missing, trying again")
         no_internal_panda_count += 1
         continue

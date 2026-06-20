@@ -416,6 +416,18 @@ void pandad_run(Panda *panda, int panda_index,
     // Process peripheral state at 20 Hz
     if (rk.frame() % 5 == 0) {
       process_peripheral_state(panda, &pm, no_fan_control);
+
+      // rpc2 POC: HARDCODE the C3X fan to 100%. The fan lives on the internal panda, which is
+      // now a SECONDARY after the role switch. Normal peripheral fan control above only drives
+      // the PRIMARY (the red panda, which has no fan), so the C3X fan would otherwise be left
+      // uncommanded. Force every connected secondary panda's fan to 100% (percent) to keep the
+      // C3X cool during the test. Only runs when secondaries exist (the dual-panda test), so a
+      // normal single-panda setup keeps its usual thermal-based fan control untouched.
+      for (auto &[p, idx] : secondary_pandas) {
+        if (p->connected()) {
+          p->set_fan_speed(100);
+        }
+      }
     }
 
     // Process panda state at 10 Hz
