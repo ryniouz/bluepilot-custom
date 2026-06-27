@@ -138,7 +138,8 @@ class CarInterface(CarInterfaceBase):
 
     # BSM: Side_Detect_L_Stat, Side_Detect_R_Stat
     # TODO: detect bsm in car_fw?
-    ret.enableBsm = 0x3A6 in fingerprint[CAN.main] and 0x3A7 in fingerprint[CAN.main]
+    ret.enableBsm = (0x3A6 in fingerprint[CAN.main] and 0x3A7 in fingerprint[CAN.main]) \
+                    and not (ret.flags & (FordFlags.CANFD_PSCM | FordFlags.CANFD_PSCM_RP | FordFlags.CANFD_PSCM_RP_MON))  # BSM on CANFD/PSCM bus, not parsed on bus 0
 
     if 0x365 in fingerprint[CAN.main]:  # F150 HEV Cluster_HEV_Data2 signal (869 = 0x365)
       ret.flags |= int(FordFlags.HEV_CLUSTER_DATA)
