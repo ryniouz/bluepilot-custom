@@ -68,6 +68,7 @@ class Page:
   action: Callable[[], str | None] | None = None        # header button label, or None for no button
   on_action: Callable[[], None] | None = None
   framed: bool = True                                   # draw the page body inside one panel
+  aliases: tuple = ()                                   # older keys that open this page (merged pages)
 
 
 class ItemsPage(Widget):
@@ -275,7 +276,7 @@ class ConsoleShell(Widget):
     """Open the page that hosts a settings PanelType (or a page key)."""
     for dest, pages in self._pages.items():
       for i, p in enumerate(pages):
-        if p.key == key:
+        if p.key == key or key in p.aliases:
           self.go(dest, i)
           return True
     return False
