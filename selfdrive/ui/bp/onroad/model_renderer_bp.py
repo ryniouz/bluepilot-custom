@@ -18,6 +18,7 @@ from openpilot.selfdrive.ui.bp.lib import theme_pack
 from openpilot.selfdrive.ui.bp.onroad.road_view import (LeadInfo, SHOW_EDGES, SHOW_LANES, SHOW_NEIGHBOURS, SHOW_SPEED_TAG,
                                                        draw_lead_marker, draw_speed_tag, lead_level, road_prefs)
 from bluepilot.ui.lib.theme import Console, Onroad, mix, with_alpha  # Custom: Console theme
+from openpilot.selfdrive.ui.bp.onroad.lane_change_fx import LaneChangeFx
 
 # BluePilot: Lane line colors by status (upstream removed LANE_LINE_COLORS dict)
 # Custom: Console status hues; disengaged lines go ghost grey instead of black
@@ -71,6 +72,7 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
 
   def __init__(self):
     super().__init__()
+    self._lc_fx = LaneChangeFx()
     self._bp_params = Params()
     self._rainbow_v = 1.0
 
@@ -220,6 +222,8 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     if not self._rad_racer:
       self._draw_blindspot_lanes(sm)  # Custom: Console blind-spot lane tint
     self._draw_path(sm)
+    # Custom: looping lane change cue toward the target lane
+    self._lc_fx.render(self, sm, road_prefs.lane_change)
 
     # Custom: Console lead marker; the numbers go to the lead card (drawn by the road view)
     has_lead = bool(render_lead_indicator and radar_state and radar_state.leadOne.status and not self._rad_racer)

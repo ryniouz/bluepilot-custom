@@ -27,12 +27,14 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console.home import PERSONALITY_LABELS, PERSONALITY_VALUES
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS
 from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
-from openpilot.selfdrive.ui.bp.onroad.road_view import LEAD_STYLE_LABELS, OPTIONS as ROAD_OPTIONS, road_prefs
+from openpilot.selfdrive.ui.bp.onroad.road_view import LC_STYLE_LABELS, LEAD_STYLE_LABELS, OPTIONS as ROAD_OPTIONS, road_prefs
 
 AUTO_CLOSE_S = 8.0
 
 SHEET_MARGIN = 40        # from the screen edges
 SHEET_H = 400
+ROAD_ROWS = 3             # the Road view page is one card row taller
+ROAD_EXTRA_H = 128
 SHEET_RADIUS = 32
 SHEET_PAD = 36
 HEADER_H = 88            # title row; the action buttons are this tall
@@ -101,8 +103,11 @@ class QuickControls:
 
   # -- collapsed bar and drag ------------------------------------------------------------
 
+  def _sheet_h(self) -> float:
+    return SHEET_H + (ROAD_EXTRA_H if self._page == "road" else 0)
+
   def _travel(self) -> float:
-    return SHEET_H + SHEET_MARGIN
+    return self._sheet_h() + SHEET_MARGIN
 
   def _handle_rect(self, rect: rl.Rectangle) -> rl.Rectangle | None:
     """Minimal mode's handle bar, or None when the dock (which is itself the handle) shows or an
@@ -184,8 +189,9 @@ class QuickControls:
       return
 
     # The sheet rises from the bottom edge, following the finger while dragged
-    y_open = rect.y + rect.height - SHEET_H - SHEET_MARGIN
-    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open + (1 - self._p) * self._travel(), rect.width - 2 * SHEET_MARGIN, SHEET_H)
+    sheet_h = self._sheet_h()
+    y_open = rect.y + rect.height - sheet_h - SHEET_MARGIN
+    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open + (1 - self._p) * self._travel(), rect.width - 2 * SHEET_MARGIN, sheet_h)
     self._sheet = sheet
     rl.draw_rectangle_rounded(sheet, roundness(sheet, SHEET_RADIUS), 12, Console.BG_PANEL)
     rl.draw_rectangle_rounded_lines_ex(sheet, roundness(sheet, SHEET_RADIUS), 12, 2, Console.BORDER_DEFAULT)
@@ -272,9 +278,9 @@ class QuickControls:
     self._hits.append((c, lambda: setattr(self, "_page", "road")))
 
   def _render_road_page(self, body: rl.Rectangle):
-    """What the road view shows: a grid of switches, two rows."""
-    rows = 2
-    cols = (len(ROAD_OPTIONS) + 1 + rows - 1) // rows  # + the marker style cell
+    """What the road view shows: a grid of switches, then the marker and lane change style cells."""
+    rows = ROAD_ROWS
+    cols = (len(ROAD_OPTIONS) + 2 + rows - 1) // rows  # + the marker and lane change cells
     w = (body.width - CARD_GAP * (cols - 1)) / cols
     h = (body.height - CARD_GAP * (rows - 1)) / rows
     for i, (bit, label) in enumerate(ROAD_OPTIONS):
@@ -286,15 +292,18 @@ class QuickControls:
       D.toggle(c.x + w - CARD_PAD - 104, c.y + (h - 60) / 2, on)
       self._hits.append((c, lambda b=bit: road_prefs.toggle(b)))
 
-    # Lead marker style: tap to step through floor, bracket, corners, chevron
-    i = len(ROAD_OPTIONS)
-    c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
-    rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else Console.BG_RAISED)
-    D.text(tr("Marker"), c.x + CARD_PAD, c.y + (h - D.BODY) / 2 - 2, D.BODY, semi=True)
-    D.icon("chevron", c.x + w - CARD_PAD - 32, c.y + (h - 32) / 2, 32, Console.TEXT_MUTED)
-    D.text_right(tr(LEAD_STYLE_LABELS[road_prefs.marker]), c.x + w - CARD_PAD - 44, c.y + (h - D.BODY) / 2 - 2, D.BODY,
-                 Console.ACCENT_TEXT, semi=True)
-    self._hits.append((c, road_prefs.next_marker))
+    # Style cells: tap to step through the choices
+    steps = (("Marker", LEAD_STYLE_LABELS[road_prefs.marker], road_prefs.next_marker),
+             ("Lane change", LC_STYLE_LABELS[road_prefs.lane_change], road_prefs.next_lane_change))
+    for k, (label, value, step) in enumerate(steps):
+      i = len(ROAD_OPTIONS) + k
+      c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
+      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else Console.BG_RAISED)
+      ty = c.y + (h - D.BODY) / 2 - 2
+      D.text(tr(label), c.x + CARD_PAD, ty, D.BODY, semi=True)
+      D.icon("chevron", c.x + w - CARD_PAD - 32, c.y + (h - 32) / 2, 32, Console.TEXT_MUTED)
+      D.text_right(tr(value), c.x + w - CARD_PAD - 44, ty, D.BODY, Console.ACCENT_TEXT, semi=True)
+      self._hits.append((c, step))
 
   def _set_preset(self, v: int):
     try:
