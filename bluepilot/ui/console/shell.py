@@ -66,6 +66,7 @@ class Page:
   action: Callable[[], str | None] | None = None        # header button label, or None for no button
   on_action: Callable[[], None] | None = None
   framed: bool = True                                   # draw the page body inside one panel
+  aliases: tuple = ()                                   # older keys that open this page (merged pages)
 
 
 class ItemsPage(Widget):
@@ -138,7 +139,7 @@ class ConsoleShell(Widget):
     item_page(Dest.ENERGY, tr("Charging settings"), "sliders", "charging", tr("Energy"))
     panel(Dest.ENERGY, tr("Trips"), "route", "TRIPS", tr("Energy"))
 
-    from bluepilot.ui.console.pages.drives import DrivesPage, OffloadPage, StoragePage
+    from bluepilot.ui.console.pages.drives import DrivesPage, OffloadPage
     drives = DrivesPage()
     self.register_page(Dest.DRIVES, Page(tr("Previous drives"), "list", drives, key="drives", framed=False))
     offload = OffloadPage()
@@ -148,8 +149,6 @@ class ConsoleShell(Widget):
     self.register_page(Dest.DRIVES, Page(tr("Upload settings"), "sliders",
                                          UploadSettingsPage(getattr(wifi.instance, "_wifi_manager", None) if wifi is not None else None),
                                          key="upload_settings", framed=False))
-    storage = StoragePage()
-    self.register_page(Dest.DRIVES, Page(tr("Storage"), "download", storage, key="drives_storage", framed=False))
 
     item_page(Dest.SCREEN, tr("Theme and layout"), "palette", "theme", tr("Screen") + " | " + tr("Applies right away"))
     panel(Dest.SCREEN, tr("Visuals"), "eye", "VISUALS", tr("Screen"))
@@ -181,21 +180,25 @@ class ConsoleShell(Widget):
     panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))
     item_page(Dest.CONNECT, tr("Data export"), "export", "export", tr("Connect"))
 
+    # System: Updates (the old Software page merged in), Truck, Device, Calibration, Storage, Maps, Developer, About
     from bluepilot.ui.console.pages.updates import UpdatesPage
-    self.register_page(Dest.SYSTEM, Page(tr("Updates"), "download", UpdatesPage(), key="updates", framed=False))
-    panel(Dest.SYSTEM, tr("Device"), "cpu", "DEVICE", tr("System"))
-    from bluepilot.ui.console.pages.calibration import CalibrationPage
-    self.register_page(Dest.SYSTEM, Page(tr("Calibration"), "calibrate", CalibrationPage(), key="calibration", framed=False))
-    panel(Dest.SYSTEM, tr("Software"), "list", "SOFTWARE", tr("System"))
+    self.register_page(Dest.SYSTEM, Page(tr("Updates"), "download", UpdatesPage(), key="updates", framed=False,
+                                         aliases=tuple(k for k in (getattr(PT, "SOFTWARE", None),) if k is not None)))
     # This build only drives the F-150 Lightning: its own page instead of sunnypilot's all-makes vehicle panel
     from bluepilot.ui.console.pages.vehicle import VehiclePage
     vehicle = VehiclePage()
     vehicle.on_open_obd = self.open_obd
-    self.register_page(Dest.SYSTEM, Page(tr("Vehicle"), "car", vehicle, key="vehicle", framed=False))
+    self.register_page(Dest.SYSTEM, Page(tr("Truck"), "car", vehicle, key="vehicle", framed=False))
+    from bluepilot.ui.console.pages.device import DevicePage
+    self.register_page(Dest.SYSTEM, Page(tr("Device"), "cpu", DevicePage(), key=getattr(PT, "DEVICE", "device"), framed=False))
+    from bluepilot.ui.console.pages.calibration import CalibrationPage
+    self.register_page(Dest.SYSTEM, Page(tr("Calibration"), "calibrate", CalibrationPage(), key="calibration", framed=False))
+    from bluepilot.ui.console.pages.storage import StoragePage
+    self.register_page(Dest.SYSTEM, Page(tr("Storage"), "storage", StoragePage(), key="drives_storage", framed=False))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
     from bluepilot.ui.console.pages.about import AboutPage
-    self.register_page(Dest.SYSTEM, Page(tr("About"), "list", AboutPage(), key="about", subtitle=tr("System"), framed=False))
+    self.register_page(Dest.SYSTEM, Page(tr("About"), "info", AboutPage(), key="about", subtitle=tr("System"), framed=False))
 
   def _hide_torque_rows(self, PT):
     """The Lightning steers by curvature: torque control, torque tuning and NNLC never apply, so hide them
@@ -244,7 +247,7 @@ class ConsoleShell(Widget):
     """Open the page that hosts a settings PanelType (or a page key)."""
     for dest, pages in self._pages.items():
       for i, p in enumerate(pages):
-        if p.key == key:
+        if p.key == key or key in p.aliases:
           self.go(dest, i)
           return True
     return False

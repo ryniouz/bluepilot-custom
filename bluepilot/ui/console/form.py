@@ -23,6 +23,7 @@ Rows (all heights fixed, so layout never jumps):
             or a radio list (more options, or labels too long to fit)        76 + 80 per option
   Stepper   title, sub, - value +                                            ROW_SET  104
   Nav       title, sub, value and a chevron; opens a sub-page or panel       ROW_SET  104
+            (back=True: an accent "Back" row with the chevron pointing left)
   Action    title, sub, a button (primary, plain or danger)                  ROW_SET  104
   Info      label left, value right, optional status dot                     ROW_INFO  64
   Meter     label, value, and a thick squared bar (K.bar)                     ROW_METER 112
@@ -156,6 +157,7 @@ class Choice:
   sub: str = ""                 # radio list only: under the title
   subs: Sequence[str] = ()      # radio list only: one line under each option
   radio: bool | None = None     # force the radio list (True) or segmented (False)
+  unifont: bool = False         # option labels in scripts the UI font lacks (language names)
 
   def is_radio(self, w: float) -> bool:
     if self.radio is not None:
@@ -190,6 +192,7 @@ class Nav:
   sub: str
   fn: Callable[[], None]
   value: str = ""
+  back: bool = False            # a "Back" row: chevron on the left, pointing back
 
   def height(self, w: float) -> float:
     return ROW_SET
@@ -411,6 +414,10 @@ class FormPage(Widget):
       D.button(plus, "+", primary=False)
       if row.enabled:
         self._hits += [(minus, row.minus), (plus, row.plus)]
+    elif isinstance(row, Nav) and row.back:
+      D.icon("back", x - 4, y + (ROW_SET - 36) / 2, 36, Console.ACCENT)
+      D.text(row.title, x + 44, y + (ROW_SET - D.BODY) / 2 - 2, D.BODY, Console.ACCENT_TEXT, semi=True)
+      self._hits.append((r, row.fn))
     elif isinstance(row, Nav):
       vw = D.text_w(row.value, D.LABEL, semi=True) + 24 if row.value else 0
       self._title_sub(x, y, w - vw - 64, row.title, row.sub)
@@ -431,14 +438,15 @@ class FormPage(Widget):
       if row.enabled:
         self._hits.append((b, row.fn))
     elif isinstance(row, Info):
-      lw = D.text_w(row.label, D.LABEL) + 32
-      D.text(D.fit(row.label, D.LABEL, w * 0.5), x, y + (ROW_INFO - D.LABEL) / 2 - 2, D.LABEL, Console.TEXT_MUTED)
       vx = right
       if row.dot is not None:
         D.dot(right - 9, y + ROW_INFO / 2, 9, row.dot)
         vx -= 32
-      D.text_right(D.fit(row.value, D.LABEL, vx - x - lw, semi=True), vx, y + (ROW_INFO - D.LABEL) / 2 - 2, D.LABEL,
-                   semi=True)
+      value = D.fit(row.value, D.LABEL, (vx - x) * 0.62, semi=True)
+      vw = D.text_w(value, D.LABEL, semi=True)
+      ty = y + (ROW_INFO - D.LABEL) / 2 - 2
+      D.text(D.fit(row.label, D.LABEL, vx - x - vw - 32), x, ty, D.LABEL, Console.TEXT_MUTED)
+      D.text_right(value, vx, ty, D.LABEL, semi=True)
     elif isinstance(row, Meter):
       D.text(D.fit(row.label, D.LABEL, w * 0.6), x, y + 16, D.LABEL, Console.TEXT_MUTED)
       D.text_right(row.value, right, y + 12, D.BODY, semi=True)
@@ -478,8 +486,12 @@ class FormPage(Widget):
       rl.draw_ring(rl.Vector2(cx, cy), 13, 17, 0, 360, 32, Console.ACCENT if sel else Console.TEXT_MUTED)
       if sel:
         rl.draw_circle(int(cx), int(cy), 8, Console.ACCENT)
-      D.text(D.fit(opt, D.BODY - 2, o.width - 104, semi=True), o.x + 80, cy - (D.BODY - 2) / 2 - 2, D.BODY - 2,
-             col, semi=True)
+      if row.unifont and any(ord(ch) > 0x04FF for ch in opt):  # Latin, Greek, Cyrillic: the UI font has them
+        from openpilot.system.ui.lib.application import FontWeight, gui_app
+        rl.draw_text_ex(gui_app.font(FontWeight.UNIFONT), opt, rl.Vector2(o.x + 80, cy - (D.BODY - 2) / 2 - 2), D.BODY - 2, 0, col)
+      else:
+        D.text(D.fit(opt, D.BODY - 2, o.width - 104, semi=True), o.x + 80, cy - (D.BODY - 2) / 2 - 2, D.BODY - 2,
+               col, semi=True)
       if row.subs and i < len(row.subs) and row.subs[i]:
         D.text(D.fit(row.subs[i], D.LABEL - 2, o.width - 104), o.x + 80, cy + 22, D.LABEL - 2, Console.TEXT_MUTED)
       if row.enabled:

@@ -20,6 +20,7 @@ from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.boot import logo_texture
 from bluepilot.ui.console.home import _param
 from bluepilot.ui.console.pages.cards import GAP, CardPage
+from bluepilot.ui.console.pages.updates import commit_date
 from bluepilot.ui.lib.theme import Console
 
 NAME = "Citadel Auto OS"
@@ -69,7 +70,7 @@ class AboutPage(CardPage):
     commit = self._get("GitCommit")[:7]
     rows = [
       (tr("Branch"), self._get("GitBranch")),
-      (tr("Commit"), commit + (f"  ·  {self._get('GitCommitDate')[:10]}" if commit and self._get("GitCommitDate") else "")),
+      (tr("Commit"), commit + (f"  ·  {commit_date(self._get('GitCommitDate'))}" if commit and self._get("GitCommitDate") else "")),
       (tr("Device"), "comma 3X"),
       (tr("Serial"), self._get("HardwareSerial")),
       (tr("Dongle ID"), self._get("DongleId")),
