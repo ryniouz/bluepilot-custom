@@ -80,6 +80,16 @@ def active_alerts(params: Params) -> list[tuple[str, int]]:
       continue
     text = val.get("text", "") if isinstance(val, dict) else ""
     out.append((str(text or cfg.get("text", "")).replace("%1", "").strip(), int(cfg.get("severity", 0))))
+  # Lightning-only build: card went passive for another car (stream B, BPPlatformMismatch; cleared on the next match)
+  try:
+    other = params.get("BPPlatformMismatch")
+  except Exception:
+    other = None
+  if other:
+    from bluepilot.ui.console.pages.vehicle import platform_name
+    other = other.decode(errors="ignore") if isinstance(other, bytes) else str(other)
+    out.insert(0, (tr("Detected") + f" {platform_name(other)}: " +
+                   tr("driver assist is off. This build only drives the Ford F-150 Lightning."), 1))
   return out
 
 

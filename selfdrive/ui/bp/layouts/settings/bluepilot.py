@@ -843,8 +843,10 @@ class BluePilotLayout(Widget):
         self._use_custom_sounds,
         self._custom_sound_selection_btn,
       ]) +
+      # Custom: no onroad border, DM icon or hybrid gauges on the Console driving view (the EV dock
+      # replaces them), so their rows are left out: Hide Onroad Border, DM icon style, Battery/Power
+      # flow gauge, size, style
       _section(tr("Visuals"), [
-        self._hide_onroad_border,
         self._disable_lane_line_status_color,
         # Custom: Road Theme, Auto Seasonal and Hide Camera View live on Screen > Theme and layout
         self._rainbow_lane_lines,
@@ -853,13 +855,8 @@ class BluePilotLayout(Widget):
         self._show_confidence_ball,
         self._animate_steering_wheel,
         self._wheel_icon_style_btn,
-        self._dm_icon_style_btn,
         self._show_ford_radar_overlay,
         self._radar_overlay_size_btn,
-        self._show_hybrid_battery_status,
-        self._show_hybrid_power_flow,
-        self._hybrid_gauge_size_btn,
-        self._hybrid_gauge_style_btn,
       ]) +
       _section(tr("Longitudinal Tuning"), [
         self._disable_BP_long,

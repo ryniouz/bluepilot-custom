@@ -46,6 +46,7 @@ SCENES: dict[str, str] = {
   "standby": "Parked standby splash (offroad idle)",
   "home": "Offroad Home dashboard in the Console shell",
   "home_alerts": "Offroad home with offroad alerts + update available",
+  "home_mismatch": "Home > Alerts after the comma refused a non-Lightning car (BPPlatformMismatch)",
   "home_charging": "Home after the charging page was minimized (Charging card reopens it)",
   "drives": "Drives > Previous drives (fake log root, some synced)",
   "drives_offload": "Drives > Offloading (comma connect queue + Citadel sync)",
@@ -1065,7 +1066,7 @@ def run_scene(sc: Scene):
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
-              "truck_data", "truck_data_off", "truck_data_asleep", "boot_progress", "boot_error"):
+              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1288,6 +1289,12 @@ def run_scene(sc: Scene):
     home = sc.main._layouts[sc.MainState.HOME]
     if hasattr(home, "last_refresh"):
       home.last_refresh = 0
+    sc.settle()
+    sc.shot()
+  elif name == "home_mismatch":
+    sc.put("BPPlatformMismatch", "FORD_F_150_MK14")
+    sc.main._open_shell()
+    sc.main._shell.open_panel("alerts")
     sc.settle()
     sc.shot()
   elif name == "settings":
