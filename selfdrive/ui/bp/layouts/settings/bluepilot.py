@@ -150,7 +150,7 @@ class BluePilotLayout(Widget):
 
     # Minimal driving view toggle
     self._hide_camera_view = toggle_item(
-      lambda: tr("Minimal Driving View"),
+      lambda: tr("Hide Camera View"),  # Custom: Console calls its Minimal layout preset "Minimal"; this hides the camera
       lambda: tr("Disable camera feed & only show lane lines and model path."),
       initial_state=self._safe_get_bool(self._params, "BPHideCameraView"),
       callback=lambda state: self._toggle_callback(state, "BPHideCameraView"),
@@ -219,7 +219,7 @@ class BluePilotLayout(Widget):
     self._theme_action = ButtonAction(lambda: tr("SELECT"))
     self._theme_action.set_value(lambda: self._get_theme_display())
     self._theme_pack_btn = ListItem(
-      lambda: tr("Theme"),
+      lambda: tr("Road Theme"),  # Custom: Console's Theme row is day/night; this is 7.0's pack / 8-Bit Racer
       description=lambda: tr("8-Bit Racer game view, or a seasonal theme pack (recolors the road and the wheel icon)."),
       action_item=self._theme_action,
       callback=self._select_theme,
@@ -831,8 +831,7 @@ class BluePilotLayout(Widget):
         self._preferred_network_btn,
         self._clear_model_cache_btn,
         self._ui_debug_log,
-        self._connect_backend_btn,
-        self._restore_dongle_btn,
+        # Custom: Connect Backend and Restore Dongle ID live on Connect > Connect backend
         self._reset_menu_btn,
       ]) +
       _section(tr("Vehicle"), [
@@ -847,9 +846,7 @@ class BluePilotLayout(Widget):
       _section(tr("Visuals"), [
         self._hide_onroad_border,
         self._disable_lane_line_status_color,
-        self._hide_camera_view,
-        self._theme_pack_btn,
-        self._theme_auto_seasonal,
+        # Custom: Road Theme, Auto Seasonal and Hide Camera View live on Screen > Theme and layout
         self._rainbow_lane_lines,
         self._show_blindspot,
         self._show_brake_status,
@@ -1227,11 +1224,16 @@ class BluePilotLayout(Widget):
   def console_page_refresh(self):
     self._layout_preset_btn.action_item.set_selected_button(self._layout_preset_idx())
     self._console_scale_btn.action_item.set_selected_button(self._console_scale_idx())
+    # 7.0 rows on Console pages (sunnylink and the bridge can change them too)
+    self._theme_auto_seasonal.action_item.set_state(self._safe_get_bool(self._params, "BPThemeAutoSeasonal"))
+    self._hide_camera_view.action_item.set_state(self._safe_get_bool(self._params, "BPHideCameraView"))
 
   # Custom: rows the Console shell shows on its own pages
   def console_page_items(self) -> dict[str, list]:
     return {
-      "theme": [self._console_mode_btn, self._console_scale_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud],
+      "theme": [self._console_mode_btn, self._console_scale_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud,
+                self._theme_pack_btn, self._theme_auto_seasonal, self._hide_camera_view],
+      "backend": [self._connect_backend_btn, self._restore_dongle_btn],
       "charging": [self._charging_screen, self._charge_sleep_btn],
       "export": [self._bridge_enabled, self._keep_until_synced, self._bridge_address, self._bridge_token],
     }

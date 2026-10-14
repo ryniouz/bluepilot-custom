@@ -107,7 +107,9 @@ class ButtonAction(ItemAction):
     value_text = self.value
     if value_text:
       text_width = measure_text_cached(self._font, value_text, ITEM_TEXT_FONT_SIZE).x
-      return text_width + BUTTON_WIDTH + TEXT_PADDING
+      # Custom: +2 px slack. rl.Rectangle is float32, so the value rect came back a hair narrower than the
+      # measured text and gui_label elided it ("Off" drew as "...", "Comma Connect" as "Comma Conne...")
+      return text_width + BUTTON_WIDTH + TEXT_PADDING + 2
     else:
       return BUTTON_WIDTH
 

@@ -31,6 +31,8 @@ from bluepilot.ui.lib.theme import Console, is_day, roundness
 RAIL_W = 152
 HEADER_H = 128
 SUBNAV_W = 480
+SUBNAV_STEP = 104      # Custom: page-list row pitch, and the smallest it may shrink to
+SUBNAV_MIN_STEP = 72
 GUTTER = 32
 
 
@@ -179,6 +181,8 @@ class ConsoleShell(Widget):
     panel(Dest.CONNECT, tr("Firehose"), "flame", "FIREHOSE", tr("Connect"))
     panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))
     item_page(Dest.CONNECT, tr("Data export"), "export", "export", tr("Connect"))
+    # Custom: 7.0 Connect Backend selector (comma connect / Konik / Offline) and dongle ID recovery
+    item_page(Dest.CONNECT, tr("Connect backend"), "cloud", "backend", tr("Connect") + " | " + tr("Reboot to apply"))
 
     from bluepilot.ui.console.pages.updates import UpdatesPage
     self.register_page(Dest.SYSTEM, Page(tr("Updates"), "download", UpdatesPage(), key="updates", framed=False))
@@ -279,16 +283,19 @@ class ConsoleShell(Widget):
 
     if len(pages) > 1 and self._dest != Dest.HOME:
       y = content.y
+      # Custom: Connect has nine or more pages; rows shrink (down to 64 px) so the last one stays on screen
+      # at every UI size instead of running off the bottom
+      step = max(SUBNAV_MIN_STEP, min(SUBNAV_STEP, content.height / len(pages)))
       for i, p in enumerate(pages):
-        r = rl.Rectangle(content.x, y, SUBNAV_W - GUTTER, 96)
+        r = rl.Rectangle(content.x, y, SUBNAV_W - GUTTER, step - 8)
         self._sub_rects.append(r)
         on = i == self._sub[self._dest]
         if on:
           rl.draw_rectangle_rounded(r, roundness(r, 16), 8, Console.ACCENT_TINT)
         color = Console.ACCENT_TEXT if on else Console.TEXT_SECONDARY
-        D.icon(p.icon, r.x + 24, r.y + 28, 40, Console.ACCENT if on else Console.TEXT_MUTED)
+        D.icon(p.icon, r.x + 24, r.y + (r.height - 40) / 2, 40, Console.ACCENT if on else Console.TEXT_MUTED)
         D.text(D.fit(p.title, D.BODY, r.width - 112, semi=on), r.x + 88, r.y + (r.height - D.BODY) / 2 - 2, D.BODY, color, semi=on)
-        y += 104
+        y += step
       content = rl.Rectangle(content.x + SUBNAV_W, content.y, content.width - SUBNAV_W, content.height)
 
     if page.framed:
