@@ -210,7 +210,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     cs = sm['carState']
     self._blindspot_left_alpha_filter.update(1.0 if cs.leftBlindspot else 0.0)
     self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
-    draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x)
+    draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x,
+                        cs.leftBlindspot and cs.leftBlinker, cs.rightBlindspot and cs.rightBlinker)
 
   def _draw_border(self, rect: rl.Rectangle):
     """Console: page-ground outer frame, status-coloured inner frame."""

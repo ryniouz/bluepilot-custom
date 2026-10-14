@@ -228,19 +228,34 @@ class SignalTiles:
     return shown
 
 
-EDGE_W = 20
-EDGE_INSET = 16
+EDGE_W = 32               # car in the blind spot
+EDGE_W_BLOCKED = 56       # signalling into it
+GLOW_W = 140
+GLOW_W_BLOCKED = 300
+EDGE_INSET = 12
 
 
-def draw_blindspot_edge(rect: rl.Rectangle, left_a: float, right_a: float):
-  """Squared danger bars on the screen edges, alpha 0..1 from the caller's fade filters."""
-  pulse = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(time.monotonic() * 2 * math.pi / 1.5))
-  for a, x in ((left_a, rect.x + EDGE_INSET), (right_a, rect.x + rect.width - EDGE_INSET - EDGE_W)):
+def draw_blindspot_edge(rect: rl.Rectangle, left_a: float, right_a: float, left_blocked: bool = False,
+                        right_blocked: bool = False):
+  """Red side of the screen for a car in the blind spot: a squared danger bar along the edge with
+  a red wash fading inward. Signalling into that lane doubles both and makes them pulse."""
+  t = time.monotonic()
+  for a, side, blocked in ((left_a, "left", left_blocked), (right_a, "right", right_blocked)):
     if a <= 0.01:
       continue
+    pulse = (0.6 + 0.4 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 0.8))) if blocked else 0.85
+    bw, gw = (EDGE_W_BLOCKED, GLOW_W_BLOCKED) if blocked else (EDGE_W, GLOW_W)
+    y, h = rect.y + 60, rect.height - 120
     c = Console.DANGER_FILL
-    bar = rl.Rectangle(x, rect.y + 120, EDGE_W, rect.height - 240)
-    rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, rl.Color(c.r, c.g, c.b, int(255 * a * pulse)))
+    glow_c = with_alpha(c, int((150 if blocked else 90) * a * pulse))
+    clear = with_alpha(c, 0)
+    if side == "left":
+      bar = rl.Rectangle(rect.x + EDGE_INSET, y, bw, h)
+      rl.draw_rectangle_gradient_h(int(bar.x + bw), int(y), int(gw), int(h), glow_c, clear)
+    else:
+      bar = rl.Rectangle(rect.x + rect.width - EDGE_INSET - bw, y, bw, h)
+      rl.draw_rectangle_gradient_h(int(bar.x - gw), int(y), int(gw), int(h), clear, glow_c)
+    rl.draw_rectangle_rounded(bar, roundness(bar, 8), 4, with_alpha(c, int(255 * a * pulse)))
 
 
 # -- model confidence ---------------------------------------------------------------------
