@@ -219,8 +219,9 @@ class VehiclePage(CardPage):
       if "chargingStateBP" in sm.data and sm.recv_frame["chargingStateBP"] > 0:
         cs = sm["chargingStateBP"]
         lv = getattr(cs, "lowVoltBattery", None)
-        soc = getattr(lv, "soc", None) if lv is not None else None
+        soc = getattr(lv, "socPercent", None) if lv is not None else None
         volts = getattr(lv, "voltage", None) if lv is not None else None
+        volts = volts or getattr(cs, "harnessVoltage", None)
         note = str(getattr(cs, "shutdownReason", "") or "")
     except Exception:
       pass
