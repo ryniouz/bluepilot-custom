@@ -57,17 +57,30 @@ def _notice_sizes(title: str, sub: str, max_w: float) -> tuple[int, int]:
     tw = measure_text_cached(semi, title, t).x if title else 0
     sw = measure_text_cached(body, sub, s).x if sub else 0
     if NOTICE_CHROME + max(tw, sw) <= max_w:
-      break
-  return t, s
+      return t, s
+  return NOTICE_TITLE - 6, NOTICE_SUB - 4
+
+
+def _notice_layout(title: str, sub: str, max_w: float) -> tuple[int, int, list[str], list[str], float, float]:
+  """(title size, sub size, title lines, sub lines, width, height). Text that does not fit the band
+  on one line wraps to two lines each instead of being cut off, and the card grows taller."""
+  semi, body = _fonts()
+  ts, ss = _notice_sizes(title, sub, max_w)
+  tw = measure_text_cached(semi, title, ts).x if title else 0
+  sw = measure_text_cached(body, sub, ss).x if sub else 0
+  if NOTICE_CHROME + max(tw, sw) <= max_w:
+    w = min(max(NOTICE_CHROME + max(tw, sw), NOTICE_MIN_W), max_w)
+    return ts, ss, [title] if title else [], [sub] if sub else [], w, (NOTICE_H2 if (title and sub) else NOTICE_H1)
+  text_w = max_w - NOTICE_CHROME
+  tl = D.wrap(title, ts, text_w, max_lines=2, semi=True) if title else []
+  sl = D.wrap(sub, ss, text_w, max_lines=2) if sub else []
+  h = 2 * NOTICE_PAD_Y + 8 + len(tl) * ts * 1.15 + len(sl) * ss * 1.25 + (8 if tl and sl else 0)
+  return ts, ss, tl, sl, max_w, max(h, NOTICE_H2 if (title and sub) else NOTICE_H1)
 
 
 def notice_size(title: str, sub: str, max_w: float) -> tuple[float, float]:
-  semi, body = _fonts()
-  t, s = _notice_sizes(title, sub, max_w)
-  tw = measure_text_cached(semi, title, t).x if title else 0
-  sw = measure_text_cached(body, sub, s).x if sub else 0
-  w = NOTICE_CHROME + max(tw, sw)
-  return min(max(w, NOTICE_MIN_W), max_w), (NOTICE_H2 if (title and sub) else NOTICE_H1)
+  _, _, _, _, w, h = _notice_layout(title, sub, max_w)
+  return w, h
 
 
 def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None = None, icon: str = "bell"):
@@ -85,15 +98,18 @@ def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None =
   cue_icon(icon, t.x + (tile - isz) / 2, t.y + (tile - isz) / 2, isz, bar)
   tx = t.x + tile + 28
   max_w = rect.x + rect.width - NOTICE_PAD_X - tx
-  ts, ss = _notice_sizes(title, sub, rect.width)
-  if title and sub:
-    y = rect.y + (rect.height - ts - 8 - ss) / 2 - 2
-    rl.draw_text_ex(semi, D.fit(title, ts, max_w, semi=True), rl.Vector2(tx, y), ts, 0, Console.TEXT_PRIMARY)
-    rl.draw_text_ex(body, D.fit(sub, ss, max_w), rl.Vector2(tx, y + ts + 8), ss, 0, Console.TEXT_MUTED)
-  else:
-    text = title or sub
-    rl.draw_text_ex(semi, D.fit(text, ts, max_w, semi=True), rl.Vector2(tx, rect.y + (rect.height - ts) / 2 - 2), ts, 0,
-                    Console.TEXT_PRIMARY)
+  ts, ss, tl, sl, _, _ = _notice_layout(title, sub, rect.width)
+  tlh, slh = (ts * 1.15 if len(tl) > 1 else ts), (ss * 1.25 if len(sl) > 1 else ss)
+  total = len(tl) * tlh + len(sl) * slh + (8 if tl and sl else 0) - (tlh - ts if len(tl) > 1 and not sl else 0)
+  y = rect.y + (rect.height - total) / 2 - 2
+  for line in tl:
+    rl.draw_text_ex(semi, D.fit(line, ts, max_w, semi=True), rl.Vector2(tx, y), ts, 0, Console.TEXT_PRIMARY)
+    y += tlh
+  if tl and sl:
+    y += 8
+  for line in sl:
+    rl.draw_text_ex(body, D.fit(line, ss, max_w), rl.Vector2(tx, y), ss, 0, Console.TEXT_MUTED if tl else Console.TEXT_PRIMARY)
+    y += slh
 
 
 # -- icons not in the shell kit (24-unit grid, 2-unit stroke, like draw.icon) -------------
