@@ -186,7 +186,7 @@ def cue_icon(name: str, x: float, y: float, size: float, color: rl.Color):
 
 # -- turn signals and blind spot ----------------------------------------------------------
 
-TILE = 128
+TILE = 152                 # turn signal / blind spot tiles (Lucas 22:42: a bit larger)
 TILE_R = 24
 BLINK_S = 0.4             # half period, matches the stock indicator cadence
 TILE_GAP = 24             # between the two tiles at the centre
@@ -238,20 +238,20 @@ class SignalTiles:
         halo = rl.Rectangle(r.x - 8, r.y - 8, TILE + 16, TILE + 16)
         rl.draw_rectangle_rounded(halo, roundness(halo, TILE_R + 8), 10, with_alpha(Console.DANGER_FILL, int(90 + 110 * pulse)))
         rl.draw_rectangle_rounded(r, rr, 10, Console.DANGER_FILL)
-        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 14, 72, Console.ON_ACCENT)
-        D.text_center(tr("Blocked"), r.x + TILE / 2, r.y + TILE - 42, 28, Console.ON_ACCENT, semi=True)
+        cue_icon("car_" + side, r.x + (TILE - 88) / 2, r.y + 16, 88, Console.ON_ACCENT)
+        D.text_center(tr("Blocked"), r.x + TILE / 2, r.y + TILE - 46, 30, Console.ON_ACCENT, semi=True)
       elif st == "car":
         rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
         rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 4, Console.DANGER)
-        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 14, 72, Console.DANGER)
-        D.text_center(tr("Car"), r.x + TILE / 2, r.y + TILE - 42, 28, Console.DANGER, semi=True)
+        cue_icon("car_" + side, r.x + (TILE - 88) / 2, r.y + 16, 88, Console.DANGER)
+        D.text_center(tr("Car"), r.x + TILE / 2, r.y + TILE - 46, 30, Console.DANGER, semi=True)
       else:
         # Turn signal: the arrow alone, lit tile while the indicator is on (no word, like a cluster)
         rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
         if on:
           rl.draw_rectangle_rounded(r, rr, 10, with_alpha(Console.SUCCESS, 0x30))
         rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 2, with_alpha(Console.SUCCESS, 0x90) if on else Console.BORDER_DEFAULT)
-        cue_icon(f"arrow_{side}", r.x + (TILE - 80) / 2, r.y + (TILE - 80) / 2, 80, Console.SUCCESS if on else Console.TEXT_GHOST)
+        cue_icon(f"arrow_{side}", r.x + (TILE - 100) / 2, r.y + (TILE - 100) / 2, 100, Console.SUCCESS if on else Console.TEXT_GHOST)
     return shown
 
 

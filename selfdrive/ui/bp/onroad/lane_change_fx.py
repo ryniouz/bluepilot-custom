@@ -33,7 +33,7 @@ LANE_W = 3.7           # fallback lane width when the model has no neighbouring 
 SAMPLES = 36
 SPOT_LEN = 5.9         # F-150 Lightning length, m
 SPOT_HALF_W = 1.05     # half its width, m
-PERIOD = {"chevrons": 1.2, "lane": 1.4, "arrow": 1.6}
+PERIOD = {"chevrons": 1.2, "lane": 1.4, "arrow": 1.6, "glide": 1.8, "brackets": 1.5, "pointer": 1.4}
 
 
 def _smoothstep(u: np.ndarray) -> np.ndarray:
@@ -54,6 +54,7 @@ class LaneChangeFx:
     self._alpha = 0.0
     self._dir = LaneChangeDirection.none
     self._edges: tuple[np.ndarray, np.ndarray] | None = None  # target lane's two lines, (SAMPLES, 3) each
+    self.phase_override: float | None = None  # tests and design previews: hold the loop at this phase
 
   # -- geometry --------------------------------------------------------------------------------
 
@@ -204,7 +205,7 @@ class LaneChangeFx:
     _fill(r, np.array([[v.x, v.y] for v in scr], dtype=np.float32), with_alpha(color, int((28 + 40 * glow) * self._alpha)))
     edge = with_alpha(color, int((90 + 110 * glow) * self._alpha))
     for a, b in zip(scr, scr[1:] + scr[:1], strict=True):
-      rl.draw_line_ex(a, b, 4.0, edge)
+      rl.draw_line_ex(a, b, 5.0, edge)
 
   def _arrow(self, r, curve, phase, color):
     """Lucas's pick (2026-10-14): a translucent arrow sweeps from our lane into the landing spot, the
@@ -239,7 +240,7 @@ class LaneChangeFx:
       d = np.gradient(pts, axis=0)
       d /= np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
       nrm = np.column_stack([-d[:, 1], d[:, 0]])
-      w0 = min(0.5 * math.hypot(side.x - start.x, side.y - start.y), 46.0)
+      w0 = min(0.5 * math.hypot(side.x - start.x, side.y - start.y), 56.0)
       half = (w0 + (14.0 - w0) * ts[:, 0])[:, None]  # tapers toward the spot
       band = np.vstack([pts + nrm * half, (pts - nrm * half)[::-1]]).astype(np.float32)
       _fill(r, band, with_alpha(color, int(85 * fade * self._alpha)))
@@ -251,6 +252,101 @@ class LaneChangeFx:
       _fill(r, head, with_alpha(color, int(115 * fade * self._alpha)))
     arrive = max(0.0, min(1.0, (phase - 0.45) / 0.15))
     self._spot(r, curve, arrive * fade, color)
+
+  # -- box-concept options (Lucas 22:42: keep the landing box, try other treatments; he picks one) --------------
+
+  def _box(self, r, curve, xc: float, scale: float = 1.0):
+    """Screen corners of a truck-sized box centred xc m ahead, sitting on the curve's lateral position there."""
+    y, z = float(np.interp(xc, curve[:, 0], curve[:, 1])), float(np.interp(xc, curve[:, 0], curve[:, 2]))
+    hl, hw = SPOT_LEN / 2 * scale, SPOT_HALF_W * scale
+    pts = [np.array([xc + a, y + b, z]) for a, b in ((-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw))]
+    scr = [self._proj(r, q) for q in pts]
+    return None if None in scr else scr
+
+  def _fill_box(self, r, scr, color: rl.Color):
+    _fill(r, np.array([[v.x, v.y] for v in scr], dtype=np.float32), color)
+
+  def _outline(self, scr, width: float, color: rl.Color):
+    for a, b in zip(scr, scr[1:] + scr[:1], strict=True):
+      rl.draw_line_ex(a, b, width, color)
+    for v in scr:
+      rl.draw_circle_v(v, width / 2, color)
+
+  def _glide(self, r, curve, phase, color):
+    """Glide: a ghost of the truck's box slides along the merge into the landing box, two fainter echoes
+    behind it; the landing box fills as it arrives. No arrow, the motion itself shows the way."""
+    x_land = float(self._spot_centre(curve)[0])
+    x_from = X_START + (x_land - X_START) * 0.4  # starts clear of the dock, still in our lane
+    move = float(_smoothstep(np.array(min(1.0, phase / 0.75))))
+    fade = 1.0 if phase < 0.85 else 1.0 - (phase - 0.85) / 0.15
+    land = self._box(r, curve, x_land)
+    if land is not None:
+      self._fill_box(r, land, with_alpha(color, int((20 + 50 * move) * fade * self._alpha)))
+      self._outline(land, 3.0, with_alpha(color, int((70 + 120 * move) * fade * self._alpha)))
+    for k, a in ((2, 0.25), (1, 0.5), (0, 1.0)):
+      m = max(0.0, move - 0.12 * k)
+      ghost = self._box(r, curve, x_from + (x_land - x_from) * m, 0.92)
+      if ghost is not None and move < 0.98:
+        self._fill_box(r, ghost, with_alpha(color, int(70 * a * fade * self._alpha)))
+        if k == 0:
+          self._outline(ghost, 3.0, with_alpha(color, int(170 * fade * self._alpha)))
+
+  def _brackets(self, r, curve, phase, color):
+    """Brackets: four corner brackets close in on the landing box like a camera focusing, and a dotted
+    path of dots flows from our lane into it."""
+    x_land = float(self._spot_centre(curve)[0])
+    close = float(_smoothstep(np.array(min(1.0, phase / 0.7))))
+    fade = 1.0 if phase < 0.85 else 1.0 - (phase - 0.85) / 0.15
+    n = 9
+    x_end = x_land - SPOT_LEN / 2
+    for k in range(n):
+      u = (k + (phase * 3) % 1.0) / n
+      x = X_START + (x_end - X_START) * u
+      p = np.array([x, np.interp(x, curve[:, 0], curve[:, 1]), np.interp(x, curve[:, 0], curve[:, 2])])
+      v = self._proj(r, p)
+      side = self._proj(r, p + np.array([0, 0.18, 0]))
+      if v is None or side is None:
+        continue
+      rad = max(3.0, min(14.0, math.hypot(side.x - v.x, side.y - v.y)))
+      rl.draw_circle_v(v, rad, with_alpha(color, int(150 * math.sin(math.pi * u) * fade * self._alpha)))
+    box = self._box(r, curve, x_land, 1.8 - 0.8 * close)
+    if box is None:
+      return
+    land = self._box(r, curve, x_land)
+    if land is not None:
+      self._fill_box(r, land, with_alpha(color, int(40 * close * fade * self._alpha)))
+    ink = with_alpha(color, int((120 + 100 * close) * fade * self._alpha))
+    for i, c in enumerate(box):
+      for nb in (box[(i + 1) % 4], box[(i - 1) % 4]):
+        e = rl.Vector2(c.x + (nb.x - c.x) * 0.28, c.y + (nb.y - c.y) * 0.28)
+        rl.draw_line_ex(c, e, 6.0, ink)
+      rl.draw_circle_v(c, 3.0, ink)
+
+  def _pointer(self, r, curve, phase, color):
+    """Pointer: the landing box glows on the road with two bold chevrons inside it sweeping toward the new
+    lane, and a thin line ties it to our lane."""
+    x_land = float(self._spot_centre(curve)[0])
+    land = self._box(r, curve, x_land)
+    if land is None:
+      return
+    breathe = 0.5 + 0.5 * math.sin(phase * 2 * math.pi)
+    self._fill_box(r, land, with_alpha(color, int((40 + 30 * breathe) * self._alpha)))
+    self._outline(land, 3.0, with_alpha(color, int(150 * self._alpha)))
+    pts = [self._proj(r, q) for q in curve if q[0] <= x_land - SPOT_LEN / 2]
+    pts = [v for v in pts if v is not None]
+    for a, b in zip(pts, pts[1:], strict=False):
+      rl.draw_line_ex(a, b, 4.0, with_alpha(color, int(110 * self._alpha)))
+    # chevrons across the box, pointing to the lane change side, stepping outward
+    cxp = rl.Vector2(sum(v.x for v in land) / 4, sum(v.y for v in land) / 4)
+    width = max(v.x for v in land) - min(v.x for v in land)
+    left = self._dir == LaneChangeDirection.left
+    dirv, nrm = ((-1.0, 0.0), (0.0, 1.0)) if left else ((1.0, 0.0), (0.0, -1.0))
+    for k in range(2):
+      u = (phase + k * 0.5) % 1.0
+      at = rl.Vector2(cxp.x + dirv[0] * width * (u - 0.4) * 0.6, cxp.y)
+      a = math.sin(math.pi * u)
+      h = min(width * 0.16, 46.0)
+      self._chevron_2d(at, dirv, nrm, h, h * 0.8, h * 0.5, with_alpha(color, int(220 * a * self._alpha)), r)
 
   # -- entry -----------------------------------------------------------------------------------
 
@@ -266,6 +362,6 @@ class LaneChangeFx:
     curve = self._curve(r, self._dir == LaneChangeDirection.left)
     if curve is None:
       return
-    phase = (rl.get_time() % PERIOD[style]) / PERIOD[style]
+    phase = self.phase_override if self.phase_override is not None else (rl.get_time() % PERIOD[style]) / PERIOD[style]
     color = Console.ACCENT
     getattr(self, f"_{style}")(r, curve, phase, color)
