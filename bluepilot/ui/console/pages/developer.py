@@ -137,7 +137,8 @@ class DeveloperPage(FormPage):
   def _screen(self) -> Section:
     return Section(tr("Screen"), "eye", [
       Toggle(tr("UI debug"), tr("Touches, FPS and pointer position"), self.p.bool("ShowDebugInfo"), self._ui_debug),
-    ])
+    ] + ([Toggle(tr("UI debug log"), tr("Logs screen changes for bug reports"), self.p.bool("BPUIDebugLog"),
+                 self.p.flip("BPUIDebugLog"))] if self.p.has("BPUIDebugLog") else []))
 
   def _advanced(self) -> Section:
     show = self.p.bool("ShowAdvancedControls")

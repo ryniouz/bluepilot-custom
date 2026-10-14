@@ -56,11 +56,11 @@ class VehiclePage(CardPage):
     return _param(self._params, key, default)
 
   def _put(self, key, value):
+    fn = self._params.put_bool if isinstance(value, bool) else self._params.put
     try:
-      if isinstance(value, bool):
-        self._params.put_bool(key, value)
-      else:
-        self._params.put(key, value)
+      fn(key, value, block=True)  # 7.0 writes in the background otherwise; the next frame would read the old value
+    except TypeError:
+      fn(key, value)
     except Exception:
       pass
 
@@ -281,6 +281,15 @@ class VehiclePage(CardPage):
                          lambda: self._put("BPLvShutdownSoc", SOC_STEPS[max(0, i - 1)]),
                          lambda: self._put("BPLvShutdownSoc", SOC_STEPS[min(len(SOC_STEPS) - 1, i + 1)]),
                          sub=tr("12 V charge"))
+    if has_param(self._params, "vbatt_pause_charging"):  # was System > More settings (BluePilot "12V Battery Limit")
+      try:
+        lim = float(self._get("vbatt_pause_charging", 11.8))
+      except (TypeError, ValueError):
+        lim = 11.8
+      y = self._step_row(r, y, tr("Low-voltage limit"), f"{lim:.1f} V",
+                         lambda: self._put("vbatt_pause_charging", round(max(11.0, lim - 0.1), 1)),
+                         lambda: self._put("vbatt_pause_charging", round(min(14.0, lim + 0.1), 1)),
+                         sub=tr("Sleeps under it"))
     if has_param(self._params, "BPLvWakeFilter"):
       wf = bool(self._get("BPLvWakeFilter", True))
       y = self._toggle_row(r, y, tr("Ignore 12 V top-ups"), tr("Not a drive"),

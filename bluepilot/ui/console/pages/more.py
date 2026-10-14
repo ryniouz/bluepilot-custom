@@ -1,6 +1,6 @@
 """
-System > More settings: the last three rows of the old BluePilot panel that have no other home yet (preferred
-Wi-Fi, the 12 V battery limit and the UI debug log). The Wi-Fi picker is still the BluePilot panel's own dialog,
+System > More settings: preferred Wi-Fi, the last row of the old BluePilot panel with no other home yet (the 12 V
+battery limit moved to System > Truck > 12 V, the UI debug log to System > Developer). The Wi-Fi picker is still the BluePilot panel's own dialog,
 fed by that panel's Wi-Fi scan, which runs while this page is open.
 """
 
@@ -45,13 +45,4 @@ class MorePage(DrivePage):
         fav = ""
     wifi = Nav(tr("Preferred Wi-Fi"), tr("Joined first when in range") if saved else tr("No saved networks yet"),
                bp._select_preferred_network, value=fav) if bp is not None and hasattr(bp, "_select_preferred_network") else None
-    return [
-      Section(tr("Network"), "wifi", [wifi]),
-      Section(tr("12 V battery"), "battery", [
-        self.stepper("vbatt_pause_charging", tr("Sleep below"), 11.0, 14.0, 0.1, lambda v: f"{v:.1f} V",
-                     sub=tr("Protects the battery"), default=11.8, as_float=True),
-      ]),
-      Section(tr("Diagnostics"), "code", [
-        self.toggle("BPUIDebugLog", tr("UI debug log"), tr("Logs screen changes for bug reports")),
-      ]),
-    ]
+    return [Section(tr("Network"), "wifi", [wifi])]
