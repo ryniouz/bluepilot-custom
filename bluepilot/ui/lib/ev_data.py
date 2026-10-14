@@ -28,6 +28,7 @@ DEFAULT_WH_PER_KM = 300.0  # ~2.1 mi/kWh, a typical mixed Lightning figure; repl
 _TEMP_IMPACT = [(-20.0, 0.60), (-10.0, 0.68), (0.0, 0.78), (10.0, 0.90), (21.0, 1.00), (30.0, 0.97), (38.0, 0.88)]
 
 
+STALE_S = 2.0  # carStateBP older than this is ignored (offroad, after the reader stops)
 HB_CURRENT_INVALID_A = 745.0  # BattTrac_I_Actl offset is -750 A; anything this large is the broken mapping
 
 # Pack temperature window outside which the HUD surfaces temperatures in the Standard layout
@@ -84,6 +85,7 @@ class EvSnapshot:
   charge_time_to_full_min: float = NAN
   charge_target_soc: float = NAN
   charge_inhibit_thermal: bool = False
+  charge_conditioning: bool = False
   # Trip integrals (since the UI went onroad)
   trip_used_kwh: float = 0.0
   trip_regen_kwh: float = 0.0
@@ -99,6 +101,21 @@ def _f(obj, name: str, default=NAN):
   return v
 
 
+def _avail(obj, flag: str = "dataAvailable") -> bool:
+  return obj is not None and bool(_f(obj, flag, False))
+
+
+def _fv(obj, name: str, flag: str | None = None):
+  """Float field, NaN when the struct (or its availability flag) says it is missing."""
+  if obj is None or (flag is not None and not _f(obj, flag, False)):
+    return NAN
+  v = _f(obj, name)
+  try:
+    return float(v)
+  except (TypeError, ValueError):
+    return NAN
+
+
 class EvDataSource:
   """Collects EV values once per frame and integrates trip energy."""
 
@@ -108,6 +125,67 @@ class EvDataSource:
     self.snap = EvSnapshot()
     self._last_t: float | None = None
     self._started_frame = -1
+
+  @staticmethod
+  def _read_stream_b(bp, s: EvSnapshot) -> None:
+    """CarStateBP fields from the "Lightning control and CAN" stream (PR #2)."""
+    b = _f(bp, "evBattery", None)
+    if _avail(b):
+      s.available = True
+      s.soc = _fv(b, "socPercent")
+      s.voltage = _fv(b, "packVoltage")
+      src = str(_f(b, "packCurrentSource", "none"))
+      s.current_a = _fv(b, "packCurrent") if src not in ("none", "battTracActl") else NAN
+      s.power_kw = _fv(b, "powerKw") if finite(s.current_a) else NAN
+      s.pack_temp_c = _fv(b, "packTempC")
+      s.coolant_temp_c = _fv(b, "coolantTempC")
+      s.charge_limit_kw = _fv(b, "chargeLimitKw", "limitsAvailable")
+      s.discharge_limit_kw = _fv(b, "dischargeLimitKw", "limitsAvailable")
+      s.range_km = _fv(b, "rangeKm", "rangeAvailable")
+      s.motor_torque_nm = _fv(b, "motorTorqueNm", "motorTorqueAvailable")
+
+    t = _f(bp, "tirePressure", None)
+    if _avail(t):
+      s.tire_kpa = [_fv(t, k) for k in ("frontLeftKpa", "frontRightKpa", "rearLeftKpa", "rearRightKpa")]
+      s.tire_low = bool(_f(t, "lowPressure", False))
+
+    lv = _f(bp, "lowVoltBattery", None)
+    if _avail(lv):
+      s.lv_volts = _fv(lv, "voltage")
+      s.lv_low = bool(_f(lv, "low", False)) or bool(_f(lv, "fault", False))
+
+    a = _f(bp, "ambient", None)
+    if _avail(a):
+      s.outside_temp_c = _fv(a, "outsideTempC")
+
+    vm = _f(bp, "vehicleMode", None)
+    if vm is not None:
+      if _f(vm, "driveModeAvailable", False):
+        mode = str(_f(vm, "driveMode", "unknown"))
+        s.drive_mode = "" if mode == "unknown" else mode.capitalize()
+      s.trailer = bool(_f(vm, "trailerAvailable", False)) and bool(_f(vm, "trailerConnected", False))
+      s.one_pedal = bool(_f(vm, "onePedalActive", False))
+
+    al = _f(bp, "evAlerts", None)
+    if al is not None:
+      s.low_soc = str(_f(al, "lowSoc", "none")) != "none"
+
+    c = _f(bp, "charging", None)
+    if _avail(c):
+      s.charging = bool(_f(c, "charging", False))
+      ct = str(_f(c, "chargeType", "none"))
+      s.charge_type = {"ac": 1, "dc": 2, "other": 3}.get(ct, 0)
+      s.charge_status = str(_f(c, "state", "unknown"))
+      s.charge_power_kw = _fv(c, "powerKw", "powerAvailable")
+      hours = _fv(c, "timeToFullHours", "timeToFullAvailable")
+      s.charge_time_to_full_min = hours * 60.0 if finite(hours) else NAN
+      s.charge_conditioning = bool(_f(c, "batteryConditioning", False))
+      if not finite(s.soc):
+        s.soc = _fv(c, "socPercent")
+      if not finite(s.pack_temp_c):
+        s.pack_temp_c = _fv(c, "batteryTempC")
+      if s.charging or s.charge_status not in ("unknown", "notReady"):
+        s.available = True
 
   def reset_trip(self):
     self.snap.trip_used_kwh = 0.0
@@ -126,43 +204,15 @@ class EvDataSource:
     s = EvSnapshot(trip_used_kwh=prev.trip_used_kwh, trip_regen_kwh=prev.trip_regen_kwh,
                    trip_km=prev.trip_km, wh_per_km=prev.wh_per_km)
     self.snap = s
-    has_bp = "carStateBP" in sm.recv_frame and sm.recv_frame["carStateBP"] >= started_frame
+    # Fresh carStateBP: onroad from card, offroad from the Lightning stream's charging reader.
+    # Freshness (not started_frame) decides, so the last drive's values never linger offroad.
+    has_bp = "carStateBP" in sm.recv_frame and sm.recv_frame["carStateBP"] > 0 and \
+      (now - float(getattr(sm, "recv_time", {}).get("carStateBP", now))) < STALE_S
     if has_bp:
       bp = sm["carStateBP"]
-      ev = _f(bp, "ev", None)
-      ev_ok = ev is not None and bool(_f(ev, "dataAvailable", False))
+      self._read_stream_b(bp, s)
       hb = _f(bp, "hybridBattery", None)
       hb_ok = hb is not None and bool(_f(hb, "dataAvailable", False))
-
-      if ev_ok:
-        s.available = True
-        s.soc = _f(ev, "socDisplay")
-        s.voltage = _f(ev, "packVoltage")
-        s.current_a = _f(ev, "packCurrent")
-        s.power_kw = _f(ev, "packPowerKw")
-        s.pack_temp_c = _f(ev, "packTempC")
-        s.coolant_temp_c = _f(ev, "coolantTempC")
-        s.charge_limit_kw = _f(ev, "chargeLimitKw")
-        s.discharge_limit_kw = _f(ev, "dischargeLimitKw")
-        s.range_km = _f(ev, "rangeKm")
-        s.motor_torque_nm = _f(ev, "motorTorqueNm")
-        tires = _f(ev, "tirePressureKpa", [])
-        s.tire_kpa = [float(t) for t in tires] if tires is not None else []
-        s.tire_low = bool(_f(ev, "tirePressureLow", False))
-        s.lv_volts = _f(ev, "lowVoltageBatteryV")
-        s.lv_low = bool(_f(ev, "lowVoltageBatteryLow", False))
-        s.outside_temp_c = _f(ev, "outsideTempC")
-        s.drive_mode = str(_f(ev, "driveModeText", "") or "")
-        s.trailer = bool(_f(ev, "trailerConnected", False))
-        s.one_pedal = bool(_f(ev, "onePedalActive", False))
-        s.low_soc = bool(_f(ev, "lowSocAlert", False))
-        s.charging = bool(_f(ev, "chargingActive", False))
-        s.charge_type = int(_f(ev, "chargeType", 0) or 0)
-        s.charge_status = str(_f(ev, "chargeStatusText", "") or "")
-        s.charge_power_kw = _f(ev, "chargePowerKw")
-        s.charge_time_to_full_min = _f(ev, "chargeTimeToFullMin")
-        s.charge_target_soc = _f(ev, "chargeTargetSoc")
-        s.charge_inhibit_thermal = bool(_f(ev, "chargeInhibitThermal", False))
 
       if hb_ok:
         s.available = True
@@ -217,6 +267,11 @@ class EvDataSource:
     return s
 
 
+# Charging states that mean the truck is still plugged in, so the screen stays (or comes) up
+PLUGGED_STATES = ("chargingAc", "chargingDc", "chargingInductive", "chargingUnknownType", "targetReached",
+                  "maintaining", "evsePaused", "scheduled", "fault")
+
+
 class ChargeSession:
   """Decides when the charging screen replaces the driving view, and tracks the session.
 
@@ -243,7 +298,8 @@ class ChargeSession:
     now = time.monotonic() if now is None else now
     moving = finite(v_ego) and v_ego > self.STANDSTILL_MS
 
-    if snap.charging and not moving:
+    plugged = snap.charging or snap.charge_status in PLUGGED_STATES
+    if plugged and not moving:
       self._off_since = None
       if self._on_since is None:
         self._on_since = now

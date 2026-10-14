@@ -437,6 +437,20 @@ class BluePilotLayout(Widget):
       callback=lambda state: self._toggle_callback(state, "BPEvHud"),
       icon="speed_limit.png"
     )
+    sleep_opts = [10, 30, 60, 0]
+    try:
+      sleep_min = int(self._safe_get(self._params, "BPChargeSleepMin", 30))
+    except (TypeError, ValueError):
+      sleep_min = 30
+    self._charge_sleep_btn = multiple_button_item(
+      lambda: tr("Sleep while charging"),
+      lambda: tr("With the truck off and charging, keep the charging screen on this long, then turn the display off. Tap to wake it."),
+      buttons=[lambda: tr("10 min"), lambda: tr("30 min"), lambda: tr("1 h"), lambda: tr("Never")],
+      button_width=200,
+      callback=lambda i: self._set_int_param("BPChargeSleepMin", sleep_opts[i], "charge_sleep_min"),
+      selected_index=sleep_opts.index(sleep_min) if sleep_min in sleep_opts else 1,
+      icon="monitoring.png"
+    )
     self._charging_screen = toggle_item(
       lambda: tr("Charging screen"),
       lambda: tr("While the truck is charging and parked, show charge state, power, energy added and time to full. Tap to go back."),
@@ -487,6 +501,7 @@ class BluePilotLayout(Widget):
       self._layout_preset_btn,
       self._ev_hud,
       self._charging_screen,
+      self._charge_sleep_btn,
       SectionHeader(tr("Data export")),
       self._bridge_enabled,
       self._keep_until_synced,
@@ -728,6 +743,14 @@ class BluePilotLayout(Widget):
     except UnknownKeyName:
       pass
     ui_state.layout_preset = int(button_index)
+
+  def _set_int_param(self, key: str, value: int, ui_attr: str | None = None):
+    try:
+      self._params.put(key, int(value))
+    except UnknownKeyName:
+      pass
+    if ui_attr:
+      setattr(ui_state, ui_attr, int(value))
 
   @staticmethod
   def _local_ip() -> str:

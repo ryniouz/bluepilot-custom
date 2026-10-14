@@ -219,6 +219,10 @@ class UIState(UIStateSP):
       self.layout_preset = 1
     self.ev_hud = bool(self.params.get("BPEvHud", return_default=True))
     self.charging_screen_enabled = bool(self.params.get("BPChargingScreen", return_default=True))
+    try:
+      self.charge_sleep_min = int(self.params.get("BPChargeSleepMin", return_default=True) or 0)
+    except (TypeError, ValueError):
+      self.charge_sleep_min = 30
     # Custom: end
     self._param_update_time = time.monotonic()
 
@@ -326,7 +330,14 @@ class Device(DeviceSP):
         callback()
     self._prev_timed_out = interaction_timeout
 
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC)
+    # Custom: stay on while charging with the ignition off, until the BPChargeSleepMin delay runs out
+    charging_awake = False
+    session = getattr(ui_state, "charge_session", None)
+    if not ui_state.ignition and getattr(ui_state, "charging_screen", False) and session is not None:
+      sleep_min = getattr(ui_state, "charge_sleep_min", 30)
+      charging_awake = sleep_min <= 0 or session.elapsed_s() < sleep_min * 60 or not interaction_timeout
+    # Custom: end
+    self._set_awake(ui_state.ignition or not interaction_timeout or PC or charging_awake)
 
   def _set_awake(self, on: bool):
     if on != self._awake:

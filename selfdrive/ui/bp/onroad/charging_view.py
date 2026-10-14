@@ -31,13 +31,20 @@ TILE_PAD = 32
 
 CHARGE_TYPE_TITLE = {1: "AC charging", 2: "DC fast charging"}
 
-# Ford ChrgStat_D2_Dsply labels worth turning into words; anything else shows as-is
+# CarStateBP.charging.state (PR #2) in words; charging states themselves need no subtitle
 STATUS_TEXT = {
-  "ChargeTargetReached": "Charge target reached",
-  "EvsePaused": "Paused by the charger",
-  "CabinPreconditioning": "Preconditioning the cabin",
-  "NotReady": "Not ready",
+  "targetReached": "Charge target reached",
+  "maintaining": "Holding at the target",
+  "evsePaused": "Paused by the charger",
+  "scheduled": "Waiting for the scheduled time",
+  "evseNotDetected": "Charger not detected",
+  "evseNotCompatible": "Charger not compatible",
+  "fault": "Charging fault",
+  "cabinPreconditioning": "Preconditioning the cabin",
+  "driveConditioning": "Conditioning the battery for the drive",
+  "notReady": "Not ready",
 }
+WARN_STATES = ("evsePaused", "evseNotDetected", "evseNotCompatible", "fault")
 
 
 def _fmt_duration(minutes: float) -> str:
@@ -87,15 +94,20 @@ class ChargingView(Widget):
     # Header: status dot + charge type
     title = CHARGE_TYPE_TITLE.get(s.charge_type, "Charging")
     dot_color = Console.WARNING if s.charge_inhibit_thermal else Console.SUCCESS
-    if s.charge_status in ("EvsePaused", "NotReady"):
-      dot_color = Console.WARNING
+    if s.charge_status in WARN_STATES:
+      dot_color = Console.DANGER if s.charge_status == "fault" else Console.WARNING
+    elif s.charge_status in ("targetReached", "maintaining"):
+      dot_color = Console.INFO
     draw_status_dot(r.x + 14, r.y + 30, 14, dot_color)
     self._text(title, r.x + 44, r.y, 60, Console.TEXT_PRIMARY, semi=True)
     sub = STATUS_TEXT.get(s.charge_status, "")
     if s.charge_inhibit_thermal:
       sub = "Limited by battery temperature"
+    elif not sub and s.charge_conditioning:
+      sub = "Conditioning the battery"
     if sub:
-      self._text(sub, r.x + 44, r.y + 76, 40, Console.WARNING if s.charge_inhibit_thermal else Console.TEXT_MUTED)
+      warn = s.charge_inhibit_thermal or s.charge_status in WARN_STATES
+      self._text(sub, r.x + 44, r.y + 76, 40, Console.WARNING if warn else Console.TEXT_MUTED)
 
     # Big SOC
     soc_y = r.y + 170

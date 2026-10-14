@@ -885,7 +885,7 @@ def _inject_charge(name: str):
   from bluepilot.ui.lib import ev_data
 
   dc = name == "charging_dc"
-  fields = dict(charging=True, charge_type=2 if dc else 1, charge_status="ChargingDCFastChange" if dc else "ChargingAC",
+  fields = dict(charging=True, charge_type=2 if dc else 1, charge_status="chargingDc" if dc else "chargingAc",
                 charge_power_kw=148.0 if dc else 9.4, charge_time_to_full_min=21.0 if dc else 312.0,
                 charge_target_soc=80.0 if dc else 90.0, charge_inhibit_thermal=not dc,
                 pack_temp_c=31.0 if dc else -4.0, range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0)
