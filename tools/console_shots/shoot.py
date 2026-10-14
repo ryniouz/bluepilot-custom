@@ -68,6 +68,10 @@ SCENES: dict[str, str] = {
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
   "theme": "Screen > Theme and layout (theme, UI size, accent, layout)",
+  "theme_light": "Screen > Theme and layout in the Day theme, Teal accent, Dense layout",
+  "trips": "Energy > Trips with a week and all-time stats from comma connect",
+  "trips_empty": "Energy > Trips before the first drive",
+  "charging_settings": "Energy > Charging settings",
   "home_large": "Home at UI size Large",
   "home_small": "Home at UI size Small",
   "cellular_large": "Connect > Cellular at UI size Large",
@@ -1103,7 +1107,7 @@ def run_scene(sc: Scene):
       ui_scale.set_scale_index(idx)
       name = name[:-len(suffix)]
   d = default_drive()
-  if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
+  if name in ("standby", "theme_light", "trips", "trips_empty", "charging_settings", "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
@@ -1308,9 +1312,27 @@ def run_scene(sc: Scene):
     gui_app.push_widget(w)
     sc.settle()
     sc.shot()
-  elif name == "theme":
+  elif name in ("theme", "theme_light"):
     sc.main._open_shell()
     sc.main._shell.open_panel("theme")
+    if name == "theme_light":
+      page = sc.main._shell.current_page().widget
+      page.set_mode(1)
+      page.set_accent(1)
+      page.set_preset(2)
+    sc.settle()
+    sc.shot()
+  elif name in ("trips", "trips_empty"):
+    if name == "trips":
+      sc.put("ApiCache_DriveStats", {"all": {"routes": 214, "distance": 5873.2, "minutes": 9120},
+                                     "week": {"routes": 11, "distance": 241.6, "minutes": 342}})
+    sc.main._open_shell()
+    sc.main._shell.open_panel("trips")
+    sc.settle()
+    sc.shot()
+  elif name == "charging_settings":
+    sc.main._open_shell()
+    sc.main._shell.open_panel("charging")
     sc.settle()
     sc.shot()
   elif name == "updates":
