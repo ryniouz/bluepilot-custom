@@ -143,7 +143,8 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.charging_settings import ChargingSettingsPage
     self.trips = TripsPage()
     self.register_page(Dest.ENERGY, Page(tr("Trips"), "route", self.trips, key="trips", subtitle=self.trips.subtitle,
-                                         sub_dot=self.trips.sub_dot, framed=False))
+                                         sub_dot=self.trips.sub_dot, framed=False,
+                                         aliases=tuple(k for k in (getattr(PT, "TRIPS", None),) if k is not None)))
     charge_settings = ChargingSettingsPage()
     charge_settings.on_open_power = self.open_vehicle_power
     self.register_page(Dest.ENERGY, Page(tr("Charging settings"), "sliders", charge_settings, key="charging",
@@ -165,8 +166,13 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.theme import ThemePage
     self.register_page(Dest.SCREEN, Page(tr("Theme and layout"), "palette", ThemePage(), key="theme",
                                          subtitle=tr("Screen") + " | " + tr("Applies right away"), framed=False))
-    panel(Dest.SCREEN, tr("Visuals"), "eye", "VISUALS", tr("Screen"))
-    panel(Dest.SCREEN, tr("Display"), "screen", "DISPLAY", tr("Screen"))
+    from bluepilot.ui.console.pages.onroad_display import OnroadDisplayPage
+    from bluepilot.ui.console.pages.display import DisplayPage
+    old_keys = lambda *names: tuple(k for k in (getattr(PT, n, None) for n in names) if k is not None)  # noqa: E731
+    self.register_page(Dest.SCREEN, Page(tr("Onroad display"), "eye", OnroadDisplayPage(), key="onroad_display",
+                                         subtitle=tr("Screen"), framed=False, aliases=old_keys("VISUALS")))
+    self.register_page(Dest.SCREEN, Page(tr("Display"), "sun", DisplayPage(), key="display",
+                                         subtitle=tr("Screen"), framed=False, aliases=old_keys("DISPLAY")))
 
     from bluepilot.ui.console.pages.connectivity import ConnectivityPage
     net = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None
