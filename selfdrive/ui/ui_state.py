@@ -17,7 +17,7 @@ from openpilot.common.bluepilot import is_bluepilot
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
 from bluepilot.ui.lib.theme import set_accent as set_console_accent, set_mode as set_console_mode, freeze_derived  # Custom: Console theme
 from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
-from bluepilot.ui.lib.charge_screen import ChargePolicy, DIM, DIM_BRIGHTNESS, OFF, ON  # Custom: charging screen timeouts
+from bluepilot.ui.lib.charge_screen import ChargePolicy, DIM, DIM_BRIGHTNESS, OFF, ON, occupied  # Custom: charging screen timeouts
 from bluepilot.ui.lib.ev_history import EvHistory  # Custom: Statistics page and Home chart history
 from cereal.services import SERVICE_LIST  # Custom: offroad charging reader (Lightning stream, PR #2)
 CHARGING_SERVICES = ["chargingStateBP"] if "chargingStateBP" in SERVICE_LIST else []  # Custom
@@ -428,15 +428,18 @@ class Device(DeviceSP):
     self._prev_timed_out = interaction_timeout
 
     # Custom: the charging screen's window (Energy > Charging settings): full brightness for its minutes from
-    # plug-in or the last tap, then dimmed or off. Truck off: stays awake through the window, unlike offroad.
+    # plug-in or the last tap, then dimmed or off; the minutes depend on whether someone is inside (truck on or in
+    # accessory mode). Truck off or accessory: stays awake through the window, unlike offroad.
     # Truck on: may turn the display off, but only while the charging screen is up, i.e. plugged in and stopped.
     charging_awake, charge_off = False, False
     mode = ON
     session = getattr(ui_state, "charge_session", None)
+    inside = occupied(ui_state.ignition, getattr(getattr(ui_state, "ev", None), "truck_ignition", ""))
+    ui_state.charge_occupied = inside
     if getattr(ui_state, "charging_screen", False) and session is not None and session.active:
       policy = getattr(ui_state, "charge_policy", None) or ChargePolicy()
       since = max(getattr(session, "window_t", 0.0), getattr(self, "_last_touch_t", 0.0))
-      mode = policy.mode(ui_state.ignition, getattr(ui_state.ev, "charge_type", 0) == 2, time.monotonic() - since)
+      mode = policy.mode(inside, getattr(ui_state.ev, "charge_type", 0) == 2, time.monotonic() - since)
       if mode != ON and touched:
         gui_app.mouse_events.clear()  # the tap that wakes the screen does not also minimize it
         self._last_touch_t = time.monotonic()

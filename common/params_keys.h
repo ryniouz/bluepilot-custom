@@ -420,7 +420,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
     {"BPChargeOffDcMin", {PERSISTENT | BACKUP, INT, "60"}},  // same, DC fast charging with the truck off
-    {"BPChargeOnAcMin", {PERSISTENT | BACKUP, INT, "15"}},   // charging screen at full brightness this long with the truck on, AC; 0 = always
+    {"BPChargeOnAcMin", {PERSISTENT | BACKUP, INT, "0"}},    // charging screen at full brightness this long with someone inside, AC; 0 = always
     {"BPChargeOnDcMin", {PERSISTENT | BACKUP, INT, "0"}},    // same, DC fast charging
     {"BPChargeOnThen", {PERSISTENT | BACKUP, INT, "0"}},     // after that with the truck on: 0 dim, 1 display off
     {"BPChargeOffThen", {PERSISTENT | BACKUP, INT, "1"}},    // after that with the truck off: 0 dim, 1 display off

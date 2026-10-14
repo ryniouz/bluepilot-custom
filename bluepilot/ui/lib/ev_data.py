@@ -16,6 +16,8 @@ import math
 import time
 from dataclasses import dataclass, field
 
+from bluepilot.ui.lib.charge_screen import OCCUPIED_IGNITION
+
 NAN = float("nan")
 
 # Lightning usable pack energy, used only for the estimated range when the truck does not send one.
@@ -91,6 +93,7 @@ class EvSnapshot:
   heater_on: bool = False
   pack_delta_temp_c: float = NAN   # spread between the warmest and coolest module
   source: str = ""                 # "car" (carStateBP, ignition on) or "charger" (chargingStateBP, ignition off)
+  truck_ignition: str = ""         # chargingStateBP.wake.ignition while offroad: "off", "accessory", ... ("" onroad)
   # Trip integrals (since the UI went onroad)
   trip_used_kwh: float = 0.0
   trip_regen_kwh: float = 0.0
@@ -275,6 +278,8 @@ class EvDataSource:
       # Ignition off: the Lightning stream's charging monitor publishes the same Charging and EvBattery structs
       self._read_stream_b(sm["chargingStateBP"], s)
       s.source = "charger"
+      wake = _f(sm["chargingStateBP"], "wake", None)
+      s.truck_ignition = str(_f(wake, "ignition", "")) if _avail(wake) else ""
     if has_bp:
       bp = sm["carStateBP"]
       s.source = "car"
@@ -402,9 +407,10 @@ class ChargeSession:
 
     if self.active:
       # The screen window restarts when the situation changes: the truck turned off or on (the publisher
-      # switches between carStateBP and chargingStateBP), AC <-> DC, or charging stopped/started (a re-plug).
+      # switches between carStateBP and chargingStateBP) or went to accessory, AC <-> DC, or charging stopped/started
+      # (a re-plug).
       # Without this, a session that began with the truck on spent its truck-off window before the truck was off.
-      key = (bool(snap.charging), snap.charge_type, snap.source)
+      key = (bool(snap.charging), snap.charge_type, snap.source, snap.truck_ignition in OCCUPIED_IGNITION)
       if snap.source and key != self._window_key:
         if self._window_key is not None:
           self.window_t = now

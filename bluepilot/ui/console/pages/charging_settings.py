@@ -2,8 +2,9 @@
 Console Charging settings page (Energy > Charging settings).
 
   Charging screen   show it while the truck charges
-  Truck on / off    how long it stays at full brightness (AC and DC apart), then dim or off; the minimal
-                    dark screen with the truck off (bluepilot/ui/lib/charge_screen.py has the rules)
+  Someone inside /  how long it stays at full brightness (AC and DC apart), then dim or off; the minimal
+  nobody inside     dark screen with nobody inside. Someone is inside when the truck is on or in accessory
+                    mode (bluepilot/ui/lib/charge_screen.py has the rules)
   The comma         what it does while parked and charging; the settings themselves live once, on
                     System > Truck (Charge and 12 V tabs), so this card summarises and links there
 
@@ -62,18 +63,18 @@ class ChargingSettingsPage(FormPage):
         Toggle(tr("Show while charging"), tr("Opens when you plug in and stop"), on, lambda: self.set_screen(not on)),
         Note(tr("A tap minimizes it. Home's Charging card brings it back.")),
       ]))
-    out.append(Section(tr("Truck on"), "car", keep(
-      self._window("BPChargeOnAcMin", tr("AC charging"), tr("From plug-in or a tap"), 15),
+    out.append(Section(tr("Someone inside"), "car", keep(
+      self._window("BPChargeOnAcMin", tr("AC charging"), tr("From plug-in or a tap"), 0),
       self._window("BPChargeOnDcMin", tr("DC fast charging"), tr("From plug-in or a tap"), 0),
       self._then("BPChargeOnThen", 0),
-    ), note=tr("Full brightness this long, then dimmed or off. A tap brings it back.")))
-    out.append(Section(tr("Truck off"), "battery", keep(
+    ), note=tr("Truck on or in accessory mode. The full charging screen, bright this long, then dimmed or off.")))
+    out.append(Section(tr("Nobody inside"), "battery", keep(
       Toggle(tr("Minimal dark screen"), tr("Charge and power only"), p.bool("BPChargeMinimal", True),
              lambda: self._set("BPChargeMinimal", not p.bool("BPChargeMinimal", True))) if p.has("BPChargeMinimal") else None,
       self._window("BPChargeSleepMin", tr("AC charging"), tr("From plug-in or a tap"), 30),
       self._window("BPChargeOffDcMin", tr("DC fast charging"), tr("From plug-in or a tap"), 60),
       self._then("BPChargeOffThen", 1),
-    ), note=tr("The minimal screen is grey on black and moves a little every minute, so nothing burns in.")))
+    ), note=tr("Truck off. The minimal screen is grey on black and moves a little every minute, so nothing burns in.")))
 
     rows = []
     if p.has("BPChargeKeepAwake"):
