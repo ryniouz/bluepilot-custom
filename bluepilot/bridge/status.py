@@ -83,12 +83,12 @@ def cellular_view(network_info: dict | None, strength: str, sim: dict | None, mo
 
 def connectivity(network: dict, roadtrip_status: dict, usage_summary: dict, comma_status: dict,
                  keep_until_synced: bool, unsynced_segments: int, last_synced: str | None,
-                 cellular: dict | None = None) -> dict:
+                 cellular: dict | None = None, link_status: dict | None = None) -> dict:
   rt = roadtrip_status["roadTrip"]
   citadel = {"enabled": rt["enabled"], "cellular": rt.get("cellular", True), "video": rt["video"],
              "state": rt["state"], "pausedReason": rt["pausedReason"], "queue": rt["queue"],
              "current": rt["current"], "lastUpload": rt["lastUpload"], "uploadedToday": rt["uploadedToday"],
-             "server": roadtrip_status["server"]}
+             "server": roadtrip_status["server"], "link": link_status}
   return {
     "t": iso_now(), "network": network, "cellular": cellular,
     "services": {"commaConnect": comma_status, "citadel": citadel},

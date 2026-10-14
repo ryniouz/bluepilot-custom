@@ -99,6 +99,8 @@ GROUPS = [
     _number("BPCellLimitMB", "Monthly LTE limit", "int", 0, 200000, 100, "MB", "0 means no limit."),
     _choice("BPCellLimitAction", "When the limit is reached", [(0, "Telemetry only"), (1, "Stop uploading")]),
     _number("BPCellResetDay", "Billing month starts on day", "int", 1, 31, 1),
+    _bool("BPRemoteLink", "Remote access from Citadel",
+          "Lets Citadel change settings and show live data when the truck is away from home. A few KB a minute."),
     _bool("BPCommaConnectWifiOnly", "comma connect uploads on Wi-Fi only",
           "comma connect stays on; its uploads wait for unmetered Wi-Fi."),
   ]},

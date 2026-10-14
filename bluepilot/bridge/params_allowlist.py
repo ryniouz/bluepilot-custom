@@ -27,7 +27,7 @@ WRITABLE = frozenset({
   # bridge
   "BPKeepUntilSynced", "BPBridgeNotifyUrl", "BPServerUrl",
   "BPRoadTripMode", "BPRoadTripVideo", "BPCellLimitMB", "BPCellLimitAction", "BPCellResetDay", "BPRoadTripCellular",
-  "BPCommaConnectWifiOnly",
+  "BPCommaConnectWifiOnly", "BPRemoteLink",
 })
 
 READABLE = READ_ONLY | WRITABLE

@@ -19,6 +19,7 @@ from bluepilot.bridge import config as cfg
 from bluepilot.bridge import segments as seg_index
 from bluepilot.bridge.config import (ALLOWED_FILES, DEFAULT_PORT, PARAM_KEEP_UNTIL_SYNCED, PARAM_NOTIFY_URL,
                                      PARAM_PORT, PARAM_TOKEN, STATE_DIR)
+from bluepilot.bridge.link import LinkSettings, RemoteLink, local_caller
 from bluepilot.bridge.live import LiveMonitor
 from bluepilot.bridge.notify import Notifier
 from bluepilot.bridge.params_allowlist import coerce_param
@@ -75,6 +76,12 @@ def roadtrip_settings(params: Params) -> RoadTripSettings:
   )
 
 
+def link_settings(params: Params) -> LinkSettings:
+  rt = roadtrip_settings(params)
+  return LinkSettings(enabled=params.get_bool(cfg.PARAM_REMOTE_LINK), server_url=rt.server_url,
+                      limit_bytes=rt.limit_bytes, limit_action=rt.limit_action)
+
+
 def _str(params: Params, key: str) -> str:
   v = params.get(key)
   return (v.decode() if isinstance(v, bytes) else v) or ""
@@ -128,6 +135,12 @@ def main() -> None:
                               usage, lambda: network_view(live.latest_network()), live.latest)
   uploader.start()
 
+  # Remote link: Citadel reaches this API from away through an outbound long-poll
+  port = int(params.get(PARAM_PORT) or DEFAULT_PORT)
+  link = RemoteLink(lambda: link_settings(params), token, local_caller(port, token),
+                    lambda: network_view(live.latest_network()), usage)
+  link.start()
+
   slow = SlowStatus(params, Paths.log_root())
 
   def build_connectivity() -> dict:
@@ -149,7 +162,7 @@ def main() -> None:
     cellular = cellular_view(net_raw.get("info"), net["strength"], slow.sim, slow.modem_version,
                              params.get_bool("GsmRoaming"), _str(params, "GsmApn"), params.get_bool("GsmMetered"))
     return connectivity(net, uploader.status(), usage.summary(rt_settings().limit_bytes), comma,
-                        params.get_bool(PARAM_KEEP_UNTIL_SYNCED), unsynced, last_synced, cellular)
+                        params.get_bool(PARAM_KEEP_UNTIL_SYNCED), unsynced, last_synced, cellular, link.status())
 
   def build_storage() -> dict:
     segs = seg_index.scan(Paths.log_root(), ALLOWED_FILES)
@@ -173,7 +186,6 @@ def main() -> None:
     keep_until_synced=lambda: params.get_bool(PARAM_KEEP_UNTIL_SYNCED),
     connectivity=build_connectivity, storage=status_writer.latest_storage,
   )
-  port = int(params.get(PARAM_PORT) or DEFAULT_PORT)
   server = make_server(ctx, port=port)
   cloudlog.info(f"bp_bridge listening on :{port}")
 
