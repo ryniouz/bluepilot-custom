@@ -2,7 +2,8 @@
 Console upload settings (Drives > Upload settings, also opened from Connect > Cellular).
 
   comma connect     Wi-Fi only (BPCommaConnectWifiOnly; without it, stock GsmMetered)
-  Citadel uploads   Road Trip Mode (BPRoadTripMode), over LTE (BPRoadTripCellular), what to send (BPRoadTripVideo)
+  Citadel uploads   Road Trip Mode (BPRoadTripMode), over LTE (BPRoadTripCellular), low-res video (BPRoadTripVideo),
+                    remote access from Citadel (BPRemoteLink, status in services.citadel.link)
   LTE data limit    monthly limit (BPCellLimitMB), what happens at the limit (BPCellLimitAction),
                     the day the month starts (BPCellResetDay)
 
@@ -22,11 +23,12 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import _param, has_param
+from bluepilot.ui.lib import bridge_status as bridge
 from bluepilot.ui.lib.upload_status import citadel_configured
 from bluepilot.ui.lib.theme import Console
 
 GAP = 32
-SET_ROW = 112
+SET_ROW = 104
 LIMITS_MB = [0, 2000, 5000, 10000, 20000]
 LIMIT_LABELS = ["Off", "2", "5", "10", "20"]
 
@@ -53,7 +55,7 @@ class UploadSettingsPage(Widget):
     left.width -= GAP / 2
     right.x += GAP / 2
     right.width -= GAP / 2
-    top, bottom = K.split_rows(left, [0.62, 1.0])
+    top, bottom = K.split_rows(left, [0.45, 1.0])
     top.height -= GAP / 2
     bottom.y += GAP / 2
     bottom.height -= GAP / 2
@@ -138,8 +140,26 @@ class UploadSettingsPage(Widget):
                            lambda: self._params.put_bool("BPRoadTripCellular", not cell), enabled=on and configured)
     if has_param(self._params, "BPRoadTripVideo"):
       video = _int(_param(self._params, "BPRoadTripVideo", 1), 1)
-      self._seg_row(r, y, tr("What to send"), [tr("Logs only"), tr("With low-res video")], 1 if video else 0,
-                    lambda i: self._params.put("BPRoadTripVideo", int(i)), enabled=on and configured)
+      y = self._toggle_row(r, y, tr("Low-res video"), tr("Off: logs only"), bool(video) and on and configured,
+                           lambda: self._params.put("BPRoadTripVideo", 0 if video else 1), enabled=on and configured)
+    if has_param(self._params, "BPRemoteLink"):
+      link = bool(_param(self._params, "BPRemoteLink", True))
+      self._toggle_row(r, y, tr("Remote access from Citadel"), self._link_text(link), link and configured,
+                       lambda: self._params.put_bool("BPRemoteLink", not link), enabled=configured)
+
+  @staticmethod
+  def _link_text(on: bool) -> str:
+    """services.citadel.link from the bridge: settings and live data from Citadel while away."""
+    if not on:
+      return tr("Settings and live data while away")
+    st = bridge.get("services", "citadel", "link")
+    if not isinstance(st, dict):
+      return tr("Settings and live data, a few KB a minute")
+    state = str(st.get("state") or "")
+    reason = {"no_server": tr("no server"), "no_network": tr("no signal"), "over_limit": tr("data limit reached"),
+              "server_error": tr("server error"), "disabled": tr("turned off")}.get(str(st.get("pausedReason")), "")
+    return {"connected": tr("Connected"), "connecting": tr("Connecting"), "waiting": tr("Waiting for a connection"),
+            "paused": tr("Paused") + (f": {reason}" if reason else "")}.get(state, tr("Settings and live data while away"))
 
   def _limit_card(self, r: rl.Rectangle):
     y = self._title(r, tr("LTE data limit"), "cell")
