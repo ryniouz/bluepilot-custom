@@ -101,6 +101,22 @@ Citadel uploads (Road Trip Mode, above) are independent of comma connect. `BPRoa
 - the modem firmware
 - the three stock settings: `GsmRoaming`, `GsmApn` and `GsmMetered`
 
+## Remote link (Citadel reaches this API from away)
+The device dials out, so nothing needs to be open on the truck. With `BPRemoteLink` on (the default) and `BPServerUrl` set:
+
+- **The poll.** The bridge long-polls `POST <BPServerUrl>/link/poll`, sending the device token as bearer and the body `{"api": 1, "results": [...]}`.
+  - Citadel holds the request for up to about 25 s, then answers `{"commands": [{"id", "method", "path", "body"?}]}`. `body` is base64.
+- **Running commands.** Each command runs against this API on localhost, using the device token. Auth, validation and the parked-only rule for settings are therefore the LAN ones.
+  - Each answer goes back with the next poll as `{"id", "status", "type", "body"}`, where `body` is base64.
+- **What can go over the link.** These calls only:
+  - `GET` on `health`, `live`, `routes`, `params`, `settings`, `connectivity`, `storage` and `snapshot`
+  - `PUT /v1/settings`
+  - `PUT /v1/params/<key>`
+- **What stays on the LAN:** file downloads, `live/stream`, `events`, `ping` and `synced`. The home pull is unchanged.
+- **Data use.** It is a few KB a minute when idle.
+  - It stops when the monthly LTE limit is reached and the limit action is "stop uploading". With "telemetry only" it keeps going.
+- **Status.** Reported in `services.citadel.link` as `{enabled, state, pausedReason, connected, lastContact, commandsToday}`.
+
 ## Keep-until-synced
 With `BPKeepUntilSynced` = 1 (default 1 when bridge enabled), `system/loggerd/deleter.py` deletes synced segments first (oldest first). It only deletes unsynced segments when free space falls below the hard floor (5% or 2 GB), so the comma never fills up.
 
