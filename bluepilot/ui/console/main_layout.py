@@ -78,6 +78,8 @@ class ConsoleMainLayout(Widget):
     self._home.on_open_drive = lambda: self._shell.go(Dest.DRIVE, 0)
     self._home.on_open_assist = lambda: self._shell.go(Dest.DRIVE, 0)
     self._home.on_open_software = lambda: self.open_settings(_settings_mod.PanelType.SOFTWARE)
+    self._home.on_open_charging = self.open_charging
+    self._home.on_open_alerts = lambda: self._shell.open_panel("alerts")
 
     self._layouts[MainState.STANDBY].set_click_callback(lambda: self._open_shell(Dest.HOME))
     self._layouts[MainState.ONROAD].set_click_callback(self._on_onroad_clicked)
@@ -141,6 +143,16 @@ class ConsoleMainLayout(Widget):
     self._set_current_layout(MainState.SHELL)
     if not self._shell.open_panel(panel_type):
       self._shell.go(Dest.SYSTEM, 0)
+
+  def open_charging(self):
+    """Reopen the charging page after it was minimized (Home's Charging card)."""
+    session = getattr(ui_state, "charge_session", None)
+    if session is None or not session.active:
+      return
+    session.dismissed = False
+    ui_state.charging_screen = True
+    self._prev_charging = True
+    self._set_current_layout(MainState.CHARGING)
 
   def _on_onroad_clicked(self):
     if self._debug_panel.is_panel_visible:

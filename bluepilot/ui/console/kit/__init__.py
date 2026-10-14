@@ -1,10 +1,9 @@
 """
 Console component kit: Citadel's page patterns for the comma 3X (2160x1080).
 
-Mirrors the layout Citadel's own apps use (EVTel, Trips): a top bar with section tabs, an
-icon rail for the section's pages, a page header, joined stat strips, joined panel grids,
-area charts, gauges, squared bars, key/value grids and form rows. Sizes are the Console web
-sizes doubled for the 3X screen. Everything colours from bluepilot.ui.lib.theme tokens per
+Citadel's Console theme and icons at phone-app sizes for the small 3X screen: big type,
+big touch targets, few things per screen. Stat strips, thick squared bars, key/value grids,
+form rows and controls (the area chart is for the Statistics page only). Everything colours from bluepilot.ui.lib.theme tokens per
 frame, so day/night and accent changes need nothing else.
 
 Drawing only: each call returns the rects its owner hit-tests.
@@ -32,15 +31,15 @@ GAP = 24
 HEADER_H = 84
 
 TAB = 28          # top-bar tab label
-TITLE = 38        # page title
-SUB = 26          # page subtitle
-H2 = 30           # section title
-CAP = 24          # captions, notes, axis ticks
-VAL = 44          # stat value
-KV = 28           # key/value value, row title
-DESC = 24         # row description
+TITLE = 52        # page title
+SUB = 30          # page subtitle
+H2 = 40           # section title
+CAP = 30          # captions, notes, axis ticks
+VAL = 64          # stat value
+KV = 38           # key/value value, row title
+DESC = 30         # row description
 
-PANEL_R = 16      # panel radius (8 px web)
+PANEL_R = 24      # card radius
 HAIR = 2          # hairline width
 
 
@@ -207,7 +206,8 @@ class Stat:
   value_color: rl.Color | None = None
 
 
-STRIP_H = 148
+STRIP_H = 200
+BAR_H = 40        # thick squared SOC bar
 
 
 def stat_strip(r: rl.Rectangle, cells: Sequence[Stat]):
@@ -215,15 +215,15 @@ def stat_strip(r: rl.Rectangle, cells: Sequence[Stat]):
   cols = split_cols(r, [1] * max(1, len(cells)))
   joined(r, cols)
   for c, s in zip(cols, cells, strict=False):
-    x, y = c.x + 28, c.y + 20
+    x, y = c.x + 32, c.y + 24
     D.text(D.fit(s.label, CAP, c.width - 48), x, y, CAP, Console.TEXT_MUTED)
     vx = x
     if s.tone is not None:
-      D.dot(vx + 8, y + 36 + VAL / 2, 8, s.tone)
-      vx += 28
-    D.value_unit(s.value, s.unit, vx, y + 36, VAL, CAP, s.value_color)
+      D.dot(vx + 10, y + 44 + VAL / 2, 10, s.tone)
+      vx += 34
+    D.value_unit(s.value, s.unit, vx, y + 44, VAL, CAP, s.value_color)
     if s.note:
-      D.text(D.fit(s.note, CAP, c.width - 48), x, y + 36 + VAL + 12, CAP, Console.TEXT_SECONDARY)
+      D.text(D.fit(s.note, CAP, c.width - 48), x, y + 44 + VAL + 12, CAP, Console.TEXT_SECONDARY)
 
 
 def section_title(r: rl.Rectangle, title: str, caption: str = "", right: str = "",
@@ -241,34 +241,34 @@ def kv(x: float, y: float, label: str, value: str, unit: str = "", max_w: float 
        color: rl.Color | None = None):
   D.text(D.fit(label, CAP, max_w) if max_w else label, x, y, CAP, Console.TEXT_MUTED)
   if unit:
-    D.value_unit(value, unit, x, y + 34, KV, CAP, color)
+    D.value_unit(value, unit, x, y + 42, KV, CAP, color)
   else:
-    D.text(D.fit(value, KV, max_w) if max_w else value, x, y + 34, KV, color)
+    D.text(D.fit(value, KV, max_w) if max_w else value, x, y + 42, KV, color)
 
 
-def kv_grid(r: rl.Rectangle, items: Sequence[tuple[str, str, str]], cols: int, row_h: float = 84):
+def kv_grid(r: rl.Rectangle, items: Sequence[tuple[str, str, str]], cols: int, row_h: float = 112):
   cw = r.width / max(1, cols)
   for i, (label, value, unit) in enumerate(items):
     kv(r.x + (i % cols) * cw, r.y + (i // cols) * row_h, label, value, unit, max_w=cw - 24)
 
 
 def bar(r: rl.Rectangle, frac: float, fill: rl.Color, target: float | None = None, live: bool = False):
-  """A 24 px squared meter; `live` draws the striped fill for sampled readings, `target` a marker."""
+  """A thick squared meter (BAR_H tall by default); `live` draws the striped fill for sampled readings, `target` a marker."""
   frac = max(0.0, min(1.0, frac))
-  rl.draw_rectangle_rounded(r, roundness(r, 4), 4, Console.BG_TRACK)
+  rl.draw_rectangle_rounded(r, roundness(r, 6), 4, Console.BG_TRACK)
   if frac > 0:
     w = max(4.0, r.width * frac)
     if live:
       x = r.x
       while x < r.x + w:
-        rl.draw_rectangle_rec(rl.Rectangle(x, r.y, min(6, r.x + w - x), r.height), fill)
-        x += 8
+        rl.draw_rectangle_rec(rl.Rectangle(x, r.y, min(10, r.x + w - x), r.height), fill)
+        x += 14
     else:
       f = rl.Rectangle(r.x, r.y, w, r.height)
-      rl.draw_rectangle_rounded(f, roundness(f, 4), 4, fill)
+      rl.draw_rectangle_rounded(f, roundness(f, 6), 4, fill)
   if target is not None and 0 < target <= 1:
     tx = r.x + r.width * target
-    rl.draw_rectangle_rec(rl.Rectangle(tx - 2, r.y - 10, 4, r.height + 20), Console.TEXT_PRIMARY)
+    rl.draw_rectangle_rec(rl.Rectangle(tx - 3, r.y - 12, 6, r.height + 24), Console.TEXT_PRIMARY)
 
 
 def gauge(cx: float, cy: float, radius: float, frac: float, fill: rl.Color, label: str, sub: str = "",
@@ -380,52 +380,52 @@ def form_row(r: rl.Rectangle, title: str, desc: str = "", first: bool = False):
 
 
 def toggle(right: float, cy: float, on: bool, enabled: bool = True) -> rl.Rectangle:
-  w, h = 80, 44
+  w, h = 104, 60
   r = rl.Rectangle(right - w, cy - h / 2, w, h)
   track = (Console.ACCENT_FILL if on else Console.TOGGLE_OFF) if enabled else Console.BG_HIGH
   rl.draw_rectangle_rounded(r, 1.0, 16, track)
   kx = r.x + w - h / 2 if on else r.x + h / 2
-  rl.draw_circle(int(kx), int(cy), h / 2 - 6, Console.TOGGLE_KNOB if enabled else Console.TEXT_GHOST)
+  rl.draw_circle(int(kx), int(cy), h / 2 - 7, Console.TOGGLE_KNOB if enabled else Console.TEXT_GHOST)
   return r
 
 
 def segmented(right: float, cy: float, labels: Sequence[str], selected: int, min_seg: float = 0) -> list[rl.Rectangle]:
   """Citadel segmented control, right-aligned at `right`. Returns segment rects."""
-  pad = 4
-  widths = [max(min_seg, D.text_w(lab, CAP + 2, semi=True) + 48) for lab in labels]
+  pad = 6
+  widths = [max(min_seg, D.text_w(lab, CAP, semi=True) + 56) for lab in labels]
   total = sum(widths) + pad * 2
-  h = 64
+  h = 80
   r = rl.Rectangle(right - total, cy - h / 2, total, h)
-  rl.draw_rectangle_rounded(r, roundness(r, 8), 8, Console.BG_RAISED)
-  rl.draw_rectangle_rounded_lines_ex(r, roundness(r, 8), 8, HAIR, Console.BORDER_DEFAULT)
+  rl.draw_rectangle_rounded(r, roundness(r, 12), 8, Console.BG_RAISED)
+  rl.draw_rectangle_rounded_lines_ex(r, roundness(r, 12), 8, HAIR, Console.BORDER_DEFAULT)
   rects, x = [], r.x + pad
   for i, (lab, w) in enumerate(zip(labels, widths, strict=False)):
     sr = rl.Rectangle(x, r.y + pad, w, h - pad * 2)
     rects.append(sr)
     on = i == selected
     if on:
-      rl.draw_rectangle_rounded(sr, roundness(sr, 6), 8, Console.ACCENT_FILL)
-    D.text_center(lab, sr.x + w / 2, sr.y + (sr.height - CAP - 2) / 2 - 2, CAP + 2,
+      rl.draw_rectangle_rounded(sr, roundness(sr, 10), 8, Console.ACCENT_FILL)
+    D.text_center(lab, sr.x + w / 2, sr.y + (sr.height - CAP) / 2 - 2, CAP,
                   Console.ON_ACCENT if on else Console.TEXT_SECONDARY, semi=on)
     x += w
   return rects
 
 
 def chip(x: float, y: float, label: str, color: rl.Color | None = None, accent: bool = False) -> rl.Rectangle:
-  w = 18 + (28 if color is not None else 0) + D.text_w(label, CAP, semi=True) + 18
-  c = rl.Rectangle(x, y, w, 48)
-  rl.draw_rectangle_rounded(c, roundness(c, 8), 8, Console.ACCENT_TINT if accent else Console.BG_HIGH)
-  tx = c.x + 18
+  w = 22 + (32 if color is not None else 0) + D.text_w(label, CAP, semi=True) + 22
+  c = rl.Rectangle(x, y, w, 60)
+  rl.draw_rectangle_rounded(c, roundness(c, 12), 8, Console.ACCENT_TINT if accent else Console.BG_HIGH)
+  tx = c.x + 22
   if color is not None:
-    D.dot(tx + 8, c.y + 24, 8, color)
-    tx += 28
-  D.text(label, tx, c.y + (48 - CAP) / 2 - 1, CAP, Console.ACCENT_TEXT if accent else Console.TEXT_SECONDARY, semi=True)
+    D.dot(tx + 9, c.y + 30, 9, color)
+    tx += 32
+  D.text(label, tx, c.y + (60 - CAP) / 2 - 1, CAP, Console.ACCENT_TEXT if accent else Console.TEXT_SECONDARY, semi=True)
   return c
 
 
 def tag(x: float, y: float, label: str, accent: bool = False) -> rl.Rectangle:
-  w = D.text_w(label, 22, semi=True) + 20
-  c = rl.Rectangle(x, y, w, 36)
+  w = D.text_w(label, 26, semi=True) + 28
+  c = rl.Rectangle(x, y, w, 44)
   rl.draw_rectangle_rounded(c, roundness(c, 8), 8, Console.ACCENT_TINT if accent else Console.BG_HIGH)
-  D.text(label, c.x + 10, c.y + 6, 22, Console.ACCENT_TEXT if accent else Console.TEXT_SECONDARY, semi=True)
+  D.text(label, c.x + 14, c.y + 8, 26, Console.ACCENT_TEXT if accent else Console.TEXT_SECONDARY, semi=True)
   return c

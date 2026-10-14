@@ -46,6 +46,7 @@ SCENES: dict[str, str] = {
   "standby": "Parked standby splash (offroad idle)",
   "home": "Offroad Home dashboard in the Console shell",
   "home_alerts": "Offroad home with offroad alerts + update available",
+  "home_charging": "Home after the charging page was minimized (Charging card reopens it)",
   "settings": "Settings open on the Device panel",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
@@ -816,12 +817,12 @@ def scene_params(name: str) -> dict:
 def run_scene(sc: Scene):
   name = sc.name
   d = default_drive()
-  if name in ("standby", "home", "home_alerts", "settings", "settings_panels"):
+  if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels"):
     sc.drive = None
   else:
     sc.drive = d
 
-  if name in ("standby", "home", "home_alerts"):
+  if name in ("standby", "home", "home_alerts", "home_charging"):
     _inject_last_known()
 
   if name == "standby":
@@ -830,6 +831,13 @@ def run_scene(sc: Scene):
   elif name == "home":
     if hasattr(sc.main, "_open_shell"):
       sc.main._open_shell()
+    sc.settle()
+    sc.shot()
+  elif name == "home_charging":
+    _inject_charge("charging_dc")
+    sc.settle()
+    if hasattr(sc.main, "_on_charging_clicked"):
+      sc.main._on_charging_clicked()
     sc.settle()
     sc.shot()
   elif name == "home_alerts":

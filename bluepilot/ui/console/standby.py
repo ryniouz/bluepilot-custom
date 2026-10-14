@@ -1,8 +1,8 @@
 """
 Console parked standby: the splash shown when the comma is offroad and idle.
 
-Brand line and status chips on top, a large clock with the date, the battery gauge with
-range, and a Citadel stat strip of readiness facts. Any tap opens Home.
+Brand line and status chips on top, a large clock with the date, the charge with a thick
+squared bar and range, and a strip of readiness facts. Any tap opens Home.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
-from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, temp, truck_snapshot
+from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, _plugged_in, soc_color, temp, truck_snapshot
 from bluepilot.ui.lib.ev_data import finite
 from bluepilot.ui.lib.theme import Console, roundness
 
@@ -55,9 +55,9 @@ class ConsoleStandby(Widget):
       pass
     cx = right
     for label, color, accent in chips:
-      w = 18 + 28 + D.text_w(label, K.CAP, semi=True) + 18
+      w = 22 + 32 + D.text_w(label, K.CAP, semi=True) + 22
       cx -= w
-      K.chip(cx, mark.y + 6, label, color, accent=accent)
+      K.chip(cx, mark.y, label, color, accent=accent)
       cx -= 16
 
     # Clock and date
@@ -65,19 +65,26 @@ class ConsoleStandby(Widget):
     D.text(time.strftime("%-I:%M", now), left - 8, rect.y + 170, 300, light=True)
     D.text(time.strftime("%A, %B %-d", now), left, rect.y + 500, 40, Console.TEXT_SECONDARY)
 
-    # Battery gauge and range
+    # Battery: big charge, range, one thick squared bar
+    bx, bw = right - 820, 820
+    by0 = rect.y + 196
     if s is not None and finite(s.soc):
-      fill = Console.DANGER if s.soc < 10 else (Console.WARNING if s.soc < 20 else Console.SUCCESS)
-      gx, gy, gr = right - 560 + 132, rect.y + 340, 132
-      K.gauge(gx, gy, gr, s.soc / 100.0, fill, f"{s.soc:.0f}%", tr("Battery"))
-      tx = gx + gr + 56
+      D.text(tr("Battery") + " · " + (tr("Live") if live else tr("Last known")), bx, by0, K.CAP, Console.TEXT_MUTED)
+      D.value_unit(f"{s.soc:.0f}", "%", bx, by0 + 44, 140, 52, light=True)
       if finite(s.range_km):
         rng = s.range_km if ui_state.is_metric else s.range_km * KM_TO_MI
-        D.text(tr("Range"), tx, gy - 110, K.CAP, Console.TEXT_MUTED)
-        D.value_unit(f"{rng:.0f}", "km" if ui_state.is_metric else "mi", tx, gy - 76, 60, K.CAP)
-      D.text(tr("Plug"), tx, gy + 24, K.CAP, Console.TEXT_MUTED)
-      plugged = getattr(ui_state, "charging_screen", False)
-      D.text(tr("Charging") if plugged else tr("Not plugged in"), tx, gy + 58, K.KV)
+        unit = "km" if ui_state.is_metric else "mi"
+        D.text_right(tr("Range"), right, by0, K.CAP, Console.TEXT_MUTED)
+        vw = D.text_w(f"{rng:.0f}", 72, semi=True) + 10 + D.text_w(unit, 32)
+        D.value_unit(f"{rng:.0f}", unit, right - vw, by0 + 92, 72, 32)
+      K.bar(rl.Rectangle(bx, by0 + 220, bw, 48), s.soc / 100.0, soc_color(s.soc))
+      plugged = _plugged_in()
+      D.dot(bx + 10, by0 + 312 + K.KV / 2, 10, Console.SUCCESS if plugged else Console.TEXT_GHOST)
+      D.text(tr("Charging") if plugged else tr("Not plugged in"), bx + 36, by0 + 310, K.KV, Console.TEXT_SECONDARY)
+    else:
+      D.text(tr("Battery"), bx, by0, K.CAP, Console.TEXT_MUTED)
+      D.text(tr("No data yet"), bx, by0 + 52, 72, Console.TEXT_MUTED, light=True)
+      K.bar(rl.Rectangle(bx, by0 + 220, bw, 48), 0.0, Console.SUCCESS)
 
     # Readiness strip
     ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
@@ -90,21 +97,18 @@ class ConsoleStandby(Widget):
                           Console.WARNING if s.tire_low else None))
     else:
       cells.append(K.Stat(tr("Tires"), dash))
-    cells.append(K.Stat(tr("12 V"), f"{s.lv_volts:.1f}" if s is not None and finite(s.lv_volts) else dash,
-                        "V" if s is not None and finite(s.lv_volts) else ""))
-    if s is not None and finite(s.pack_temp_c):
-      v, u = temp(s.pack_temp_c)
-      cells.append(K.Stat(tr("Pack"), v, u))
+    if s is not None and finite(s.lv_volts):
+      cells.append(K.Stat(tr("12 V"), f"{s.lv_volts:.1f}", "V", tr("Low") if s.lv_low else tr("Healthy"),
+                          Console.WARNING if s.lv_low else None))
     else:
-      cells.append(K.Stat(tr("Pack"), dash))
+      cells.append(K.Stat(tr("12 V"), dash))
     if s is not None and finite(s.outside_temp_c):
       v, u = temp(s.outside_temp_c)
       cells.append(K.Stat(tr("Outside"), v, u))
     else:
       cells.append(K.Stat(tr("Outside"), dash))
-    cells.append(K.Stat(tr("Data"), tr("Live") if live else tr("Last known"), ""))
-    K.stat_strip(rl.Rectangle(left, rect.y + rect.height - 132 - K.STRIP_H, right - left, K.STRIP_H), cells)
+    K.stat_strip(rl.Rectangle(left, rect.y + rect.height - 120 - K.STRIP_H, right - left, K.STRIP_H), cells)
 
-    by = rect.y + rect.height - 84
+    by = rect.y + rect.height - 76
     D.text("BluePilot 6.0 · bp-6.0 · Lightning", left, by, K.CAP, Console.TEXT_MUTED)
     D.text_right(tr("Tap anywhere to open Home"), right, by, K.CAP, Console.TEXT_MUTED)

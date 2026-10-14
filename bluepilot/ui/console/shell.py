@@ -1,9 +1,9 @@
 """
-Console shell for the comma 3X, laid out like Citadel's own apps.
+Console shell for the comma 3X: roomy, phone-like navigation in the Console theme.
 
-  top bar     section tabs: Home, Drive, Energy, Screen, Connect, System
-  page rail   the section's pages as icons, down the left edge
-  page        a header (icon, title, status line, one action) above the page body
+  rail        Home, Drive, Energy, Screen, Connect, System (icon and label)
+  header      section title, alert / update / network chips, one page action, clock
+  page        Home's cards, or a section's page list beside one big card
 
 Settings sections host the existing openpilot / sunnypilot / BluePilot panel widgets, so every
 feature keeps working. Other modules add pages with register_page().
@@ -11,19 +11,25 @@ feature keeps working. Other modules add pages with register_page().
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
 
 import pyray as rl
 
+from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.console import kit as K
-from bluepilot.ui.lib.theme import Console
+from bluepilot.ui.lib.theme import Console, is_day, roundness
+
+RAIL_W = 152
+HEADER_H = 128
+SUBNAV_W = 480
+GUTTER = 32
 
 
 class Dest(IntEnum):
@@ -83,7 +89,9 @@ class ConsoleShell(Widget):
     self._sub: dict[Dest, int] = dict.fromkeys(Dest, 0)
     self._pages: dict[Dest, list[Page]] = {d: [] for d in Dest}
     self._tab_rects: list[rl.Rectangle] = []
-    self._rail_rects: list[rl.Rectangle] = []
+    self._sub_rects: list[rl.Rectangle] = []
+    self._chip_rects: list[tuple[rl.Rectangle, str]] = []
+    self._params = Params()
     self._action_rect: rl.Rectangle | None = None
     self._current: Widget | None = None
     self.alert_count: Callable[[], int] = lambda: 0
@@ -106,7 +114,8 @@ class ConsoleShell(Widget):
 
     self.register_page(Dest.HOME, Page(tr("Overview"), "grid", home, key="overview", framed=False))
     if alerts is not None:
-      self.register_page(Dest.HOME, Page(tr("Alerts"), "bell", alerts, key="alerts", subtitle=tr("Home")))
+      self.register_page(Dest.HOME, Page(tr("Alerts"), "bell", alerts, key="alerts", subtitle=tr("Home"),
+                                         action=lambda: tr("Back"), on_action=lambda: self.go(Dest.HOME, 0)))
 
     drive = tr("Drive") + " | " + tr("Changes apply on the next drive")
     panel(Dest.DRIVE, tr("Assist"), "gauge", "TOGGLES", drive)
@@ -194,31 +203,102 @@ class ConsoleShell(Widget):
 
   def _render(self, rect: rl.Rectangle):
     rl.draw_rectangle_rec(rect, Console.BG_PAGE)
-    net = self._network()
-    self._tab_rects, _ = K.top_bar(rl.Rectangle(rect.x, rect.y, rect.width, K.TOP_H), [(tr(n), i) for _, n, i in SECTIONS],
-                                   int(self._dest), [net] if net else [], alerts=self.alert_count())
-    pages = self._pages[self._dest]
-    body_y = rect.y + K.TOP_H
-    self._rail_rects = K.page_rail(rl.Rectangle(rect.x, body_y, K.RAIL_W, rect.height - K.TOP_H),
-                                   [p.icon for p in pages], self._sub[self._dest])
+    self._draw_rail(rl.Rectangle(rect.x, rect.y, RAIL_W, rect.height))
+    body = rl.Rectangle(rect.x + RAIL_W, rect.y, rect.width - RAIL_W, rect.height)
     page = self.current_page()
+    self._draw_header(rl.Rectangle(body.x, body.y, body.width, HEADER_H), page)
+    content = rl.Rectangle(body.x + GUTTER, body.y + HEADER_H, body.width - GUTTER * 2, body.height - HEADER_H - GUTTER)
     if page is None:
       return
     self._switch_to(page.widget)
+    pages = self._pages[self._dest]
+    self._sub_rects = []
 
-    area = rl.Rectangle(rect.x + K.RAIL_W + K.PAD_L, body_y + K.PAD_T, rect.width - K.RAIL_W - K.PAD_L - K.PAD_R,
-                        rect.height - K.TOP_H - K.PAD_T - 28)
-    sub = page.subtitle() if callable(page.subtitle) else page.subtitle
-    dot = page.sub_dot() if page.sub_dot else None
-    action = page.action() if page.action else None
-    self._action_rect = K.page_header(rl.Rectangle(area.x, area.y, area.width, K.HEADER_H), page.icon, page.title, sub,
-                                      dot, action=action)
-    body = rl.Rectangle(area.x, area.y + K.HEADER_H + K.GAP, area.width, area.height - K.HEADER_H - K.GAP)
+    if len(pages) > 1 and self._dest != Dest.HOME:
+      y = content.y
+      for i, p in enumerate(pages):
+        r = rl.Rectangle(content.x, y, SUBNAV_W - GUTTER, 96)
+        self._sub_rects.append(r)
+        on = i == self._sub[self._dest]
+        if on:
+          rl.draw_rectangle_rounded(r, roundness(r, 16), 8, Console.ACCENT_TINT)
+        color = Console.ACCENT_TEXT if on else Console.TEXT_SECONDARY
+        D.icon(p.icon, r.x + 24, r.y + 28, 40, Console.ACCENT if on else Console.TEXT_MUTED)
+        D.text(D.fit(p.title, D.BODY, r.width - 112, semi=on), r.x + 88, r.y + (r.height - D.BODY) / 2 - 2, D.BODY, color, semi=on)
+        y += 104
+      content = rl.Rectangle(content.x + SUBNAV_W, content.y, content.width - SUBNAV_W, content.height)
+
     if page.framed:
-      K.panel(body)
-      page.widget.render(rl.Rectangle(body.x + 32, body.y + 8, body.width - 64, body.height - 16))
+      D.card(content)
+      page.widget.render(rl.Rectangle(content.x + 32, content.y + 12, content.width - 64, content.height - 24))
     else:
-      page.widget.render(body)
+      page.widget.render(content)
+
+  def _draw_rail(self, r: rl.Rectangle):
+    rl.draw_rectangle_rec(r, Console.BG_PANEL)
+    if is_day():
+      rl.draw_rectangle_rec(rl.Rectangle(r.x + r.width - 2, r.y, 2, r.height), Console.BORDER_DEFAULT)
+    brand = rl.Rectangle(r.x + (r.width - 80) / 2, r.y + 28, 80, 80)
+    rl.draw_rectangle_rounded(brand, roundness(brand, 16), 8, Console.ACCENT_FILL)
+    D.text_center("BP", brand.x + 40, brand.y + 22, 32, Console.ON_ACCENT, semi=True)
+
+    self._tab_rects = []
+    y = r.y + 140
+    for dest, label, ic in SECTIONS:
+      item = rl.Rectangle(r.x + 16, y, r.width - 32, 116)
+      self._tab_rects.append(item)
+      on = dest == self._dest
+      if on:
+        rl.draw_rectangle_rounded(item, roundness(item, 16), 8, Console.ACCENT_TINT)
+      color = Console.ACCENT_TEXT if on else Console.TEXT_MUTED
+      D.icon(ic, item.x + (item.width - 44) / 2, item.y + 18, 44, Console.ACCENT if on else Console.TEXT_MUTED)
+      D.text_center(tr(label), item.x + item.width / 2, item.y + 72, D.CAPTION, color, semi=True)
+      y += 124
+
+    ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
+    D.dot(r.x + r.width / 2, r.y + r.height - 86, 10, Console.SUCCESS if ready else Console.TEXT_GHOST)
+    D.text_center(tr("Ready") if ready else tr("No car"), r.x + r.width / 2, r.y + r.height - 62, D.CAPTION,
+                  Console.TEXT_MUTED, semi=True)
+
+  def _draw_header(self, r: rl.Rectangle, page: Page | None):
+    if self._dest == Dest.HOME and page is not None and page.key == "alerts":
+      title = tr("Alerts")
+    elif self._dest == Dest.HOME:
+      title = tr("F-150 Lightning")
+    else:
+      title = {d: n for d, n, _ in SECTIONS}[self._dest]
+      title = tr(title)
+    D.text(title, r.x + GUTTER + 16, r.y + (r.height - D.H1) / 2 - 2, D.H1, semi=True)
+    right = r.x + r.width - GUTTER
+    clock = time.strftime("%-I:%M %p")
+    right -= D.text_right(clock, right, r.y + (r.height - D.BODY) / 2 - 2, D.BODY, semi=True) + 28
+    self._action_rect = None
+    action = page.action() if page is not None and page.action else None
+    if action:
+      w = D.text_w(action, D.LABEL, semi=True) + 64
+      b = rl.Rectangle(right - w, r.y + (r.height - 72) / 2, w, 72)
+      D.button(b, action, primary=False, size=D.LABEL)
+      self._action_rect = b
+      right = b.x - 16
+    chips = []
+    alerts = self.alert_count()
+    if alerts:
+      chips.append((tr("1 alert") if alerts == 1 else f"{alerts} " + tr("alerts"), Console.WARNING, "alerts"))
+    try:
+      if self._params.get_bool("UpdateAvailable"):
+        chips.append((tr("Update ready"), Console.ACCENT, None))
+    except Exception:
+      pass
+    net = self._network()
+    if net:
+      chips.append((net[0], net[1], None))
+    self._chip_rects = []
+    for label, color, key in chips:
+      cw = D.text_w(label, D.LABEL, semi=True) + 24 * 2 + 28
+      c = D.chip(right - cw, r.y + (r.height - 60) / 2, label, color)
+      if key:
+        self._chip_rects.append((c, key))
+      right -= cw + 16
 
   @staticmethod
   def _network():
@@ -236,11 +316,16 @@ class ConsoleShell(Widget):
   def _handle_mouse_release(self, mouse_pos) -> bool:
     for i, r in enumerate(self._tab_rects):
       if D.hit(r, mouse_pos):
-        self.go(SECTIONS[i][0])
+        dest = SECTIONS[i][0]
+        self.go(dest, 0 if dest == Dest.HOME else None)
         return True
-    for i, r in enumerate(self._rail_rects):
+    for i, r in enumerate(self._sub_rects):
       if D.hit(r, mouse_pos):
         self.go(self._dest, i)
+        return True
+    for r, key in self._chip_rects:
+      if D.hit(r, mouse_pos):
+        self.open_panel(key)
         return True
     page = self.current_page()
     if page is not None and page.on_action and D.hit(self._action_rect, mouse_pos):
