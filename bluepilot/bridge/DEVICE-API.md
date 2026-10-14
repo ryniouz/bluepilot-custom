@@ -62,6 +62,10 @@ Latest `thumbnail` JPEG from the road camera (onroad only, ~1/min upstream rate)
 ### `GET /v1/params?keys=a,b` and `PUT /v1/params/<key>`
 Read any key in the allowlist; write `{ "value": ... }` only when **offroad** (`IsOnroad` false), else 409 `{error:"onroad"}`. Allowlist = BluePilot/sunnypilot display and tuning keys (see `bluepilot/bridge/params_allowlist.py`). Never writes safety or calibration keys.
 
+### `GET /v1/settings` and `PUT /v1/settings` (remote settings, like sunnypilot connect)
+`GET` returns `{ onroad, editable, groups: [{ id, title, settings: [{ key, type: "bool|choice|int|float", title, description, options?: [{value,label}], min?, max?, step?, unit?, value }] }] }`. Groups: driving, speed_limit, lateral, longitudinal, display, device (metadata in `bluepilot/bridge/settings_schema.py`).
+`PUT` body `{ "values": { key: value, ... } }` validates every value against its metadata first, then writes them all; returns `{ applied: { key: value } }`. 409 `onroad` while driving, 403 for keys outside the schema, 400 for out-of-range or invalid choices (nothing is written). The device's own settings screens read the same params, so both stay in sync.
+
 ## Keep-until-synced
 With `BPKeepUntilSynced` = 1 (default 1 when bridge enabled), `system/loggerd/deleter.py` deletes synced segments first (oldest first). It only deletes unsynced segments when free space falls below the hard floor (5% or 2 GB), so the comma never fills up.
 

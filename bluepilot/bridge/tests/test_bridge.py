@@ -331,3 +331,44 @@ def test_notifier_posts_drive_finished(tmp_path):
   srv.shutdown()
   assert got and got[0][0] == f"Bearer {TOKEN}" and got[0][1]["event"]["kind"] == "drive_finished"
   assert len(got) == 1
+
+
+# ---------------------------------------------------------------- settings (remote control)
+
+def test_schema_matches_allowlist():
+  from bluepilot.bridge.params_allowlist import WRITABLE
+  from bluepilot.bridge.settings_schema import BY_KEY
+  assert set(BY_KEY) <= WRITABLE
+  assert WRITABLE - set(BY_KEY) == {"BPBridgeNotifyUrl"}
+
+
+def test_settings_get_and_batch_put(env):
+  env.params.values.update({"LongitudinalPersonality": 1, "custom_path_offset": 0.0, "FordPrefHybridGaugeStyle": "flat"})
+  status, body = jcall(env, "/v1/settings")
+  assert status == 200 and body["editable"] is True
+  driving = next(g for g in body["groups"] if g["id"] == "driving")
+  personality = next(s for s in driving["settings"] if s["key"] == "LongitudinalPersonality")
+  assert personality["value"] == 1 and personality["options"][2] == {"value": 2, "label": "Relaxed"}
+
+  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"LongitudinalPersonality": "2", "custom_path_offset": 0.25,
+                                                               "FordPrefHybridGaugeStyle": "arched", "ShowBrakeStatus": "true"}})
+  assert status == 200
+  assert env.params.values["LongitudinalPersonality"] == 2 and env.params.values["custom_path_offset"] == 0.25
+  assert env.params.values["FordPrefHybridGaugeStyle"] == "arched" and env.params.values["ShowBrakeStatus"] is True
+
+
+def test_settings_put_validates_all_before_writing(env):
+  env.params.values["custom_path_offset"] = 0.0
+  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"ShowBrakeStatus": True, "custom_path_offset": 0.9}})
+  assert status == 400 and "between" in body["message"]
+  assert env.params.values["ShowBrakeStatus"] is False  # nothing written
+  assert jcall(env, "/v1/settings", "PUT", {"values": {"AlphaLongitudinalEnabled": True}})[0] == 403
+  assert jcall(env, "/v1/params/SpeedLimitMode", "PUT", {"value": 7})[0] == 400
+
+
+def test_settings_refused_onroad(env):
+  env.params.onroad = True
+  _, body = jcall(env, "/v1/settings")
+  assert body["editable"] is False
+  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"ShowBrakeStatus": True}})
+  assert status == 409 and body["error"] == "onroad"

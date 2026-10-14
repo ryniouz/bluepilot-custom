@@ -14,6 +14,7 @@ from bluepilot.bridge import API_VERSION
 from bluepilot.bridge import segments as seg_index
 from bluepilot.bridge.config import ALLOWED_FILES, LIVE_HZ_MAX, LIVE_HZ_MIN, SSE_PING_S
 from bluepilot.bridge.params_allowlist import READABLE, WRITABLE
+from bluepilot.bridge.settings_schema import BY_KEY, GROUPS, validate_value
 from bluepilot.bridge.store import EventLog, SyncedStore, iso_now
 
 CHUNK = 256 * 1024
@@ -123,8 +124,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
           return self._snapshot(query)
         if path == "/v1/params":
           return self._params_get(query)
+        if path == "/v1/settings":
+          return self._settings_get()
       elif method == "POST" and path == "/v1/synced":
         return self._synced()
+      elif method == "PUT" and path == "/v1/settings":
+        return self._settings_put()
       elif method == "PUT" and path.startswith("/v1/params/"):
         return self._params_put(path[len("/v1/params/"):])
       return self._error(404, "not_found")
@@ -251,8 +256,32 @@ class BridgeHandler(BaseHTTPRequestHandler):
     value = body["value"]
     if value is None or isinstance(value, (dict, list)):
       raise ValueError("value must be a string, number or boolean")
+    if key in BY_KEY:
+      value = validate_value(BY_KEY[key], value)
     self.ctx.params.put(key, value)
     self._send_json(200, {"key": key, "value": self.ctx.params.get(key)})
+
+  def _settings_get(self) -> None:
+    onroad = self.ctx.params.is_onroad()
+    groups = [{"id": g["id"], "title": g["title"],
+               "settings": [{**m, "value": self.ctx.params.get(m["key"])} for m in g["settings"]]} for g in GROUPS]
+    self._send_json(200, {"onroad": onroad, "editable": not onroad, "groups": groups})
+
+  def _settings_put(self) -> None:
+    """Apply several settings at once; all are validated before any is written."""
+    if self.ctx.params.is_onroad():
+      return self._error(409, "onroad", "Settings can only be changed while the truck is parked.")
+    body = self._read_json()
+    values = body.get("values") if isinstance(body, dict) else None
+    if not isinstance(values, dict) or not values:
+      raise ValueError("body must be {values: {key: value}}")
+    unknown = [k for k in values if k not in BY_KEY]
+    if unknown:
+      return self._error(403, "not_allowed", f"Cannot be changed remotely: {', '.join(unknown)}")
+    normalized = {k: validate_value(BY_KEY[k], v) for k, v in values.items()}
+    for k, v in normalized.items():
+      self.ctx.params.put(k, v)
+    self._send_json(200, {"applied": {k: self.ctx.params.get(k) for k in normalized}})
 
   def _live_stream(self, query: dict) -> None:
     try:

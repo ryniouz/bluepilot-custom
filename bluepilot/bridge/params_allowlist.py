@@ -23,7 +23,7 @@ WRITABLE = frozenset({
   "TrueVEgoUI", "HideVEgoUI", "ShowTurnSignals", "RocketFuel", "ChevronInfo", "DevUIInfo",
   "SmartCruiseControlVision", "SmartCruiseControlMap", "DynamicExperimentalControl", "SpeedLimitMode",
   "SpeedLimitPolicy", "SpeedLimitOffsetType", "SpeedLimitValueOffset", "LongitudinalPersonality", "ExperimentalMode",
-  "OnroadScreenOffBrightness", "OnroadScreenOffTimer", "MaxTimeOffroad", "IsMetric",
+  "OnroadScreenOffBrightness", "IsMetric",
   # bridge
   "BPKeepUntilSynced", "BPBridgeNotifyUrl",
 })
