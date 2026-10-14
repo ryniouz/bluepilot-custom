@@ -80,7 +80,7 @@ class ChargingSettingsPage(FormPage):
       rows.append(Info(tr("Stays on while charging"), tr("Yes") if p.bool("BPChargeKeepAwake", True) else tr("No")))
     if p.has("BPChargeSleepDelayMin"):
       d = p.int("BPChargeSleepDelayMin", 30)
-      rows.append(Info(tr("Powers down after the charge"), tr("Default timer") if d == 0 else fmt_min(d)))
+      rows.append(Info(tr("Sleeps after charging"), tr("Default timer") if d == 0 else fmt_min(d)))
     if p.has("BPLvSaver"):
       rows.append(Info(tr("12 V power saver"), tr("On") if p.bool("BPLvSaver") else tr("Off")))
     rows.append(Nav(tr("Power while parked"), tr("System > Truck"), lambda: self.on_open_power and self.on_open_power()))
