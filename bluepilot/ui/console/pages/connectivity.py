@@ -21,11 +21,10 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import STRENGTH, _param, has_param
-from bluepilot.ui.console.pages.drives import fmt_bytes
 from bluepilot.ui.lib import bridge_status as bridge
 from bluepilot.ui.lib.drive_index import indexer
 from bluepilot.ui.lib.home_location import home_location
-from bluepilot.ui.lib.net_usage import usage
+from bluepilot.ui.lib.net_usage import fmt_data, usage
 from bluepilot.ui.lib.theme import Console
 
 GAP = 32
@@ -197,19 +196,16 @@ class ConnectivityPage(Widget):
     y = self._row(r, y, *self.data_used(), button=True)
     cell = bridge.get("usage", "cell")
     if isinstance(cell, dict):
-      tv, tu = fmt_bytes(int(cell.get("todayBytes") or 0))
-      y = self._row(r, y, tr("Today"), f"{tv} {tu}", button=True)
+      y = self._row(r, y, tr("Today"), fmt_data(int(cell.get("todayBytes") or 0)), button=True)
     else:
-      bv, bu = fmt_bytes(usage().boot_bytes)
-      y = self._row(r, y, tr("Since start-up"), f"{bv} {bu}", button=True)
+      y = self._row(r, y, tr("Since start-up"), fmt_data(usage().boot_bytes), button=True)
     self._button(r, tr("Cellular settings"), lambda: self.on_open_cellular and self.on_open_cellular())
 
   def data_used(self) -> tuple[str, str, rl.Color | None]:
     """'Data this month' row: the bridge's count (with its limit) when it runs, else the UI's own."""
     month = bridge.get("usage", "cell", "monthBytes")
     month = int(month) if isinstance(month, (int, float)) else usage().month_bytes
-    v, u = fmt_bytes(month)
-    text, color = f"{v} {u}", None
+    text, color = fmt_data(month), None
     limit = bridge.get("usage", "limitBytes", default=0)
     if not limit and has_param(self._params, "BPCellLimitMB"):
       try:
@@ -217,8 +213,7 @@ class ConnectivityPage(Widget):
       except ValueError:
         limit = 0
     if limit:
-      lv, lu = fmt_bytes(int(limit))
-      text += " " + tr("of") + f" {lv} {lu}"
+      text += " " + tr("of") + " " + fmt_data(int(limit))
       if bridge.get("usage", "overLimit", default=False) or month >= limit:
         color = Console.WARNING
     return tr("Data this month"), text, color

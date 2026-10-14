@@ -229,4 +229,11 @@ if os.path.exists("../../third_party/copyparty/copyparty-sfx.py"):
   copyparty_args += ["-q"]
   procs += [NativeProcess("copyparty-sfx", "third_party/copyparty", ["./copyparty-sfx.py", *copyparty_args], and_(only_offroad, use_copyparty))]
 
+# Custom: sunnylink is off in Citadel Auto OS, which links through its own services. Its daemons never start, so
+# the device neither registers with nor reports to sunnylink, and its backups don't run. The source stays for
+# upstream merges. comma connect (athenad, uploader) is untouched.
+SUNNYLINK_PROCS = {"manage_sunnylinkd", "sunnylink_registration_manager", "statsd_sp", "backup_manager", "sunnylink_uploader"}
+procs = [p for p in procs if p.name not in SUNNYLINK_PROCS]
+# End Custom
+
 managed_processes = {p.name: p for p in procs}

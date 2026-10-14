@@ -211,7 +211,7 @@ class RoadTripUploader(threading.Thread):
     if snap.get("onroad") and now - self.last_live >= LIVE_PUSH_S:
       self.last_live = now
       body = json.dumps(snap, separators=(",", ":")).encode()
-      if not self._request("POST", f"{base}/live", body, {"Content-Type": "application/json"}, cellular):
+      if not self._request("POST", f"{base}/live", body, {"Content-Type": "application/json"}, cellular, "live"):
         return self._fail()
 
     segs = seg_index.scan(self.log_root, self.allowed_files)
@@ -249,13 +249,14 @@ class RoadTripUploader(threading.Thread):
   def _headers(self, extra: dict) -> dict:
     return {"Authorization": f"Bearer {self.token()}", **extra}
 
-  def _request(self, method: str, url: str, body: bytes | None, headers: dict, cellular: bool) -> bool:
+  def _request(self, method: str, url: str, body: bytes | None, headers: dict, cellular: bool,
+               category: str = "citadel") -> bool:
     try:
       status = self.transport(method, url, self._headers(headers), body)
     except (OSError, http.client.HTTPException, ValueError):
       return False
     if body:
-      self.usage.add_upload(len(body), cellular)
+      self.usage.add_upload(len(body), cellular, category)
     if 200 <= status < 300:
       self._ok()
       return True
@@ -285,7 +286,7 @@ class RoadTripUploader(threading.Thread):
     except (OSError, http.client.HTTPException, ValueError):
       status = 0
     finally:
-      self.usage.add_upload(sent[0], cellular)
+      self.usage.add_upload(sent[0], cellular, "citadel")
       with self.lock:
         self.current = None
     if not (200 <= status < 300) or sent[0] != size:

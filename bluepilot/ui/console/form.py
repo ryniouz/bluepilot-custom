@@ -26,6 +26,7 @@ Rows (all heights fixed, so layout never jumps):
   Action    title, sub, a button (primary, plain or danger)                  ROW_SET  104
   Info      label left, value right, optional status dot                     ROW_INFO  64
   Meter     label, value, and a thick squared bar (K.bar)                     ROW_METER 112
+  Stack     one thick bar split into parts, legend below (where a total went)  64 + 56 per legend line
   Note      muted wrapped text (up to 4 lines)                               40 per line + 16
   Custom    any height; draw(rect) returns its own hit rects
 
@@ -48,7 +49,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
-from bluepilot.ui.lib.theme import Console
+from bluepilot.ui.lib.theme import Console, roundness
 
 GAP = 32
 TITLE_H = 76
@@ -57,6 +58,8 @@ ROW_SEG = 130
 ROW_INFO = 64
 ROW_METER = 112
 ROW_RADIO = 80
+STACK_BAR = 40
+STACK_LEGEND = 56
 NOTE_LINE = 40
 TWO_COLS_W = 1200
 DRAG_PX = 16
@@ -232,6 +235,36 @@ class Meter:
 
 
 @dataclass
+class StackPart:
+  label: str
+  value: str          # shown in the legend, already formatted (e.g. "412 MB")
+  amount: float       # bar length, in the same unit as Stack.scale
+  color: rl.Color
+
+
+@dataclass
+class Stack:
+  """One thick squared bar split into parts with a legend underneath: where a total went (data, storage, energy).
+  `scale` is what the full bar stands for (0: the sum of the parts); `marker` draws a limit line at that amount.
+  Parts with no amount keep their legend entry (shown as zero) unless `hide_empty`."""
+  parts: Sequence[StackPart]
+  scale: float = 0.0
+  marker: float | None = None
+  cols: int = 0             # legend columns; 0 picks 3 on a wide card, 2 otherwise
+  hide_empty: bool = False
+
+  def _legend(self) -> list[StackPart]:
+    return [p for p in self.parts if p.amount > 0 or not self.hide_empty]
+
+  def ncols(self, w: float) -> int:
+    return self.cols if self.cols > 0 else (3 if w >= 1300 else 2)
+
+  def height(self, w: float) -> float:
+    n, c = len(self._legend()), self.ncols(w)
+    return 24 + STACK_BAR + 16 + STACK_LEGEND * ((n + c - 1) // c) + 8
+
+
+@dataclass
 class Note:
   text: str
   color: rl.Color | None = None
@@ -250,7 +283,7 @@ class Custom:
     return self.h
 
 
-Row = Toggle | Choice | Stepper | Nav | Action | Info | Meter | Note | Custom
+Row = Toggle | Choice | Stepper | Nav | Action | Info | Meter | Stack | Note | Custom
 
 
 @dataclass
@@ -443,6 +476,8 @@ class FormPage(Widget):
       D.text(D.fit(row.label, D.LABEL, w * 0.6), x, y + 16, D.LABEL, Console.TEXT_MUTED)
       D.text_right(row.value, right, y + 12, D.BODY, semi=True)
       K.bar(rl.Rectangle(x, y + 64, w, 28), row.frac, row.color or Console.ACCENT, target=row.target)
+    elif isinstance(row, Stack):
+      self._draw_stack(row, r)
     elif isinstance(row, Note):
       yy = y + 12
       for ln in D.wrap(row.text, D.LABEL, w, row.lines):
@@ -452,6 +487,39 @@ class FormPage(Widget):
       hits = row.draw(r)
       if hits:
         self._hits += hits
+
+  def _draw_stack(self, row: Stack, r: rl.Rectangle):
+    x, w = r.x, r.width
+    bar = rl.Rectangle(x, r.y + 24, w, STACK_BAR)
+    total = sum(max(0.0, p.amount) for p in row.parts)
+    scale = row.scale if row.scale > 0 else total
+    rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)
+    if scale > 0 and total > 0:
+      end = bar.x + w * min(1.0, total / scale)   # parts past the scale (over a limit) are cut at the bar's end
+      sx = bar.x
+      for p in row.parts:
+        if p.amount <= 0 or sx >= end:
+          continue
+        pw = min(max(6.0, w * p.amount / scale), end - sx)
+        rl.draw_rectangle_rec(rl.Rectangle(sx, bar.y, pw, STACK_BAR), p.color)
+        sx += pw
+        if sx < end - 1:  # a hairline of card between parts
+          rl.draw_rectangle_rec(rl.Rectangle(sx - 2, bar.y, 3, STACK_BAR), Console.BG_PANEL)
+    if row.marker is not None and scale > 0 and 0 < row.marker <= scale:
+      mx = bar.x + w * row.marker / scale
+      rl.draw_rectangle_rec(rl.Rectangle(mx - 3, bar.y - 12, 6, STACK_BAR + 24), Console.TEXT_PRIMARY)
+    cols = row.ncols(w)
+    cw = w / cols
+    for i, p in enumerate(row._legend()):
+      lx = x + (i % cols) * cw
+      ly = bar.y + STACK_BAR + 16 + (i // cols) * STACK_LEGEND
+      inner = cw - (48 if i % cols < cols - 1 else 0)
+      D.dot(lx + 9, ly + STACK_LEGEND / 2, 9, p.color if p.amount > 0 else Console.BORDER_STRONG)
+      vw = D.text_w(p.value, D.LABEL, semi=True)
+      D.text(D.fit(p.label, D.LABEL, inner - 36 - vw - 16), lx + 32, ly + (STACK_LEGEND - D.LABEL) / 2 - 2, D.LABEL,
+             Console.TEXT_SECONDARY)
+      D.text_right(p.value, lx + inner, ly + (STACK_LEGEND - D.LABEL) / 2 - 2, D.LABEL,
+                   Console.TEXT_PRIMARY if p.amount > 0 else Console.TEXT_GHOST, semi=True)
 
   def _draw_choice(self, row: Choice, r: rl.Rectangle):
     x, y, w = r.x, r.y, r.width

@@ -82,6 +82,8 @@ On failure it backs off for 5 s, 10 s, 30 s, 1 min, 2 min, then 5 min.
 
 Cellular, or a metered Wi-Fi network, counts against `BPCellLimitMB` per billing month, which starts on day `BPCellResetDay`. Over the limit, `BPCellLimitAction` 0 sends telemetry only and 1 stops all uploads. LTE use is measured from the modem counters (`deviceState.networkStats`) and stored in `/data/bluepilot/bridge/usage.json`.
 
+`usage.categories` breaks the month's LTE bytes down: `commaConnect` (the stock uploader meters what it sends over LTE into `/dev/shm/bp_comma_cell_bytes`), `citadel` (Road Trip Mode segment uploads), `live` (the live snapshot pushed while driving), `link` (remote link answers) and `other` (the modem total minus those, never negative: athena, updates, maps, DNS). Counts are bytes sent; they reset with the billing month. The on-device Connect > Cellular page draws them as one stacked bar.
+
 Uploads do not mark segments synced: keep-until-synced still waits for the home pull (rlog and cameras).
 
 ## comma connect and Citadel, side by side

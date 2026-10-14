@@ -28,6 +28,7 @@ from bluepilot.bridge.server import BridgeContext, make_server
 from bluepilot.bridge.status import (STATUS_PATH, StatusWriter, cellular_view, connectivity, disk_usage, network_view,
                                      storage_breakdown)
 from bluepilot.bridge.store import EventLog, SyncedStore, iso_now
+from bluepilot.bridge import meter as comma_meter
 from bluepilot.bridge.usage import DataUsage
 
 
@@ -161,6 +162,7 @@ def main() -> None:
                                  time.monotonic_ns(), net, params.get_bool(cfg.PARAM_COMMA_WIFI_ONLY), slow.comma_queue)
     cellular = cellular_view(net_raw.get("info"), net["strength"], slow.sim, slow.modem_version,
                              params.get_bool("GsmRoaming"), _str(params, "GsmApn"), params.get_bool("GsmMetered"))
+    usage.observe_comma(comma_meter.read())
     return connectivity(net, uploader.status(), usage.summary(rt_settings().limit_bytes), comma,
                         params.get_bool(PARAM_KEEP_UNTIL_SYNCED), unsynced, last_synced, cellular, link.status())
 
