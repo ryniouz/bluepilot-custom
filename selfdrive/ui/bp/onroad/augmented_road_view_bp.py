@@ -67,6 +67,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._confidence_ball = ConsoleConfidence()
     self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
     self._param_counter = 0
+    self._guest = self._read_guest()
 
   def update_fade_out_bottom_overlay(self, _content_rect):
     """BluePilot: Skip MICI fade overlay on TICI — causes unwanted black gradient at bottom."""
@@ -82,6 +83,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._param_counter += 1
     if self._param_counter >= 60:
       self._param_counter = 0
+      self._guest = self._read_guest()
       self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
 
     self._switch_stream_if_needed(ui_state.sm)
@@ -89,7 +91,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # Custom: Console layout preset filters optional overlays for this frame
     preset = current_preset()
-    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL
+    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL and not self._guest
+    self._hud_renderer.guest = self.alert_renderer.guest = self._guest
 
     # Custom: the camera fills the whole screen (no border frame); the UI keeps its inset
     self._content_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
@@ -114,7 +117,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     CameraView._render(self, rect)
 
     # Render model (uses full content rect for camera-space overlays)
-    self.model_renderer.render(self._content_rect)
+    # Custom: no path or lead marker on a Guest Mode drive (openpilot is not driving)
+    if not self._guest:
+      self.model_renderer.render(self._content_rect)
 
     # SP fade overlay
     self.update_fade_out_bottom_overlay(self._content_rect)
@@ -144,7 +149,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._hud_renderer.render(ui_rect)
 
     # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
-    lead = self.model_renderer.lead_info
+    lead = None if self._guest else self.model_renderer.lead_info
     if lead is not None and preset != LayoutPreset.MINIMAL and road_prefs.on(SHOW_LEAD_CARD):
       details = self._ev_hud.last_rect
       if details is not None:  # Dense: the details card owns the right edge; sit to its left
@@ -165,12 +170,12 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       int(self._content_rect.height)
     )
     # Custom: a prompt or critical card at the bottom covers the tile's corner; the card shows the ask
-    if not alert_blocks_dock:
+    if not alert_blocks_dock and not self._guest:
       self.driver_state_renderer.render(ui_rect)
 
     # BluePilot: stock arc torque bar when the dock (which carries the strip) is hidden.
     # Custom: the Minimal preset hides it.
-    if dock is None and preset != LayoutPreset.MINIMAL:
+    if dock is None and preset != LayoutPreset.MINIMAL and not self._guest:
       torque_rect = ui_rect
       if ui_state.developer_ui in (DeveloperUiState.BOTTOM, DeveloperUiState.BOTH):
         torque_rect = rl.Rectangle(ui_rect.x, ui_rect.y, ui_rect.width, ui_rect.height - get_bottom_dev_ui_offset())
@@ -194,7 +199,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     # Custom: engagement glow along the screen edges replaces the border frame (BPHideOnroadBorder
     # still turns it off)
     if not self._bp_params.get_bool("BPHideOnroadBorder"):
-      self._draw_state_glow(rect)
+      if not self._guest:
+        self._draw_state_glow(rect)
 
     # Publish uiDebug
     msg = messaging.new_message('uiDebug')
@@ -217,6 +223,15 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
     draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x,
                         cs.leftBlindspot and cs.leftBlinker, cs.rightBlindspot and cs.rightBlinker)
+
+  def _read_guest(self) -> bool:
+    """Guest Mode drive: BPGuestModeActive is set by the Lightning control stream for the whole
+    drive (card passive, panda noOutput, factory ACC and lane keeping). False on builds that do
+    not have the key yet."""
+    try:
+      return self._bp_params.get_bool("BPGuestModeActive")
+    except UnknownKeyName:
+      return False
 
   def _calc_frame_matrix(self, rect: rl.Rectangle) -> np.ndarray:
     """Custom: stock framing, but the zoom never drops below what covers the whole content rect,

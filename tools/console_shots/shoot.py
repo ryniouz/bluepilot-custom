@@ -93,9 +93,11 @@ SCENES.update({
   "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
   "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band and edge glow",
   "drive_off": "Disengaged: neutral state band, no edge glow",
+  "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
-                    "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
+                    "drive_guest", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -846,7 +848,8 @@ def scene_params(name: str) -> dict:
 
 # --- Stream B (driving screen) scene setup ------------------------------------------------
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
-                "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off")
+                "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
+                "drive_guest")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -890,6 +893,10 @@ def setup_drive_scene(name: str, d: dict):
     d.update(enabled=False, state="disabled", mads=(True, True))
   elif name == "drive_off":
     d.update(enabled=False, state="disabled")
+  elif name == "drive_guest":
+    d.update(enabled=False, state="disabled", alert=("small", "normal", "openpilot Unavailable", "Dashcam Mode"))
+    from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP
+    AugmentedRoadViewBP._read_guest = lambda self: True
 
 
 def _inject_ev(fields: dict):

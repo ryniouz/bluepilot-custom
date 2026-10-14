@@ -79,6 +79,7 @@ class AlertRendererBP(AlertRenderer):
     # notification card centres in it.
     self.notify_band: tuple[float, float] | None = None
     self.notify_top: float | None = None
+    self.guest = False
 
   def _render(self, rect: rl.Rectangle):
     from openpilot.selfdrive.ui.ui_state import ui_state
@@ -95,6 +96,11 @@ class AlertRendererBP(AlertRenderer):
       ui_state.onroad_brightness_handle_alerts(ui_state.started, alert)
 
     if not alert:
+      return
+
+    # Custom: on a Guest Mode drive openpilot is passive by design; its engage prompts and
+    # "unavailable" alerts are expected noise, so only critical alerts still show
+    if self.guest and alert.status != AlertStatus.critical:
       return
 
     if alert.status == AlertStatus.normal and alert.size != AlertSize.full:

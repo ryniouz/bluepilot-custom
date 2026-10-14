@@ -137,6 +137,10 @@ def cue_icon(name: str, x: float, y: float, size: float, color: rl.Color):
       rl.draw_circle_v(rl.Vector2(x + lx * s, y + 13.6 * s), 1.4 * s, color)
     for wx in (4.5, 16):
       rl.draw_rectangle_rounded(rl.Rectangle(x + wx * s, y + 17.5 * s, 3.5 * s, 3.5 * s), 0.4, 4, color)
+  elif name == "rec":
+    # recording: a filled dot in a ring
+    rl.draw_ring(rl.Vector2(x + 12 * s, y + 12 * s), 9 * s - w / 2, 9 * s + w / 2, 0, 360, 40, color)
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 12 * s), 5 * s, color)
   elif name == "alert":
     # bold exclamation for alert tiles
     rl.draw_rectangle_rounded(rl.Rectangle(x + 10 * s, y + 3 * s, 4 * s, 12.5 * s), 0.6, 6, color)

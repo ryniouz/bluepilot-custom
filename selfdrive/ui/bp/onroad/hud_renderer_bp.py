@@ -54,6 +54,7 @@ class HudRendererBP(HudRendererSP):
     self.speed_limit_renderer = CanadianSpeedLimit()
     self._signals = SignalTiles()
     self._signals_shown = False
+    self.guest = False             # set by the road view each frame (Guest Mode drive)
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -92,6 +93,17 @@ class HudRendererBP(HudRendererSP):
     preset = current_preset()
 
     self.cluster_rect = self._draw_cluster(rect)
+
+    # Custom: Guest Mode drive (BPGuestModeActive): the truck's factory assist drives and the
+    # comma only records, so nothing that suggests openpilot can engage is drawn
+    if self.guest:
+      self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
+      self._signals_shown = self._signals.render_center(rect.x + rect.width / 2, rect.y + NOTICE_TOP)
+      title, sub = tr("Factory driver assist"), tr("comma recording only")
+      band_l, band_r = self.notify_band(rect)
+      w, h = notice_size(title, sub, band_r - band_l)
+      notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, Console.DANGER, "rec")
+      return
 
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
@@ -151,6 +163,8 @@ class HudRendererBP(HudRendererSP):
     return rl.Rectangle(x, y, rect.width, rect.height)
 
   def _status(self) -> tuple[str, rl.Color]:
+    if self.guest:
+      return tr("Guest mode"), Console.TEXT_GHOST
     if not self.is_cruise_available:
       return tr("Unavailable"), Console.TEXT_GHOST
     status = ui_state.status
@@ -179,7 +193,7 @@ class HudRendererBP(HudRendererSP):
     unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, CLUSTER_UNIT).x
     speed_col = 0.0 if hide_speed else speed_w + 14 + unit_w
 
-    show_set = self.is_cruise_available
+    show_set = self.is_cruise_available and not self.guest
     set_col = CLUSTER_SET_W if show_set else 0.0
     inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
     w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
@@ -193,7 +207,7 @@ class HudRendererBP(HudRendererSP):
     word, color = self._status()
     if sla_active and self.is_cruise_set:
       word, color = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
-    active = ui_state.status != UIStatus.DISENGAGED or (sla_active and self.is_cruise_set)
+    active = not self.guest and (ui_state.status != UIStatus.DISENGAGED or (sla_active and self.is_cruise_set))
     band = rl.Rectangle(x, y, w, STATE_BAND_H)
     rl.draw_rectangle_rounded(band, roundness(band, CLUSTER_RADIUS), 10, color if active else Console.BG_RAISED)
     rl.draw_rectangle_rec(rl.Rectangle(x, y + STATE_BAND_H - CLUSTER_RADIUS, w, CLUSTER_RADIUS), color if active else Console.BG_RAISED)
