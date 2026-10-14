@@ -105,7 +105,11 @@ def _read_stdin():
 
 def main():
   gui_app.init_window("Spinner")
-  spinner = Spinner()
+  # Custom: Console start-up screen
+  from bluepilot.ui.console.boot import ConsoleSpinner, apply_saved_theme
+  apply_saved_theme()
+  spinner = ConsoleSpinner()
+  # End Custom
   for _ in gui_app.render():
     text_list = _read_stdin()
     if text_list:
