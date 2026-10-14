@@ -1,8 +1,10 @@
+import numpy as np
 import time
 from enum import IntEnum
 import pyray as rl
 from cereal import log, messaging
 from openpilot.common.params import Params
+from openpilot.common.params_pyx import UnknownKeyName
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.bp.onroad.cameraview_bp import CameraViewBP
@@ -10,6 +12,7 @@ from openpilot.selfdrive.ui.bp.onroad.blindspot_renderer import BlindspotRendere
 from openpilot.selfdrive.ui.bp.onroad.hud_renderer_bp import HudRendererBP
 from openpilot.selfdrive.ui.bp.onroad.alert_renderer_bp import AlertRendererBP
 from openpilot.selfdrive.ui.bp.onroad.model_renderer_bp import ModelRendererBP
+<<<<<<< ours
 from openpilot.selfdrive.ui.bp.onroad.driver_state_bp import DriverStateRendererBP
 from openpilot.selfdrive.ui.bp.lib.dm_icon_style import DMIconStyle
 from openpilot.selfdrive.ui.bp.onroad.hybrid_battery_gauge import HybridBatteryGauge
@@ -31,25 +34,34 @@ class GaugeStyle(IntEnum):
   flat = 0
   arched = 1
 
+=======
+from openpilot.selfdrive.ui.bp.onroad.driver_monitor_bp import DriverMonitorBP
+from openpilot.selfdrive.ui.bp.onroad.road_view import CARD_W as LEAD_CARD_W, SHOW_LEAD_CARD, draw_lead_card, road_prefs
+from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
+from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
+from openpilot.selfdrive.ui.bp.onroad.console_cues import ConsoleConfidence, draw_blindspot_edge
+from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState, get_bottom_dev_ui_offset
+from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
+from openpilot.selfdrive.ui.ui_state import UIStatus
+from openpilot.selfdrive.ui.onroad.augmented_road_view import DEFAULT_DEVICE_CAMERA, INF_POINT, WIDE_CAM
+from bluepilot.ui.lib.theme import Console, Onroad, with_alpha
+from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
+>>>>>>> theirs
 
 # BluePilot: Margin to keep confidence ball inside the colored border
 BALL_BORDER_MARGIN = UI_BORDER_SIZE // 2  # 15px
 
-# Shared container styling (matches battery/power flow gauge backgrounds)
-SHARED_BG_COLOR = rl.Color(20, 20, 20, 100)
-SHARED_BG_ROUNDNESS = 0.3
-SHARED_BG_GLOW_EXPANSION = 4
-SHARED_INNER_GAP = 10  # Pixels between battery and power flow gauges inside shared container
-SHARED_PADDING = 8     # Padding around inner content in shared container
-SHARED_BORDER_THICKNESS = 2.0  # Power flow mode-colored border thickness
-
-# Torque crown strip (thin torque bar integrated into the top of the shared container)
-TORQUE_STRIP_HEIGHT = 11   # Height of the torque strip inside shared container
-TORQUE_STRIP_GAP = 3       # Gap between strip bottom and gauge content top
-
-# Full screen reference for sidebar detection
-FULL_CONTENT_WIDTH = 2100.0
-
+# Custom: engagement glow (replaces the 30 px border)
+GLOW_W = 52
+GLOW_ALPHA = 0x9C
+STATE_GLOW = {
+  UIStatus.ENGAGED: Onroad.ENGAGED,
+  UIStatus.OVERRIDE: Onroad.OVERRIDE,
+  UIStatus.LAT_ONLY: Onroad.LAT_ONLY,
+  UIStatus.LONG_ONLY: Onroad.LONG_ONLY,
+}
 
 class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixin):
   """BluePilot AugmentedRoadView with blindspot indicators, gauges, and BP renderers."""
@@ -63,21 +75,33 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
 
     # BluePilot: Replace renderers with BP versions
     self.model_renderer = ModelRendererBP()
+    # Custom: Console driver-monitoring tile
+    self.driver_state_renderer = DriverMonitorBP()
     self._hud_renderer = HudRendererBP()
     self.alert_renderer = AlertRendererBP()
+<<<<<<< ours
     self.driver_state_renderer = DriverStateRendererBP(DMIconStyle.COMMA_3X)
     self._battery_gauge_bp = HybridBatteryGauge()
     self._power_flow_gauge = PowerFlowGauge()
     self._battery_gauge_arched = HybridBatteryGaugeArched()
     self._power_flow_gauge_arched = PowerflowGaugeArched()
     # BluePilot: Torque bar renderer (renders as crown strip inside gauge container)
+=======
+    # BluePilot: Torque bar renderer. Custom: a strip along the top of the Console dock, or the
+    # stock arc when the dock is hidden.
+>>>>>>> theirs
     self._torque_bar = TorqueBarRendererBP(scale=3.0)
-    self._power_flow_gauge_arched.set_torque_bar(self._torque_bar)
+
+    # Custom: Console EV HUD. The bottom dock (charge, power, range) replaces BluePilot's hybrid
+    # battery and power-flow gauges; a details card on the right carries the rest.
+    self._ev_hud = EvHudRenderer()
 
     # BluePilot: Add confidence ball on left side (MADS beam + enhanced coloring)
-    self._confidence_ball = ConfidenceBallTiciBP()
+    # Custom: Console confidence bar (same signal and zones as the ball)
+    self._confidence_ball = ConsoleConfidence()
     self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
     self._param_counter = 0
+<<<<<<< ours
     self._hybrid_gauge_style = GaugeStyle(self._bp_params.get("FordPrefGaugeStyle", return_default=True) or 0)
     # BluePilot: Cache param to avoid per-frame disk I/O (refreshed in existing 60-frame block)
     self._hide_onroad_border = self._bp_params.get_bool("BPHideOnroadBorder")
@@ -88,10 +112,12 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
 
     # BluePilot: Rad Racer 8-bit theme (drawing host; selection lives in theme_scene)
     self._rad_racer_theme = RadRacerTheme()
+=======
+    self._guest = self._read_guest()
+>>>>>>> theirs
 
   def update_fade_out_bottom_overlay(self, _content_rect):
     """BluePilot: Skip MICI fade overlay on TICI — causes unwanted black gradient at bottom."""
-    pass
 
   def _render(self, rect):
     """Override render to add blindspot, gauges, confidence ball on left."""
@@ -103,33 +129,34 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     self._param_counter += 1
     if self._param_counter >= 60:
       self._param_counter = 0
+      self._guest = self._read_guest()
       self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
+<<<<<<< ours
       self._hide_onroad_border = self._bp_params.get_bool("BPHideOnroadBorder")
       try:
         self._cached_gauge_size = int(self._bp_params.get("FordPrefHybridDriveGaugeSize", return_default=True))
       except (TypeError, ValueError):
         self._cached_gauge_size = 2
       self._hybrid_gauge_style = GaugeStyle(self._bp_params.get("FordPrefGaugeStyle", return_default=True) or 0)
+=======
+>>>>>>> theirs
 
     self._switch_stream_if_needed(ui_state.sm)
     self._update_calibration()
 
-    # Create inner content area with border padding
-    self._content_rect = rl.Rectangle(
-      rect.x + UI_BORDER_SIZE,
-      rect.y + UI_BORDER_SIZE,
-      rect.width - 2 * UI_BORDER_SIZE,
-      rect.height - 2 * UI_BORDER_SIZE,
-    )
+    # Custom: Console layout preset filters optional overlays for this frame
+    preset = current_preset()
+    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL and not self._guest
+    self._hud_renderer.guest = self.alert_renderer.guest = self._guest
+
+    # Custom: the camera fills the whole screen (no border frame); the UI keeps its inset
+    self._content_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
+    inset = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                         rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
 
     # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
-    ball_offset = (ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN) if self._show_confidence_ball else 0
-    ui_rect = rl.Rectangle(
-      self._content_rect.x + ball_offset,
-      self._content_rect.y,
-      self._content_rect.width - ball_offset,
-      self._content_rect.height,
-    )
+    ball_offset = (ConsoleConfidence.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
+    ui_rect = rl.Rectangle(inset.x + ball_offset, inset.y, inset.width - ball_offset, inset.height)
 
     bp_ui_log.scissor("AugRoadView", "begin",
                        x=int(self._content_rect.x), y=int(self._content_rect.y),
@@ -155,66 +182,76 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
       _scene.draw_background(self._content_rect, getattr(self, "_bp_hide_camera_view", False))
 
     # Render model (uses full content rect for camera-space overlays)
-    self.model_renderer.render(self._content_rect)
+    # Custom: no path or lead marker on a Guest Mode drive (openpilot is not driving)
+    if not self._guest:
+      self.model_renderer.render(self._content_rect)
 
     # SP fade overlay
     self.update_fade_out_bottom_overlay(self._content_rect)
 
     # BluePilot: Render confidence ball on left side (narrow rect = ball strip only, not full width)
-    if self._show_confidence_ball:
-      ball_strip_width = ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN
-      # Semi-transparent dark backdrop so ball is visible against bright camera feed
-      rl.draw_rectangle_gradient_h(
-        int(self._content_rect.x),
-        int(self._content_rect.y),
-        int(ball_strip_width),
-        int(self._content_rect.height),
-        rl.Color(20, 20, 20, 120),  # darker at left edge
-        rl.Color(20, 20, 20, 0),    # fade to transparent at right edge
-      )
-      ball_rect = rl.Rectangle(
-        self._content_rect.x + BALL_BORDER_MARGIN,
-        self._content_rect.y,
-        ball_strip_width,
-        self._content_rect.height,
-      )
-      self._confidence_ball.render(ball_rect)
+    if show_ball:
+      self._confidence_ball.render(rl.Rectangle(self._content_rect.x + BALL_BORDER_MARGIN, self._content_rect.y,
+                                                ConsoleConfidence.BALL_WIDTH, self._content_rect.height))
+
+    # Custom: a prompt or critical alert owns the bottom of the screen, so the dock steps aside
+    alert = self.alert_renderer.get_alert(ui_state.sm)
+    alert_blocks_dock = alert is not None and not (alert.status == log.SelfdriveState.AlertStatus.normal and
+                                                   alert.size != log.SelfdriveState.AlertSize.full)
+
+    # BluePilot: Update torque bar filter state (once per frame, before the dock or arc uses it)
+    self._torque_bar.update()
+
+    # Custom: Console dock and details card, drawn under the blindspot edges so the red warning
+    # is never covered
+    dock = None if alert_blocks_dock else self._ev_hud.render_dock(self._content_rect, preset, self._torque_bar)
+    self._ev_hud.render(self._content_rect, preset, bottom=dock.y if dock is not None else None)
 
     # BluePilot: Draw blindspot screen edge indicators ON TOP of confidence ball backdrop
     # so the red safety warning is never obscured
     self._draw_blindspot_screen_edges(self._content_rect, self.BLIND_SPOT_WIDTH)
 
-    # BluePilot: Render HUD, driver state before gauges and alerts
-    self._hud_renderer.set_gradient_rect(self._content_rect)
     self._hud_renderer.render(ui_rect)
 
+    # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
+    lead = None if self._guest else self.model_renderer.lead_info
+    if lead is not None and preset != LayoutPreset.MINIMAL and road_prefs.on(SHOW_LEAD_CARD):
+      details = self._ev_hud.last_rect
+      if details is not None:  # Dense: the details card owns the right edge; sit to its left
+        x, y = details.x - 24 - LEAD_CARD_W, details.y
+      else:
+        x, y = self._hud_renderer.lead_card_pos(ui_rect, LEAD_CARD_W)
+      draw_lead_card(x, y, lead, road_prefs.value, ui_state.is_metric, self.model_renderer.lead_alpha)
+
     bp_ui_log.scissor("AugRoadView", "reset (defensive)")
+<<<<<<< ours
     # Defensive: re-establish scissor before drawing driver state and battery. Some HUD widgets
     # (e.g. speed limit, brake status, unified gauge) can leave raylib state in a bad way on device,
     # causing the bottom-left widgets to be clipped or not drawn. Calling begin_scissor_mode again
     # (without end first) flushes pending draws and resets the scissor rect in one GPU call instead of two.
+=======
+    # Defensive: re-establish scissor before drawing driver state. Some HUD widgets (e.g. speed
+    # limit, brake status) can leave raylib state in a bad way on device, causing the bottom-left
+    # widgets to be clipped or not drawn.
+    rl.end_scissor_mode()
+>>>>>>> theirs
     rl.begin_scissor_mode(
       int(self._content_rect.x),
       int(self._content_rect.y),
       int(self._content_rect.width),
       int(self._content_rect.height)
     )
-    self.driver_state_renderer.render(ui_rect)
+    # Custom: a prompt or critical card at the bottom covers the tile's corner; the card shows the ask
+    if not alert_blocks_dock and not self._guest:
+      self.driver_state_renderer.render(ui_rect)
 
-    # BluePilot: Update torque bar filter state (once per frame, before _render_gauges uses it)
-    self._torque_bar.update()
-
-    # BluePilot: Render gauges + torque crown strip inside shared container
-    gauge_height_offset, hybrid_active = self._render_gauges(self._content_rect, ball_offset)
-    bp_ui_log.state("AugRoadView", "hybrid_active", hybrid_active)
-    bp_ui_log.state("AugRoadView", "gauge_height_offset", round(gauge_height_offset))
-
-    # BluePilot: When no hybrid gauge is active, fall back to the stock arc torque bar
-    if not hybrid_active:
+    # BluePilot: stock arc torque bar when the dock (which carries the strip) is hidden.
+    # Custom: the Minimal preset hides it.
+    if dock is None and preset != LayoutPreset.MINIMAL and not self._guest:
       torque_rect = ui_rect
       if ui_state.developer_ui in (DeveloperUiState.BOTTOM, DeveloperUiState.BOTH):
         torque_rect = rl.Rectangle(ui_rect.x, ui_rect.y, ui_rect.width, ui_rect.height - get_bottom_dev_ui_offset())
-      self._torque_bar.render(torque_rect, gauge_height_offset=gauge_height_offset)
+      self._torque_bar.render(torque_rect, gauge_height_offset=0.0)
 
     # BluePilot: theme scene foreground — decor + near particles over the HUD, under alerts.
     if _scene is not None and not _scene.replaces_hud():
@@ -223,20 +260,29 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     # Alerts last so they are never covered by gauges or other overlays.
     # BluePilot: Full-screen alerts (e.g. reverse gear) must use content_rect so they cover
     # the confidence ball strip; otherwise the camera shows through where the ball was.
-    alert = self.alert_renderer.get_alert(ui_state.sm)
     alert_rect = (
       self._content_rect
-      if (alert and alert.size == log.SelfdriveState.AlertSize.full and self._show_confidence_ball)
+      if (alert and alert.size == log.SelfdriveState.AlertSize.full and show_ball)
       else ui_rect
     )
+    self.alert_renderer.notify_band = self._hud_renderer.notify_band(ui_rect)
+    self.alert_renderer.notify_top = self._hud_renderer.notify_top(ui_rect)
     self.alert_renderer.render(alert_rect)
 
     bp_ui_log.scissor("AugRoadView", "end")
     rl.end_scissor_mode()
 
+<<<<<<< ours
     # BluePilot: Conditionally draw border
     if not self._hide_onroad_border:
       self._draw_border(rect)
+=======
+    # Custom: engagement glow along the screen edges replaces the border frame (BPHideOnroadBorder
+    # still turns it off)
+    if not self._bp_params.get_bool("BPHideOnroadBorder"):
+      if not self._guest:
+        self._draw_state_glow(rect)
+>>>>>>> theirs
 
   def _render_rad_racer_scene(self, rect: rl.Rectangle):
     """Render the full Rad Racer 8-bit scene: skyline, road, sprites, gauge cluster.
@@ -276,6 +322,7 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     if not self._hide_onroad_border:
       self._draw_border(rect)
 
+<<<<<<< ours
   def _get_dm_center_y(self, content_rect: rl.Rectangle) -> float:
     """Get the driver monitor face icon's vertical center Y coordinate.
 
@@ -516,3 +563,98 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
       rl.Color(20, 20, 20, int(SHARED_BG_COLOR.a * 0.3)),
     )
     rl.draw_rectangle_rounded(rect, SHARED_BG_ROUNDNESS, 10, SHARED_BG_COLOR)
+=======
+  def _draw_blindspot_screen_edges(self, rect: rl.Rectangle, blind_spot_width: int = 250):
+    """Custom: Console blind-spot edges, squared danger bars instead of a red gradient.
+    Same toggle (ShowBlindspotOverlay) and fade as BluePilot's."""
+    try:
+      if not self._blindspot_params.get_bool("ShowBlindspotOverlay"):
+        return
+    except UnknownKeyName:
+      return
+    sm = ui_state.sm
+    if not sm.valid['carState']:
+      return
+    cs = sm['carState']
+    self._blindspot_left_alpha_filter.update(1.0 if cs.leftBlindspot else 0.0)
+    self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
+    draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x,
+                        cs.leftBlindspot and cs.leftBlinker, cs.rightBlindspot and cs.rightBlinker)
+
+  def _read_guest(self) -> bool:
+    """Guest Mode drive: BPGuestModeActive is set by the Lightning control stream for the whole
+    drive (card passive, panda noOutput, factory ACC and lane keeping). False on builds that do
+    not have the key yet."""
+    try:
+      return self._bp_params.get_bool("BPGuestModeActive")
+    except UnknownKeyName:
+      return False
+
+  def _calc_frame_matrix(self, rect: rl.Rectangle) -> np.ndarray:
+    """Custom: stock framing, but the zoom never drops below what covers the whole content rect,
+    so the full-screen camera has no bars at the edges (the road camera's 1.1x falls a few
+    pixels short of the panel's width otherwise)."""
+    cache_key = (ui_state.sm.recv_frame['liveCalibration'], self._content_rect.width, self._content_rect.height, self.stream_type)
+    if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
+      return self._cached_matrix
+
+    device_camera = self.device_camera or DEFAULT_DEVICE_CAMERA
+    is_wide_camera = self.stream_type == WIDE_CAM
+    intrinsic = device_camera.ecam.intrinsics if is_wide_camera else device_camera.fcam.intrinsics
+    calibration = self.view_from_wide_calib if is_wide_camera else self.view_from_calib
+
+    x, y = self._content_rect.x, self._content_rect.y
+    w, h = self._content_rect.width, self._content_rect.height
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+    margin = 5
+    zoom = max(2.0 if is_wide_camera else 1.1, (w / 2 + margin + 1) / cx, (h / 2 + margin + 1) / cy)
+
+    calib_transform = intrinsic @ calibration
+    kep = calib_transform @ INF_POINT
+    max_x_offset = cx * zoom - w / 2 - margin
+    max_y_offset = cy * zoom - h / 2 - margin
+    try:
+      if abs(kep[2]) > 1e-6:
+        x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
+        y_offset = np.clip((kep[1] / kep[2] - cy) * zoom, -max_y_offset, max_y_offset)
+      else:
+        x_offset, y_offset = 0, 0
+    except (ZeroDivisionError, OverflowError):
+      x_offset, y_offset = 0, 0
+
+    self._matrix_cache_key = cache_key
+    self._cached_matrix = np.array([
+      [zoom * 2 * cx / w, 0, -x_offset / w * 2],
+      [0, zoom * 2 * cy / h, -y_offset / h * 2],
+      [0, 0, 1.0]
+    ])
+    video_transform = np.array([
+      [zoom, 0.0, (w / 2 + x - x_offset) - (cx * zoom)],
+      [0.0, zoom, (h / 2 + y - y_offset) - (cy * zoom)],
+      [0.0, 0.0, 1.0]
+    ])
+    self.model_renderer.set_transform(video_transform @ calib_transform)
+    return self._cached_matrix
+
+  def _draw_state_glow(self, rect: rl.Rectangle):
+    """A soft wash of the engagement colour fading in from every edge: unmistakable at the edge
+    of vision, nothing over the road when disengaged."""
+    color = STATE_GLOW.get(ui_state.status)
+    if color is None:
+      return
+    a = with_alpha(color, GLOW_ALPHA)
+    clear = with_alpha(color, 0)
+    x, y, w, h, g = int(rect.x), int(rect.y), int(rect.width), int(rect.height), GLOW_W
+    rl.draw_rectangle_gradient_v(x, y, w, g, a, clear)
+    rl.draw_rectangle_gradient_v(x, y + h - g, w, g, clear, a)
+    rl.draw_rectangle_gradient_h(x, y, g, h, a, clear)
+    rl.draw_rectangle_gradient_h(x + w - g, y, g, h, clear, a)
+
+  def _draw_border(self, rect: rl.Rectangle):
+    """Console: page-ground outer frame, status-coloured inner frame."""
+    rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, Console.BG_PAGE)
+    border_color = BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                               rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
+    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, UI_BORDER_SIZE, border_color)
+>>>>>>> theirs

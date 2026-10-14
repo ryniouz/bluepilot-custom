@@ -19,6 +19,7 @@ from openpilot.system.ui.widgets.list_view import ListItem, ToggleAction, ItemAc
 from openpilot.system.ui.widgets.scroller_tici import LineSeparator, LINE_COLOR, LINE_PADDING
 from openpilot.system.ui.sunnypilot.lib.styles import style
 from openpilot.system.ui.sunnypilot.widgets.option_control import OptionControlSP, LABEL_WIDTH
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class Spacer(Widget):
@@ -31,7 +32,7 @@ class Spacer(Widget):
     self._rect.width = parent_rect.width
 
   def _render(self, _):
-    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.x + self._rect.width), int(self._rect.y), rl.Color(0,0,0,0))
+    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.x + self._rect.width), int(self._rect.y), with_alpha(Console.BG_PAGE, 0))
 
 
 class ToggleActionSP(ToggleAction):
@@ -178,6 +179,8 @@ class MultipleButtonActionSP(MultipleButtonAction):
       # Check individual button enabled state
       is_button_enabled = self.enabled and (self.enabled_buttons is None or i in self.enabled_buttons)
       current_text_color = text_color if is_button_enabled else style.MBC_DISABLED
+      if is_button_enabled and i == self.selected_button:  # Custom: Console text on the accent fill
+        current_text_color = Console.ON_ACCENT
 
       rl.draw_text_ex(self._font, text, rl.Vector2(text_x, text_y), 40, 0, current_text_color)
 
@@ -273,7 +276,7 @@ class ListItemSP(ListItem):
     content_width = item_rect.width - (style.ITEM_PADDING * 2)
     title_width = measure_text_cached(self._font, self.title, style.ITEM_TEXT_FONT_SIZE).x
     right_width = min(content_width - title_width, right_width)
-    if isinstance(self.action_item, ToggleAction) or isinstance(self.action_item, SimpleButtonActionSP):
+    if isinstance(self.action_item, SimpleButtonActionSP):  # Custom: Console form rows keep toggles on the right
       action_x = item_rect.x
     else:
       action_x = item_rect.x + item_rect.width - right_width
@@ -290,7 +293,7 @@ class ListItemSP(ListItem):
 
     content_x = self._rect.x + style.ITEM_PADDING
     text_x = content_x
-    left_action_item = isinstance(self.action_item, ToggleAction) or isinstance(self.action_item, SimpleButtonActionSP)
+    left_action_item = isinstance(self.action_item, SimpleButtonActionSP)  # Custom: Console form rows keep toggles on the right
 
     if left_action_item:
       item_height = style.SIMPLE_BUTTON_HEIGHT if isinstance(self.action_item, SimpleButtonActionSP) else style.TOGGLE_HEIGHT
@@ -336,6 +339,12 @@ class ListItemSP(ListItem):
       # Draw right item if present
       if self.action_item:
         right_rect = self.get_right_item_rect(self._rect)
+        # Custom: Console form rows: toggles sit at the right edge, centred on the title line
+        if isinstance(self.action_item, ToggleAction) and self.inline:
+          right_rect = rl.Rectangle(self._rect.x + self._rect.width - style.ITEM_PADDING - style.TOGGLE_WIDTH,
+                                    self._rect.y + (style.ITEM_BASE_HEIGHT - style.TOGGLE_HEIGHT) // 2 + style.ITEM_PADDING / 2,
+                                    style.TOGGLE_WIDTH, style.TOGGLE_HEIGHT)
+        # Custom: end
         if self.action_item.render(right_rect) and self.action_item.enabled:
           # Right item was clicked/activated
           if self.callback:

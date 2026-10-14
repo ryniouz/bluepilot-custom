@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pyray as rl
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -10,21 +12,42 @@ from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 # BluePilot: Rainbow shader moved to BP module after upstream removal
 from openpilot.bluepilot.ui.lib.bp_shaders import draw_rainbow_polygon
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+<<<<<<< ours
 # BluePilot: seasonal theme packs (colors.json overrides for road colors)
 from openpilot.selfdrive.ui.bp.lib import theme_pack
+=======
+from openpilot.selfdrive.ui.bp.onroad.road_view import (LeadInfo, SHOW_EDGES, SHOW_LANES, SHOW_NEIGHBOURS, draw_lead_marker,
+                                                       lead_level, road_prefs)
+from openpilot.system.ui.lib.shader_polygon import Gradient
+from bluepilot.ui.lib.theme import Console, Onroad, mix, with_alpha
+>>>>>>> theirs
 
 # BluePilot: Lane line colors by status (upstream removed LANE_LINE_COLORS dict)
+# Custom: Console status hues; disengaged lines go ghost grey instead of black
 LANE_LINE_COLORS_BP = {
-  UIStatus.DISENGAGED: rl.Color(0, 0, 0, 255),
-  UIStatus.ENGAGED: rl.Color(0, 255, 80, 255),
-  UIStatus.OVERRIDE: rl.Color(145, 155, 149, 255),
+  UIStatus.DISENGAGED: Console.TEXT_GHOST,
+  UIStatus.ENGAGED: Onroad.ENGAGED,
+  UIStatus.OVERRIDE: Onroad.OVERRIDE,
+  UIStatus.LAT_ONLY: Onroad.LAT_ONLY,
+  UIStatus.LONG_ONLY: Onroad.LONG_ONLY,
 }
 
 # BluePilot: Radar/vision lead indicator colors
-LEAD_RADAR_GLOW = rl.Color(0, 134, 233, 255)
-LEAD_RADAR_CHEVRON_BASE = rl.Color(0, 100, 200, 255)
-LEAD_VISION_GLOW = rl.Color(218, 202, 37, 255)
-LEAD_VISION_CHEVRON_BASE = rl.Color(201, 34, 49, 255)
+# Custom: Console - radar lead is info, vision lead is warning (outer mark full, inner deepened)
+LEAD_RADAR_GLOW = Onroad.LEAD_RADAR
+LEAD_RADAR_CHEVRON_BASE = mix(Onroad.LEAD_RADAR, Console.BG_PAGE, 0.35)
+LEAD_VISION_GLOW = Onroad.LEAD_VISION
+LEAD_VISION_CHEVRON_BASE = mix(Onroad.LEAD_VISION, Console.BG_PAGE, 0.35)
+
+ROAD_EDGE_COLOR = Console.DANGER
+
+# Custom: road markings stay white over the camera in day and night
+ROAD_WHITE = rl.Color(255, 255, 255, 255)
+ROAD_WHITE_DIM = rl.Color(170, 174, 180, 255)
+
+# Custom: blind-spot lane tint
+BLINDSPOT_LANE_M = 35.0
+BLINDSPOT_HALF_W = 1.6
 
 # BluePilot: Overlay size scale factors (Small=0, Medium=1, Large=2)
 OVERLAY_SCALE_FACTORS = {0: 0.6, 1: 1.0, 2: 1.5}
@@ -85,6 +108,14 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     self._lead_v_filters = [FirstOrderFilter(0, 0.3, dt, initialized=False),
                             FirstOrderFilter(0, 0.3, dt, initialized=False)]
     self._lead_was_active = [False, False]
+    self._marking = 0
+
+    # Custom: Console lead marker geometry per lead (x, y, width) and the card's lead state
+    self._lead_marks: list[tuple[float, float, float] | None] = [None, None]
+    self._lead_d_smooth = [0.0, 0.0]
+    self._lead_v_smooth = [0.0, 0.0]
+    self.lead_info: LeadInfo | None = None
+    self.lead_alpha = 0.0
 
   def prepare_projection(self, rect: rl.Rectangle) -> None:
     """Set clip region so _map_to_screen works before render().
@@ -185,16 +216,26 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
       self._dash_phase = (self._dash_phase + max(0.0, v_ego) / gui_app.target_fps) % period
 
     self._draw_lane_lines()
+    self._draw_blindspot_lanes(sm)
     self._draw_path(sm)
 
+<<<<<<< ours
     # BluePilot: In Rad Racer theme, leads are drawn as sprites by RadRacerTheme
     if render_lead_indicator and radar_state and not self._rad_racer:
+=======
+    # Custom: Console lead marker; the numbers go to the lead card (drawn by the road view)
+    has_lead = bool(render_lead_indicator and radar_state and radar_state.leadOne.status)
+    self.lead_alpha += ((1.0 if has_lead else 0.0) - self.lead_alpha) * 0.25
+    if has_lead:
+      lo = radar_state.leadOne
+      v_ego = sm['carState'].vEgo
+      self.lead_info = LeadInfo(d_rel=self._lead_d_smooth[0], v_rel=self._lead_v_smooth[0],
+                                v_lead=max(0.0, v_ego + self._lead_v_smooth[0]), v_ego=v_ego, radar=bool(getattr(lo, 'radar', False)))
+    elif self.lead_alpha < 0.02:
+      self.lead_info = None
+    if render_lead_indicator and radar_state:
+>>>>>>> theirs
       self._draw_lead_indicator()
-      # BluePilot: Pass radar/overlay state to BP chevron metrics for boxed layout
-      self.chevron_metrics.ford_overlay_enabled = self.ford_overlay_enabled
-      self.chevron_metrics.lead_is_radar = self._lead_is_radar
-      self.chevron_metrics.overlay_scale = self._overlay_scale
-      self.chevron_metrics.draw_lead_status(sm, radar_state, self._rect, self._lead_vehicles)
 
   def _update_lead_radar_status(self, radar_state):
     """Track whether each lead is radar-sourced for coloring."""
@@ -208,6 +249,7 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
   def _update_leads(self, radar_state, path_x_array):
     """Update lead positions with temporal smoothing to reduce radar jitter."""
     self._lead_vehicles = [LeadVehicle(), LeadVehicle()]
+    self._lead_marks = [None, None]
     leads = [radar_state.leadOne, radar_state.leadTwo]
 
     dt = 1 / gui_app.target_fps
@@ -223,16 +265,19 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
         d_rel = self._lead_d_filters[i].update(lead_data.dRel)
         y_rel = self._lead_y_filters[i].update(lead_data.yRel)
         v_rel = self._lead_v_filters[i].update(lead_data.vRel)
+        self._lead_d_smooth[i], self._lead_v_smooth[i] = d_rel, v_rel
 
         idx = self._get_path_length_idx(path_x_array, d_rel)
         z = self._path.raw_points[idx, 2] if idx < len(self._path.raw_points) else 0.0
         point = self._map_to_screen(d_rel, -y_rel + self._camera_offset, z + self._path_offset_z)
         if point:
+          self._marking = i
           self._lead_vehicles[i] = self._update_lead_vehicle(d_rel, v_rel, point, self._rect)
 
         self._lead_was_active[i] = True
       else:
         self._lead_was_active[i] = False
+        self._lead_marks[i] = None
 
   def _update_lead_vehicle(self, d_rel, v_rel, point, rect):
     """Override to apply overlay size scale factor to chevron geometry."""
@@ -252,6 +297,9 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
 
     g_xo = sz / 5
     g_yo = sz / 10
+
+    # Custom: the Console bracket spans roughly a car's width at that distance
+    self._lead_marks[self._marking] = (float(x), float(min(point[1], rect.height - 24)), float(sz * 3.4))
 
     glow = [(x + (sz * 1.35) + g_xo, y + sz + g_yo), (x, y - g_yo), (x - (sz * 1.35) - g_xo, y + sz + g_yo)]
     chevron = [(x + (sz * 1.25), y + sz), (x, y), (x - (sz * 1.25), y + sz)]
@@ -323,6 +371,30 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     self._previous_path_projected_points = smoothed.copy()
     self._path.projected_points = smoothed
 
+  def _draw_blindspot_lanes(self, sm):
+    """Custom: a car in the blind spot tints the neighbouring lane red for the first 35 m;
+    signalling into it makes the tint stronger and pulse."""
+    if not ui_state.blindspot:
+      return
+    cs = sm['carState']
+    lines = self._lane_lines
+    if len(lines) < 4:
+      return
+    pulse = 0.5 + 0.5 * np.sin(time.monotonic() * 2 * np.pi / 0.8)
+    for bs, blinker, (a, b) in ((cs.leftBlindspot, cs.leftBlinker, (0, 1)), (cs.rightBlindspot, cs.rightBlinker, (2, 3))):
+      if not bs or lines[a].raw_points.size == 0 or lines[b].raw_points.size == 0:
+        continue
+      mid = (lines[a].raw_points + lines[b].raw_points) / 2
+      max_idx = self._get_path_length_idx(mid[:, 0], BLINDSPOT_LANE_M)
+      poly = self._map_line_to_polygon(mid, BLINDSPOT_HALF_W, 0.0, max_idx, BLINDSPOT_LANE_M)
+      if poly.size == 0:
+        continue
+      alpha = (0.35 + 0.25 * pulse) if blinker else 0.28
+      gradient = Gradient(start=(0.0, 1.0), end=(0.0, 0.0), stops=[0.0, 0.7, 1.0],
+                          colors=[with_alpha(Console.DANGER_FILL, int(255 * alpha)), with_alpha(Console.DANGER_FILL, int(200 * alpha)),
+                                  with_alpha(Console.DANGER_FILL, 0)])
+      draw_polygon(self._rect, poly, gradient=gradient)
+
   def _draw_lane_lines(self):
     """Draw lane lines with enhanced rendering and glow effects."""
     # BluePilot: Rad Racer theme replaces all road rendering with green game lines
@@ -336,6 +408,7 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
   # (rad_racer_road.py) so the comma four renderer can share them.
 
   def _get_ll_color(self, prob: float, is_current_lane: bool) -> rl.Color:
+<<<<<<< ours
     """Get lane line color based on UI status with confidence-based brightness.
 
     Current lanes use status color (green when engaged, gray on override, black when disengaged).
@@ -364,12 +437,25 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
   def _draw_enhanced_lane_lines(self):
     """Draw enhanced lane lines with glow effects and confidence-based brightness."""
     rainbow_lane_lines_active = self._rainbow_lane_lines_active(ui_state.sm)
+=======
+    """Custom: Console lane lines are white (ghost grey when disengaged); the engagement colour
+    lives in the path, so lines and path no longer compete. White in both themes: they sit on
+    the camera, not on a Console surface."""
+    if ui_state.status == UIStatus.DISENGAGED:
+      return ROAD_WHITE_DIM
+    return ROAD_WHITE
+
+  def _draw_enhanced_lane_lines(self):
+    """Custom: our lane's two lines solid by confidence, neighbouring lines faint, road edges red;
+    each group can be hidden from the Road view settings."""
+    show_lanes = road_prefs.on(SHOW_LANES)
+    show_next = road_prefs.on(SHOW_NEIGHBOURS)
+>>>>>>> theirs
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0 or self._lane_line_probs[i] < 0.4:
         continue
-
-      base_alpha = np.clip(self._lane_line_probs[i] * 0.8, 0.3, 0.8)
       is_current_lane = (i == 1 or i == 2)
+<<<<<<< ours
       if not is_current_lane:
         base_alpha *= 0.4
 
@@ -551,14 +637,35 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     Uses rl.draw_line_strip for batched line rendering instead of individual draw_line_ex calls.
     """
     if not self._path.projected_points.size:
+=======
+      if not (show_lanes if is_current_lane else (show_lanes and show_next)):
+        continue
+      alpha = float(np.clip(self._lane_line_probs[i], 0.4, 1.0)) * (0.9 if is_current_lane else 0.35)
+      color = self._get_ll_color(float(self._lane_line_probs[i]), is_current_lane)
+      draw_polygon(self._rect, lane_line.projected_points, with_alpha(color, int(alpha * 255)))
+
+    if road_prefs.on(SHOW_EDGES):
+      for i, road_edge in enumerate(self._road_edges):
+        if road_edge.projected_points.size == 0:
+          continue
+        edge_alpha = np.clip(1.0 - self._road_edge_stds[i], 0.0, 1.0) * 0.6
+        draw_polygon(self._rect, road_edge.projected_points, with_alpha(ROAD_EDGE_COLOR, int(edge_alpha * 255)))
+
+  def _draw_path(self, sm):
+    """Custom: the path is a soft ribbon in the engagement colour fading toward the horizon, and
+    turns neutral while the plan is not asking for throttle. Experimental mode and rainbow keep
+    their own colouring."""
+    if not self._path.projected_points.size:
+      return
+    if ui_state.rainbow_path:
+      draw_polygon(self._rect, self._path.projected_points, rainbow=True, rainbow_v=self._rainbow_v)
+>>>>>>> theirs
+      return
+    if self._experimental_mode:
+      super()._draw_path(sm)
       return
 
-    points = self._path.projected_points
-    num_points = len(points)
-    mid_point = num_points // 2
-    if mid_point < 2:
-      return
-
+<<<<<<< ours
     left_edge = points[:mid_point]
     right_edge = points[mid_point:][::-1]
 
@@ -589,6 +696,18 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
         rl.Vector2(float(right_edge[-1][0]), float(right_edge[-1][1])),
         4.0, edge_color
       )
+=======
+    allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
+    self._blend_filter.update(int(allow_throttle))
+    t = round(self._blend_filter.x * 100) / 100
+    status = LANE_LINE_COLORS_BP.get(ui_state.status, LANE_LINE_COLORS_BP[UIStatus.DISENGAGED])
+    if ui_state.status == UIStatus.DISENGAGED:
+      status = ROAD_WHITE
+    base = mix(ROAD_WHITE, status, t)
+    gradient = Gradient(start=(0.0, 1.0), end=(0.0, 0.0),
+                        colors=[with_alpha(base, 120), with_alpha(base, 80), with_alpha(base, 0)], stops=[0.0, 0.55, 1.0])
+    draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
+>>>>>>> theirs
 
   @staticmethod
   def _line_to_ribbon(pts: np.ndarray, half_w: float) -> np.ndarray:
@@ -619,15 +738,20 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     return np.vstack([left, right[::-1]]).astype(np.float32)
 
   def _draw_lead_indicator(self):
-    """Draw lead vehicles with dynamic colors based on detection source (radar vs vision)."""
-    if self.ford_overlay_enabled:
-      #Chevron is handled by the Metric renderer.
-      return
-
-    for i, lead in enumerate(self._lead_vehicles):
-      if not lead.glow or not lead.chevron:
+    """Custom: a squared bracket under each lead, coloured by time to the lead. Radar leads get a
+    closed base; camera-only leads an open one."""
+    for i, mark in enumerate(self._lead_marks):
+      if mark is None:
         continue
+      if i == 1 and self._lead_marks[0] is not None and abs(self._lead_d_smooth[0] - self._lead_d_smooth[1]) < 3.0:
+        continue
+      x, y, w = mark
+      v_ego = ui_state.sm['carState'].vEgo
+      info = LeadInfo(d_rel=self._lead_d_smooth[i], v_rel=self._lead_v_smooth[i], v_ego=v_ego)
+      alpha = self.lead_alpha if i == 0 else 0.6
+      draw_lead_marker(x, y, w, lead_level(info), alpha, vision=not self._lead_is_radar[i])
 
+<<<<<<< ours
       is_radar = self._lead_is_radar[i] if i < len(self._lead_is_radar) else False
 
       # BluePilot: Blue for radar leads, yellow/red for vision leads
@@ -645,3 +769,5 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
 
       rl.draw_triangle_fan(lead.glow, len(lead.glow), glow_color)
       rl.draw_triangle_fan(lead.chevron, len(lead.chevron), chevron_color)
+=======
+>>>>>>> theirs

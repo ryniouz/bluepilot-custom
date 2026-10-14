@@ -26,6 +26,7 @@ from bluepilot.ui.widgets.metric_card import MetricCard, MetricData
 from bluepilot.ui.widgets.network_card import NetworkCard
 from bluepilot.ui.widgets.icon_button import IconButton, InfoButton, FanWidget
 from bluepilot.ui.widgets.recent_changes import RecentChangesDialog, _read_bp_version
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 ThermalStatus = log.DeviceState.ThermalStatus
@@ -533,7 +534,7 @@ class SidebarBP(Widget):
 
     for i in range(gradient_width):
       alpha = int(20 * (i / gradient_width))
-      color = rl.Color(0, 0, 0, alpha)
+      color = with_alpha(Console.BG_PAGE, alpha)
       rl.draw_line(
         gradient_start + i, int(rect.y),
         gradient_start + i, int(rect.y + rect.height),

@@ -8,6 +8,7 @@ import pyray as rl
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.list_view import ListItem, ItemAction
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class ProgressBarAction(ItemAction):
@@ -16,10 +17,10 @@ class ProgressBarAction(ItemAction):
     self.progress = 0.0
     self.text = ""
     self.show_progress = False
-    self.text_color = rl.GRAY
+    self.text_color = Console.TEXT_GHOST
     self._font = gui_app.font(FontWeight.NORMAL)
 
-  def update(self, progress, text, show_progress=False, text_color=rl.GRAY):
+  def update(self, progress, text, show_progress=False, text_color=Console.TEXT_GHOST):
     self.progress = progress
     self.text = text
     self.show_progress = show_progress
@@ -47,7 +48,7 @@ class ProgressBarAction(ItemAction):
       inner_rect = rl.Rectangle(bar_rect.x + 4, bar_rect.y + 4, bar_rect.width - 8, bar_rect.height - 8)
       if inner_rect.width > 0:
         fill_width = max(0, min(inner_rect.width, inner_rect.width * (self.progress / 100.0)))
-        rl.draw_rectangle_rounded(rl.Rectangle(inner_rect.x, inner_rect.y, fill_width, inner_rect.height), 0.2, 10, rl.Color(30, 121, 232, 255))
+        rl.draw_rectangle_rounded(rl.Rectangle(inner_rect.x, inner_rect.y, fill_width, inner_rect.height), 0.2, 10, Console.ACCENT)
 
     rl.draw_text_ex(self._font, self.text, rl.Vector2(bar_rect.x + text_x, bar_rect.y + (bar_height - text_size.y) / 2), font_size, 0, self.text_color)
 

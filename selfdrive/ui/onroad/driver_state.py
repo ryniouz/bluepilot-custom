@@ -6,6 +6,7 @@ from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha, copy as copy_color  # Custom: Console theme
 
 AlertSize = log.SelfdriveState.AlertSize
 
@@ -73,10 +74,11 @@ class DriverStateRenderer(Widget):
     self.dm_img = gui_app.texture("icons/driver_face.png", IMG_SIZE, IMG_SIZE)
 
     # Colors
-    self.white_color = rl.Color(255, 255, 255, 255)
-    self.arc_color = rl.Color(26, 242, 66, 255)
-    self.engaged_color = rl.Color(26, 242, 66, 255)
-    self.disengaged_color = rl.Color(139, 139, 139, 255)
+    # Custom: Console - success arc when engaged, ghost when not
+    self.white_color = copy_color(Console.TEXT_PRIMARY)
+    self.arc_color = copy_color(Console.SUCCESS)
+    self.engaged_color = copy_color(Console.SUCCESS)
+    self.disengaged_color = copy_color(Console.TEXT_GHOST)
 
     self.set_visible(lambda: (ui_state.sm["selfdriveState"].alertSize == AlertSize.none and
                               ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame))
@@ -86,7 +88,7 @@ class DriverStateRenderer(Widget):
     opacity = 0.65 if self.is_active else 0.2
 
     # Draw background circle
-    rl.draw_circle(int(self.position_x), int(self.position_y), BTN_SIZE // 2, rl.Color(0, 0, 0, 70))
+    rl.draw_circle(int(self.position_x), int(self.position_y), BTN_SIZE // 2, with_alpha(Console.BG_PAGE, 120))  # Custom: Console
 
     # Draw face icon
     icon_pos = rl.Vector2(self.position_x - self.dm_img.width // 2, self.position_y - self.dm_img.height // 2)

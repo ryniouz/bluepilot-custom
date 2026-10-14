@@ -58,7 +58,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IsDriverViewEnabled", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsEngaged", {PERSISTENT, BOOL}},
     {"IsLdwEnabled", {PERSISTENT | BACKUP, BOOL}},
-    {"IsMetric", {PERSISTENT | BACKUP, BOOL}},
+    {"IsMetric", {PERSISTENT | BACKUP, BOOL, "1"}},  // Custom: Canadian units (km, km/h) by default
     {"IsOffroad", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsOnroad", {PERSISTENT, BOOL}},
     {"IsRhdDetected", {PERSISTENT, BOOL}},
@@ -339,6 +339,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPThemeAutoSeasonal", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPRainbowLines", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadView", {PERSISTENT | BACKUP, INT, "375"}},
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     // BluePilot: No static defaults; the first active UI persists its matching device styles (C4=0, C3X=1).
     {"BPSteeringWheelIconStyle", {PERSISTENT | BACKUP, INT}},
@@ -386,6 +387,24 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // BluePilot: UI params
     {"BPLastSeenVersion", {PERSISTENT, STRING}},
+
+    // Custom: Console UI params (stream A, Comma Console UI)
+    {"BPConsoleAccent", {PERSISTENT | BACKUP, STRING, "blue"}},
+    {"BPConsoleMode", {PERSISTENT | BACKUP, STRING, "auto"}},  // auto, day, night
+    {"BPLayoutPreset", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPEvHud", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
+    {"BPLastEvSnapshot", {PERSISTENT, JSON}},
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},
+    {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
+    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},
+    {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
+    {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
+    {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
+    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home  // pinned update branch; empty = UpdaterTargetBranch / current  // one-time switch of IsMetric to km for this build
+    // Custom: end
 
     // WiFi Management
     {"WifiFavoriteSSID", {PERSISTENT | BACKUP, STRING}},

@@ -1,6 +1,7 @@
 import pyray as rl
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class IconWidget(Widget):
@@ -12,5 +13,5 @@ class IconWidget(Widget):
     self.set_enabled(False)
 
   def _render(self, _) -> None:
-    color = rl.Color(255, 255, 255, int(self._opacity * 255))
+    color = with_alpha(Console.TEXT_PRIMARY, int(self._opacity * 255))
     rl.draw_texture_ex(self._texture, rl.Vector2(self._rect.x, self._rect.y), 0.0, 1.0, color)

@@ -3,6 +3,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 from openpilot.system.ui.lib.application import gui_app, GL_VERSION
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 MAX_GRADIENT_COLORS = 20  # includes stops as well
 
@@ -181,7 +182,7 @@ def _configure_shader_color(state: ShaderState, color: Optional[rl.Color],
     rl.set_shader_value(state.shader, state.locations['gradientStart'], start_vec, UNIFORM_VEC2)
     rl.set_shader_value(state.shader, state.locations['gradientEnd'], end_vec, UNIFORM_VEC2)
   else:
-    color = color or rl.WHITE
+    color = color or Console.TEXT_PRIMARY
     state.fill_color_ptr[0:4] = [color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0]
     rl.set_shader_value(state.shader, state.locations['fillColor'], state.fill_color_ptr, UNIFORM_VEC4)
 
@@ -229,9 +230,140 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
 
   # Draw strip, color here doesn't matter
   rl.begin_shader_mode(state.shader)
-  rl.draw_triangle_strip(tri_strip, len(tri_strip), rl.WHITE)
+  rl.draw_triangle_strip(tri_strip, len(tri_strip), Console.TEXT_PRIMARY)
   rl.end_shader_mode()
 
+<<<<<<< ours
+=======
+def draw_circle_gradient(rect: rl.Rectangle, center_x: float, center_y: float, radius: float, top_color: rl.Color, bottom_color: rl.Color) -> None:
+  state = ShaderState.get_instance()
+  state.initialize()
+
+  state.circle_center[0:2] = [center_x, rect.height - center_y]
+  state.circle_radius[0] = radius
+  state.circle_top_color[0:4] = [top_color.r / 255.0, top_color.g / 255.0, top_color.b / 255.0, top_color.a / 255.0]
+  state.circle_bottom_color[0:4] = [bottom_color.r / 255.0, bottom_color.g / 255.0, bottom_color.b / 255.0, bottom_color.a / 255.0]
+
+  rl.set_shader_value(state.circle_shader, state.circle_locations['center'], state.circle_center, rl.SHADER_UNIFORM_VEC2)
+  rl.set_shader_value(state.circle_shader, state.circle_locations['radius'], state.circle_radius, rl.SHADER_UNIFORM_FLOAT)
+  rl.set_shader_value(state.circle_shader, state.circle_locations['topColor'], state.circle_top_color, rl.SHADER_UNIFORM_VEC4)
+  rl.set_shader_value(state.circle_shader, state.circle_locations['bottomColor'], state.circle_bottom_color, rl.SHADER_UNIFORM_VEC4)
+
+  # Draw quad covering the circle area; shader will discard pixels outside the radius
+  # square_pos = (center[0] - radius, center[1] - radius)
+  # square_size = int(radius * 2)
+
+  rl.begin_shader_mode(state.circle_shader)
+  rl.draw_rectangle_rec(rect, Console.TEXT_PRIMARY)
+  rl.end_shader_mode()
+
+
+class CircleShaderState:
+  """Separate singleton for the GPU-accelerated circle gradient shader.
+  Renders a perfect anti-aliased gradient circle without the square+ring hack."""
+
+  _instance: Any = None
+
+  @classmethod
+  def get_instance(cls):
+    if cls._instance is None:
+      cls._instance = cls()
+    return cls._instance
+
+  FRAGMENT_SHADER = GL_VERSION + """
+out vec4 finalColor;
+
+uniform vec2 center;
+uniform float radius;
+uniform vec4 topColor;
+uniform vec4 bottomColor;
+
+void main()
+{
+    vec2 uv = gl_FragCoord.xy;
+    float dist = distance(uv, center);
+
+    // Anti-aliased edge: smooth falloff over 1px
+    float alpha = 1.0 - smoothstep(radius - 1.0, radius, dist);
+    if (alpha <= 0.0) discard;
+
+    // Vertical gradient: 0 at bottom of circle, 1 at top
+    float t = clamp((uv.y - center.y + radius) / (2.0 * radius), 0.0, 1.0);
+    vec4 col = mix(bottomColor, topColor, t);
+    col.a *= alpha;
+    finalColor = col;
+}
+"""
+
+  def __init__(self):
+    if CircleShaderState._instance is not None:
+      raise Exception("This class is a singleton. Use get_instance() instead.")
+
+    self.initialized = False
+    self.shader = None
+
+    self.locations = {
+      'center': None,
+      'radius': None,
+      'topColor': None,
+      'bottomColor': None,
+      'mvp': None,
+    }
+
+    self.center_ptr = rl.ffi.new("float[2]", [0, 0])
+    self.radius_ptr = rl.ffi.new("float *", 0.0)
+    self.top_color_ptr = rl.ffi.new("float[4]", [0.0, 0.0, 0.0, 0.0])
+    self.bottom_color_ptr = rl.ffi.new("float[4]", [0.0, 0.0, 0.0, 0.0])
+
+  def initialize(self):
+    if self.initialized:
+      return
+
+    self.shader = rl.load_shader_from_memory(VERTEX_SHADER, self.FRAGMENT_SHADER)
+
+    for uniform in self.locations.keys():
+      self.locations[uniform] = rl.get_shader_location(self.shader, uniform)
+
+    proj = rl.matrix_ortho(0, gui_app.width, gui_app.height, 0, -1, 1)
+    rl.set_shader_value_matrix(self.shader, self.locations['mvp'], proj)
+
+    self.initialized = True
+
+  def cleanup(self):
+    if not self.initialized:
+      return
+    if self.shader:
+      rl.unload_shader(self.shader)
+      self.shader = None
+    self.initialized = False
+
+
+def draw_shader_circle_gradient(center_x: float, center_y: float, radius: float,
+                                top_color: rl.Color, bottom_color: rl.Color) -> None:
+  """Draw a gradient circle using a GPU shader. Produces a clean anti-aliased circle."""
+  state = CircleShaderState.get_instance()
+  state.initialize()
+
+  # Shader uses bottom-left origin for gl_FragCoord, so flip Y
+  state.center_ptr[0] = center_x
+  state.center_ptr[1] = gui_app.height - center_y
+  state.radius_ptr[0] = radius
+  state.top_color_ptr[0:4] = [top_color.r / 255.0, top_color.g / 255.0, top_color.b / 255.0, top_color.a / 255.0]
+  state.bottom_color_ptr[0:4] = [bottom_color.r / 255.0, bottom_color.g / 255.0, bottom_color.b / 255.0, bottom_color.a / 255.0]
+
+  rl.set_shader_value(state.shader, state.locations['center'], state.center_ptr, UNIFORM_VEC2)
+  rl.set_shader_value(state.shader, state.locations['radius'], state.radius_ptr, UNIFORM_FLOAT)
+  rl.set_shader_value(state.shader, state.locations['topColor'], state.top_color_ptr, UNIFORM_VEC4)
+  rl.set_shader_value(state.shader, state.locations['bottomColor'], state.bottom_color_ptr, UNIFORM_VEC4)
+
+  # Draw a quad covering the circle bounding box; shader discards pixels outside radius
+  pad = 2  # 1px extra for anti-aliasing
+  rl.begin_shader_mode(state.shader)
+  rl.draw_rectangle(int(center_x - radius - pad), int(center_y - radius - pad),
+                    int(radius * 2 + pad * 2), int(radius * 2 + pad * 2), Console.TEXT_PRIMARY)
+  rl.end_shader_mode()
+
+>>>>>>> theirs
 
 def cleanup_shader_resources():
   state = ShaderState.get_instance()

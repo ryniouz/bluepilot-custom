@@ -12,6 +12,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle
 from openpilot.system.ui.widgets.label import gui_text_box, gui_label
 from openpilot.system.ui.widgets.network import WifiManagerUI
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 # Constants
 MARGIN = 50
@@ -20,9 +21,9 @@ BUTTON_WIDTH = 400
 PROGRESS_BAR_HEIGHT = 72
 TITLE_FONT_SIZE = 80
 BODY_FONT_SIZE = 65
-BACKGROUND_COLOR = rl.BLACK
-PROGRESS_BG_COLOR = rl.Color(41, 41, 41, 255)
-PROGRESS_COLOR = rl.Color(54, 77, 239, 255)
+BACKGROUND_COLOR = Console.BG_PAGE
+PROGRESS_BG_COLOR = Console.BG_RAISED
+PROGRESS_COLOR = Console.ACCENT_FILL
 
 
 class Screen(IntEnum):
@@ -121,7 +122,7 @@ class Updater(Widget):
     # Draw the Wi-Fi manager UI
     wifi_rect = rl.Rectangle(rect.x + MARGIN, rect.y + MARGIN, rect.width - MARGIN * 2,
                              rect.height - BUTTON_HEIGHT - MARGIN * 3)
-    rl.draw_rectangle_rounded(wifi_rect, 0.035, 10, rl.Color(51, 51, 51, 255))
+    rl.draw_rectangle_rounded(wifi_rect, 0.035, 10, Console.BG_HIGH)
     wifi_content_rect = rl.Rectangle(wifi_rect.x + 50, wifi_rect.y, wifi_rect.width - 100, wifi_rect.height)
     self.wifi_manager_ui.render(wifi_content_rect)
 

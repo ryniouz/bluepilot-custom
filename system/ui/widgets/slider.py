@@ -6,7 +6,12 @@ import pyray as rl
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
+<<<<<<< ours
 from openpilot.common.filter_simple import FirstOrderFilter, BounceFilter
+=======
+from openpilot.common.filter_simple import FirstOrderFilter
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
+>>>>>>> theirs
 
 
 class SliderBase(Widget, abc.ABC):
@@ -40,9 +45,15 @@ class SliderBase(Widget, abc.ABC):
 
     self._is_dragging_circle = False
 
+<<<<<<< ours
     self._label = self._child(UnifiedLabel(title, font_size=36, font_weight=FontWeight.SEMI_BOLD, text_color=rl.WHITE,
                                            alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
                                            alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE, line_height=0.9, shimmer=True))
+=======
+    self._label = UnifiedLabel(title, font_size=36, font_weight=FontWeight.SEMI_BOLD, text_color=with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65)),
+                               alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
+                               alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE, line_height=0.9)
+>>>>>>> theirs
 
   @abc.abstractmethod
   def _load_assets(self):
@@ -129,7 +140,13 @@ class SliderBase(Widget, abc.ABC):
       self._scroll_x_circle_filter.x = self._scroll_x_circle
 
   def _render(self, _):
+<<<<<<< ours
     white = rl.Color(255, 255, 255, int(255 * self._opacity_filter.x))
+=======
+    # TODO: iOS text shimmering animation
+
+    white = with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x))
+>>>>>>> theirs
 
     bg_txt_x = self._rect.x + (self._rect.width - self._bg_txt.width) / 2
     bg_txt_y = self._rect.y + (self._rect.height - self._bg_txt.height) / 2
@@ -138,9 +155,14 @@ class SliderBase(Widget, abc.ABC):
     btn_x = bg_txt_x + self._bg_txt.width - self._circle_bg_txt.width + self._scroll_x_circle_filter.x
     btn_y = self._rect.y + (self._rect.height - self._circle_bg_txt.height) / 2
 
+<<<<<<< ours
     label_alpha = int(255 * (1.0 - self.slider_percentage) * self._opacity_filter.x)
     if label_alpha > 0:
       self._label.set_text_color(rl.Color(255, 255, 255, label_alpha))
+=======
+    if self._confirmed_time == 0.0 or self._scroll_x_circle > 0:
+      self._label.set_text_color(with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65 * (1.0 - self.slider_percentage) * self._opacity_filter.x)))
+>>>>>>> theirs
       label_rect = rl.Rectangle(
         self._rect.x + 20,
         self._rect.y,
@@ -181,9 +203,15 @@ class BigSlider(SliderBase):
   def __init__(self, title: str, icon: rl.Texture, confirm_callback: Callable | None = None):
     self._icon = icon
     super().__init__(title, confirm_callback=confirm_callback)
+<<<<<<< ours
     self._label.set_font_size(48)
     self._label.set_font_weight(FontWeight.DISPLAY)
     self._label.set_line_height(0.875)
+=======
+    self._label = UnifiedLabel(title, font_size=48, font_weight=FontWeight.DISPLAY, text_color=with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65)),
+                               alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                               line_height=0.875)
+>>>>>>> theirs
 
   def _load_assets(self):
     self.set_rect(rl.Rectangle(0, 0, 520 + self.HORIZONTAL_PADDING * 2, 180))

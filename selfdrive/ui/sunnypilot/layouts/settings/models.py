@@ -7,7 +7,6 @@ See the LICENSE.md file in the root directory for more details.
 import os
 import re
 import time
-import pyray as rl
 
 from cereal import custom
 from openpilot.sunnypilot.models.default_model import DEFAULT_MODEL
@@ -26,6 +25,7 @@ from openpilot.system.ui.sunnypilot.lib.utils import NoElideButtonAction
 from openpilot.system.ui.sunnypilot.widgets.list_view import ListItemSP, toggle_item_sp, option_item_sp
 from openpilot.system.ui.sunnypilot.widgets.progress_bar import progress_item
 from openpilot.system.ui.sunnypilot.widgets.tree_dialog import TreeOptionDialog, TreeNode, TreeFolder
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 if gui_app.sunnypilot_ui():
   from openpilot.system.ui.sunnypilot.widgets.list_view import button_item_sp as button_item
@@ -165,14 +165,14 @@ class ModelsLayout(Widget):
       if label := labels.get(getattr(model.type, 'raw', model.type)):
         label.set_visible(True)
         p = model.artifact.downloadProgress
-        text, show, color = f"pending - {bundle.displayName}", False, rl.GRAY
+        text, show, color = f"pending - {bundle.displayName}", False, Console.TEXT_GHOST
         if p.status == custom.ModelManagerSP.DownloadStatus.downloading:
           text, show = f"{int(p.progress)}% - {bundle.displayName}", True
         elif p.status in (custom.ModelManagerSP.DownloadStatus.downloaded, custom.ModelManagerSP.DownloadStatus.cached):
           status_text = tr("from cache" if p.status == custom.ModelManagerSP.DownloadStatus.cached else "downloaded")
           text, color = f"{bundle.displayName} - {status_text if status_changed else tr('ready')}", ON_COLOR
         elif p.status == custom.ModelManagerSP.DownloadStatus.failed:
-          text, color = f"download failed - {bundle.displayName}", rl.RED
+          text, color = f"download failed - {bundle.displayName}", Console.DANGER
         label.action_item.update(p.progress, text, show, color)
 
   @staticmethod

@@ -4,8 +4,23 @@ import cereal.messaging as messaging
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.sidebar import Sidebar, SIDEBAR_WIDTH
 from openpilot.selfdrive.ui.layouts.home import HomeLayout
+<<<<<<< ours
 from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout, PanelType
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
+=======
+from openpilot.selfdrive.ui.layouts.settings import settings as _settings_mod
+from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout
+from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
+
+# BluePilot: START - BP sidebar, home layout, and onroad overlays
+from bluepilot.ui.widgets.sidebar import SidebarBP as Sidebar  # noqa: F811
+from bluepilot.ui.lib.constants import BPConstants
+SIDEBAR_WIDTH = BPConstants.SIDEBAR_WIDTH  # noqa: F811
+from bluepilot.ui.layouts.home_bp import HomeLayoutBP as HomeLayout  # noqa: F811
+from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP as AugmentedRoadView  # noqa: F811
+from bluepilot.ui.widgets.debug import ControlsDebugPanel
+# BluePilot: END - BP sidebar, home layout, and onroad overlays
+>>>>>>> theirs
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
@@ -22,8 +37,11 @@ if is_bluepilot():
 
 if gui_app.sunnypilot_ui():
   from openpilot.selfdrive.ui.sunnypilot.layouts.settings.settings import SettingsLayoutSP as SettingsLayout
+<<<<<<< ours
   from openpilot.selfdrive.ui.layouts.settings import settings as _settings_module
   PanelType = _settings_module.PanelType
+=======
+>>>>>>> theirs
 
 
 class MainState(IntEnum):
@@ -148,3 +166,10 @@ class MainLayout(Widget):
     # BluePilot: render debug panel overlay on top of onroad view
     if is_bluepilot() and self._current_mode == MainState.ONROAD and self._debug_panel.is_panel_visible:
       self._debug_panel.render(content_rect)
+
+
+# Custom: Console redesign. The 3X uses the Console shell (standby splash, rail navigation,
+# quick-controls sheet, charging page) in place of the stock sidebar/home/settings layout.
+from bluepilot.ui.console.main_layout import ConsoleMainLayout, MainState
+MainLayout = ConsoleMainLayout  # noqa: F811
+# Custom: end

@@ -36,10 +36,11 @@ from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.sunnypilot.lib.styles import style
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller_tici import Scroller
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 # from openpilot.selfdrive.ui.sunnypilot.layouts.settings.navigation import NavigationLayout
 
-OP.PANEL_COLOR = rl.Color(10, 10, 10, 255)
+OP.PANEL_COLOR = Console.BG_PAGE
 ICON_SIZE = 70
 
 OP.PanelType = IntEnum(
@@ -87,7 +88,12 @@ class NavButton(Widget):
 
     if self.panel_info.icon:
       icon_texture = gui_app.texture(self.panel_info.icon, ICON_SIZE, ICON_SIZE, keep_aspect_ratio=True)
+<<<<<<< ours
       rl.draw_texture_ex(icon_texture, rl.Vector2(content_x, rect.y + (OP.NAV_BTN_HEIGHT - icon_texture.height) / 2), 0.0, 1.0, rl.WHITE)
+=======
+      rl.draw_texture(icon_texture, int(content_x), int(rect.y + (OP.NAV_BTN_HEIGHT - icon_texture.height) / 2),
+                      Console.TEXT_PRIMARY)
+>>>>>>> theirs
       content_x += ICON_SIZE + 20
 
     # Draw button text (right-aligned)
@@ -148,7 +154,7 @@ class SettingsLayoutSP(OP.SettingsLayout):
     close_color = OP.CLOSE_BTN_PRESSED if pressed else OP.CLOSE_BTN_COLOR
     rl.draw_rectangle_rounded(close_btn_rect, 1.0, 20, close_color)
 
-    icon_color = rl.Color(255, 255, 255, 255) if not pressed else rl.Color(220, 220, 220, 255)
+    icon_color = with_alpha(Console.TEXT_PRIMARY, 255) if not pressed else Console.TEXT_SECONDARY
     icon_dest = rl.Rectangle(
       close_btn_rect.x + (close_btn_rect.width - self._close_icon.width) / 2,
       close_btn_rect.y + (close_btn_rect.height - self._close_icon.height) / 2,

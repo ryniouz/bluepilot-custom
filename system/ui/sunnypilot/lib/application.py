@@ -7,6 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 import os
 
 import pyray as rl
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 SHOW_MOUSE_COORDS = os.getenv("SHOW_MOUSE_COORDS") == "1"
 SUNNYPILOT_UI = os.getenv("SUNNYPILOT_UI", "1") == "1"
@@ -23,7 +24,7 @@ class GuiApplicationExt:
   def _draw_mouse_coordinates(self, font):
     coords_text = f"X:{int(rl.get_mouse_x())}, Y:{int(rl.get_mouse_y())}"
 
-    green_color = rl.Color(0, 159, 47, 255)  # Match the green color of FPS counter
+    green_color = Console.SUCCESS  # Match the green color of FPS counter
 
     # Calculate text width to position it at the right edge; estimate width based on text length
     # Each character is approximately 10-12 pixels wide at font size 20

@@ -13,18 +13,19 @@ from openpilot.system.ui.lib.wrap_text import wrap_text
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.html_render import HtmlRenderer
 from openpilot.selfdrive.selfdrived.alertmanager import OFFROAD_ALERTS
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class AlertColors:
-  HIGH_SEVERITY = rl.Color(226, 44, 44, 255)
-  LOW_SEVERITY = rl.Color(41, 41, 41, 255)
-  BACKGROUND = rl.Color(57, 57, 57, 255)
-  BUTTON = rl.WHITE
-  BUTTON_PRESSED = rl.Color(200, 200, 200, 255)
-  BUTTON_TEXT = rl.BLACK
-  SNOOZE_BG = rl.Color(79, 79, 79, 255)
-  SNOOZE_BG_PRESSED = rl.Color(100, 100, 100, 255)
-  TEXT = rl.WHITE
+  HIGH_SEVERITY = Console.DANGER_FILL
+  LOW_SEVERITY = Console.BG_RAISED
+  BACKGROUND = Console.BG_HIGH
+  BUTTON = Console.TEXT_PRIMARY
+  BUTTON_PRESSED = Console.TEXT_SECONDARY
+  BUTTON_TEXT = Console.BG_PAGE
+  SNOOZE_BG = Console.BORDER_DEFAULT
+  SNOOZE_BG_PRESSED = Console.TEXT_GHOST
+  TEXT = Console.TEXT_PRIMARY
 
 
 class AlertConstants:
@@ -78,7 +79,7 @@ class ActionButton(Widget):
     rl.draw_rectangle_rounded(self._rect, roundness, 10, bg_color)
 
     # center text
-    color = rl.WHITE if self._style == ButtonStyle.DARK else rl.BLACK
+    color = Console.TEXT_PRIMARY if self._style == ButtonStyle.DARK else Console.BG_PAGE
     text_x = int(self._rect.x + (self._rect.width - text_size.x) // 2)
     text_y = int(self._rect.y + (self._rect.height - text_size.y) // 2)
     rl.draw_text_ex(self._font, self.text, rl.Vector2(text_x, text_y), AlertConstants.FONT_SIZE, 0, color)
