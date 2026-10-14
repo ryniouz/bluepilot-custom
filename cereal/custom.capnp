@@ -468,7 +468,51 @@ struct ChargingStateBP @0xc2243c65e0340384 {
   sleepInSeconds @4 :Float32;  # countdown after a charge ends (BPChargeSleepDelayMin), -1 when not counting
 }
 
-struct CustomReserved12 @0x9ccdc8676701b412 {
+# Custom: OBD adapter link (ELM327 over Wi-Fi, USB or Bluetooth), separate from the panda and CAN
+struct ObdStateBP @0x9ccdc8676701b412 {
+  enabled @0 :Bool;                  # BPObdEnabled
+  transport @1 :Transport;
+  link @2 :Link;
+  message @3 :Text;                  # one line for the UI: what is happening or what is wrong
+  adapter @4 :Text;                  # adapter banner, e.g. "ELM327 v1.5"
+  protocol @5 :Text;                 # ATDP answer
+  bluetoothAvailable @6 :Bool;
+  bluetoothMessage @7 :Text;         # why Bluetooth is unavailable, when it is
+  usbDevices @8 :List(Text);         # /dev/ttyUSB*, /dev/ttyACM* seen right now
+  requestsPerSecond @9 :Float32;
+  lastResponseAgeS @10 :Float32;     # -1 before the first answer
+  catalog @11 :Text;                 # which PID catalog is loaded
+  values @12 :List(Value);
+  polling @13 :Bool;                 # false while the truck is off and not charging (no 12 V drain)
+
+  struct Value {
+    name @0 :Text;
+    shortName @1 :Text;
+    value @2 :Float32;
+    unit @3 :Text;                   # metric: degC, kPa, V, A, kWh, percent
+    ageS @4 :Float32;
+    header @5 :Text;
+    request @6 :Text;
+  }
+
+  enum Transport {
+    none @0;
+    bluetooth @1;
+    wifi @2;
+    usb @3;
+    simulated @4;
+  }
+
+  enum Link {
+    off @0;           # BPObdEnabled is off
+    unavailable @1;   # the chosen transport cannot work on this device (e.g. no Bluetooth in AGNOS)
+    connecting @2;
+    initializing @3;
+    connected @4;     # adapter answers and the truck responds
+    carAsleep @5;     # adapter answers, truck does not
+    idle @6;          # connected earlier; paused while the truck is off and not charging
+    error @7;
+  }
 }
 
 struct ControllerStateBP @0xcd96dafb67a082d0 {

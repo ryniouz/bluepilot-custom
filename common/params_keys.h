@@ -329,6 +329,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPGuestModeOneTrip", {PERSISTENT | BACKUP, BOOL, "1"}},       // turn Guest Mode off again after one drive
     {"BPGuestModeActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},  // this drive is running as Guest Mode (UI)
     {"BPGuestModeUsed", {PERSISTENT, BOOL, "0"}},                    // set by card on a guest drive; cleared at the next offroad start
+    {"BPObdEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},             // OBD adapter link on/off (read-only PID polling)
+    {"BPObdTransport", {PERSISTENT | BACKUP, STRING, "wifi"}},      // wifi, usb, bluetooth or simulated
+    {"BPObdAddress", {PERSISTENT | BACKUP, STRING, ""}},            // wifi host[:port], usb /dev path, bluetooth MAC[#channel]
+    {"BPObdPollWhenOff", {PERSISTENT | BACKUP, BOOL, "0"}},         // also poll while the truck is off and not charging (keeps modules awake)
     // Custom: end
 
     // BluePilot: Portal (Web Routes Server)
