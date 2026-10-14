@@ -8,7 +8,8 @@ from opendbc.car.ford.values import CAR
 from openpilot.common.params import Params
 from openpilot.selfdrive.car.guest_mode import offroad_reset
 
-KEYS = ("BPGuestMode", "BPGuestModeOneTrip", "BPGuestModeActive", "BPGuestModeUsed", "OpenpilotEnabledToggle")
+KEYS = ("BPGuestMode", "BPGuestModeOneTrip", "BPGuestModeActive", "BPGuestModeUsed", "OpenpilotEnabledToggle",
+        "BPLockedPlatform", "BPPlatformMismatch")
 NO_OUTPUT = car.CarParams.SafetyModel.noOutput
 
 
@@ -21,10 +22,10 @@ def params():
   return p
 
 
-def make_car():
+def make_car(platform=CAR.FORD_F_150_LIGHTNING_MK1):
   from openpilot.selfdrive.car.card import Car
-  CP = CarInterface.get_non_essential_params(CAR.FORD_F_150_LIGHTNING_MK1)
-  CI = CarInterface(CP, CarInterface.get_non_essential_params_sp(CP, CAR.FORD_F_150_LIGHTNING_MK1))
+  CP = CarInterface.get_non_essential_params(platform)
+  CI = CarInterface(CP, CarInterface.get_non_essential_params_sp(CP, platform))
   return Car(CI, RadarInterface(CI.CP, CI.CP_SP))
 
 
@@ -58,3 +59,19 @@ class TestGuestMode:
     assert not offroad_reset(params)
     assert params.get_bool("BPGuestMode") and not params.get_bool("BPGuestModeUsed")
     assert make_car().CP.passive
+
+
+class TestPlatformLock:
+  def test_lightning_controls(self, params):
+    assert not make_car().CP.passive
+    assert params.get("BPPlatformMismatch") is None
+
+  def test_other_car_stays_passive(self, params):
+    c = make_car(CAR.FORD_F_150_MK14)  # e.g. the comma moved to a gas F-150
+    assert c.CP.passive
+    assert [cfg.safetyModel for cfg in c.CP.safetyConfigs] == [NO_OUTPUT]
+    assert params.get("BPPlatformMismatch") == "FORD_F_150_MK14"
+
+  def test_lock_off(self, params):
+    params.put("BPLockedPlatform", "")
+    assert not make_car(CAR.FORD_F_150_MK14).CP.passive
