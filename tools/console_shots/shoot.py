@@ -78,12 +78,16 @@ SCENES: dict[str, str] = {
   "vehicle": "System > Vehicle: the Lightning, platform lock, Driving tab",
   "vehicle_alerts": "System > Vehicle: Alerts tab (battery %, tire PSI, 12 V)",
   "vehicle_guest": "System > Vehicle: Guest Mode tab",
-  "vehicle_power": "System > Vehicle: Power tab",
+  "vehicle_power": "System > Vehicle: Charging tab",
+  "vehicle_12v": "System > Vehicle: 12 V tab, power saver on, OBD 12 V charge (stream B 12 V keys faked)",
   "vehicle_mismatch": "System > Vehicle: the comma refused another car",
   "steering": "Drive > Steering: torque and NNLC rows hidden",
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
   "boot_progress": "Start-up spinner with a progress number",
   "about": "System > About: Citadel Auto OS name, logo and version",
+  "boot_os_prompt": "OS update screen (bluepilot/ui/console/updater.py): update needed prompt",
+  "boot_os_progress": "OS update screen: installing, Console progress bar",
+  "boot_os_failed": "OS update screen: update failed, Reboot",
   "boot_error": "Error window (system/ui/text.py) with a build log",
   "tap_large": "UI size Large: a tap on the rail's Connect item (screen px) must open Connect",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
@@ -1104,8 +1108,9 @@ def run_scene(sc: Scene):
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
-              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
-              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about"):
+              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
+              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
+              "boot_os_prompt", "boot_os_progress", "boot_os_failed"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1261,7 +1266,14 @@ def run_scene(sc: Scene):
     sc.main._open_shell()
     sc.main._shell.open_panel("vehicle")
     page = sc.main._shell.current_page().widget
-    page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3}.get(name, 0)
+    page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3, "vehicle_12v": 4}.get(name, 0)
+    if name == "vehicle_12v":
+      from bluepilot.ui.console.pages import vehicle as vmod
+      fake_obd("connected")
+      lv = {"BPLvSaver": True, "BPLvSaverOffroadMin": 10, "BPLvShutdownSoc": 50, "BPLvWakeFilter": True}
+      real_has, real_get = vmod.has_param, page._get
+      vmod.has_param = lambda p, k: k in lv or real_has(p, k)
+      page._get = lambda k, d=None: lv[k] if k in lv else real_get(k, d)
     sc.settle()
     sc.shot()
   elif name.startswith("truck_data"):
@@ -1283,6 +1295,13 @@ def run_scene(sc: Scene):
       log = "\n".join(f"[{i:4d}/1873] Compiling selfdrive/modeld/models/commonmodel.cc" for i in range(1840, 1872))
       log += "\nselfdrive/ui/qt/offroad/settings.cc:412:7: error: use of undeclared identifier 'params'\nscons: *** [selfdrive/ui/ui] Error 1"
       w = boot.ConsoleTextWindow("openpilot failed to build\n\n" + log)
+    elif name.startswith("boot_os_"):
+      from bluepilot.ui.console.updater import ConsoleUpdater, Screen
+      w = ConsoleUpdater("agnos.py", "manifest.json")
+      if name != "boot_os_prompt":
+        w.set_current_screen(Screen.PROGRESS)
+        w.progress_text, w.progress_value = "Installing system", 62
+        w.show_reboot_button = name == "boot_os_failed"
     else:
       w = boot.ConsoleSpinner()
       w.set_text("47" if name == "boot_progress" else "Installing the update. This takes a few minutes.")
