@@ -9,7 +9,7 @@ lead card show.
 Opening: drag the dock (or, in Minimal mode where there is no dock, the small handle bar at the
 bottom) upward and the sheet follows the finger; let go past a third of the way and it settles
 open, otherwise it drops back. A tap on the handle, the dock or the camera opens it too. Dragging
-the sheet's header down closes it, as do a tap outside it, its close button, or a few seconds
+the sheet down (from anywhere on it) closes it, as do a tap outside it, its close button, or a few seconds
 without a touch, so the road stays clear.
 """
 
@@ -109,11 +109,13 @@ class QuickControls:
     alert owns the bottom of the screen."""
     if getattr(ui_state, "qc_blocked", False) or getattr(ui_state, "qc_dock", None) is not None:
       return None
-    return rl.Rectangle(rect.x + (rect.width - HANDLE_W) / 2, rect.y + rect.height - HANDLE_BOTTOM - HANDLE_H, HANDLE_W, HANDLE_H)
+    # Something else may own the bottom centre (a theme's gauge cluster): sit above it
+    inset = float(getattr(ui_state, "qc_bottom_inset", 0.0) or 0.0)
+    return rl.Rectangle(rect.x + (rect.width - HANDLE_W) / 2, rect.y + rect.height - inset - HANDLE_BOTTOM - HANDLE_H, HANDLE_W, HANDLE_H)
 
   def _drag_zone(self, rect: rl.Rectangle) -> rl.Rectangle | None:
     if self._p > 0.5:
-      return rl.Rectangle(self._sheet.x, self._sheet.y, self._sheet.width, SHEET_PAD + HEADER_H) if self._sheet else None
+      return self._sheet  # a downward drag anywhere on the sheet closes it; taps still reach the cards
     dock = getattr(ui_state, "qc_dock", None)
     if dock is not None and not getattr(ui_state, "qc_blocked", False):
       return dock
