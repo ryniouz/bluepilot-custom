@@ -20,6 +20,8 @@ import time
 
 import pyray as rl
 
+from cereal import log
+
 from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceBallTiciBP
 from openpilot.selfdrive.ui.sunnypilot.onroad.speed_limit import SpeedLimitRenderer
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -280,6 +282,59 @@ def draw_blindspot_edge(rect: rl.Rectangle, left_a: float, right_a: float, left_
       bar = rl.Rectangle(rect.x + rect.width - EDGE_INSET - bw, y, bw, h)
       rl.draw_rectangle_gradient_h(int(bar.x - gw), int(y), int(gw), int(h), clear, glow_c)
     rl.draw_rectangle_rounded(bar, roundness(bar, 8), 4, with_alpha(c, int(255 * a * pulse)))
+
+
+# -- attention bar ------------------------------------------------------------------------
+
+ATTN_W = 14               # left-edge accent bar for steering override / blocked steering
+ATTN_GLOW = 90
+ATTN_INSET = 18
+STEER_BLOCKED_EVENTS = ("steerTempUnavailable", "steerUnavailable", "steerSaturated", "steerTimeLimit", "lkasDisabled")
+
+
+class AttentionBar:
+  """A red accent bar along the left edge for conditions the driver must notice: steering blocked
+  or faulted, a critical alert, or the driver overriding the steering. It replaces the old
+  full-screen coloured border for these cases; the speed card's status band names the state."""
+
+  def __init__(self):
+    self._a = 0.0
+    self.state = ""         # "blocked" | "critical" | "override" | ""
+
+  def update(self) -> str:
+    sm = ui_state.sm
+    state = ""
+    try:
+      cs = sm['carState']
+      ss = sm['selfdriveState']
+      alert_type = str(ss.alertType or "")
+      active = ui_state.status in (UIStatus.ENGAGED, UIStatus.OVERRIDE, UIStatus.LAT_ONLY)
+      if cs.steerFaultTemporary or cs.steerFaultPermanent or any(e in alert_type for e in STEER_BLOCKED_EVENTS):
+        state = "blocked"
+      elif ss.alertStatus == log.SelfdriveState.AlertStatus.critical:
+        state = "critical"
+      elif active and cs.steeringPressed:
+        state = "override"
+    except Exception:
+      state = ""
+    self.state = state
+    self._a += ((1.0 if state else 0.0) - self._a) * 0.25
+    return state
+
+  def render(self, rect: rl.Rectangle):
+    if self._a <= 0.02:
+      return
+    t = time.monotonic()
+    pulse = 0.7 + 0.3 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 0.9)) if self.state in ("blocked", "critical") else 1.0
+    a = self._a * pulse
+    c = Console.DANGER_FILL
+    y, h = rect.y + 60, rect.height - 120
+    bar = rl.Rectangle(rect.x + ATTN_INSET, y, ATTN_W, h)
+    rl.draw_rectangle_gradient_h(int(bar.x + ATTN_W), int(y), ATTN_GLOW, int(h), with_alpha(c, int(70 * a)), with_alpha(c, 0))
+    rl.draw_rectangle_rounded(bar, 1.0, 8, with_alpha(c, int(255 * a)))
+    # a lighter core line gives the bar a lit, glassy edge
+    core = rl.Rectangle(bar.x + 4, y + 10, 3, h - 20)
+    rl.draw_rectangle_rounded(core, 1.0, 4, rl.Color(255, 255, 255, int(70 * a)))
 
 
 # -- model confidence ---------------------------------------------------------------------

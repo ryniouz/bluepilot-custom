@@ -263,7 +263,9 @@ class EvHudRenderer:
     charging = s.charging
     regen = kw < -0.5
     caption = "Charging" if charging else ("Regen" if regen else "Power")
-    self._dock_value(r, f"{abs(kw):.0f}", "kW", caption, caption_color=Console.SUCCESS if (regen or charging) else None)
+    # Regen reads as negative power (energy back into the pack); charger power stays positive
+    value = f"{abs(kw):.0f}" if charging or not regen else f"-{abs(kw):.0f}"
+    self._dock_value(r, value, "kW", caption, caption_color=Console.SUCCESS if (regen or charging) else None)
     # Center-zero meter: regen grows left in success, drive grows right in accent
     bar = self._dock_bar_rect(r)
     rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)

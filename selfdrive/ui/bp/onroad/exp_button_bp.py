@@ -1,6 +1,6 @@
 import pyray as rl
 
-from openpilot.selfdrive.ui.onroad.exp_button import ExpButton
+from openpilot.selfdrive.ui.onroad.exp_button import FACE_SIZE, ExpButton
 from openpilot.selfdrive.ui.bp.lib.steering_wheel_style import (
   ensure_steering_wheel_icon_style_initialized,
   get_steering_wheel_icon_style,
@@ -11,7 +11,7 @@ from openpilot.system.ui.lib.application import gui_app
 # BluePilot: seasonal theme packs (steering wheel icon override)
 from openpilot.selfdrive.ui.bp.lib import theme_pack
 from bluepilot.ui.console import draw as D  # Custom: shared Console icons
-from bluepilot.ui.lib.theme import Console  # Custom: Console theme
+from bluepilot.ui.lib.theme import Console, is_day, with_alpha  # Custom: Console theme
 
 
 class ExpButtonBP(ExpButton):
@@ -37,6 +37,23 @@ class ExpButtonBP(ExpButton):
       self._animate_steering_wheel = self._params.get_bool("BPAnimateSteeringWheel")
       self._wheel_icon_style = get_steering_wheel_icon_style(self._params, SteeringWheelIconStyle.COMMA_3X)
       self._theme_pack = theme_pack.get_active_pack()
+
+  def _draw_console_face(self, center_x: float, center_y: float, is_exp: bool) -> None:
+    """Custom: a round translucent glass face (Lucas 2026-10-14) instead of the rounded square: a
+    tinted disc, a soft sheen on the upper half, a thin lit rim and a faint shadow ring."""
+    c = rl.Vector2(center_x, center_y)
+    r = FACE_SIZE / 2
+    day = is_day()
+    rl.draw_ring(c, r, r + 6, 0, 360, 72, rl.Color(0, 0, 0, 0x18 if day else 0x30))
+    if is_exp:
+      fill = with_alpha(Console.ACCENT_FILL, 0xE6)
+    else:
+      fill = with_alpha(Console.BG_PANEL, (0xE6 if self.is_pressed else 0xA8) if not day else (0xF2 if self.is_pressed else 0xC8))
+    rl.draw_circle_v(c, r, fill)
+    rl.draw_circle_gradient(rl.Vector2(center_x, center_y - r * 0.38), r * 0.6, rl.Color(255, 255, 255, 0x22 if not day else 0x55),
+                            rl.Color(255, 255, 255, 0))
+    rim = rl.Color(255, 255, 255, 0x40) if not day else Console.BORDER_DEFAULT
+    rl.draw_ring(c, r - 2, r, 0, 360, 72, rim)
 
   def _render(self, rect: rl.Rectangle) -> None:
     center_x = int(self._rect.x + self._rect.width // 2)

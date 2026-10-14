@@ -16,7 +16,7 @@ from openpilot.selfdrive.ui.bp.onroad.road_view import CARD_W as LEAD_CARD_W, SH
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
 from openpilot.selfdrive.ui.bp.onroad.rad_racer_theme import RadRacerTheme
 from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
-from openpilot.selfdrive.ui.bp.onroad.console_cues import ConsoleConfidence, draw_blindspot_edge
+from openpilot.selfdrive.ui.bp.onroad.console_cues import AttentionBar, ConsoleConfidence, draw_blindspot_edge
 from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState, get_bottom_dev_ui_offset
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -57,6 +57,7 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     # BluePilot: Torque bar renderer. Custom: a strip along the top of the Console dock, or the
     # stock arc when the dock is hidden.
     self._torque_bar = TorqueBarRendererBP(scale=3.0)
+    self._attention = AttentionBar()  # Custom: red left-edge bar for override / blocked steering
 
     # Custom: Console EV HUD. The bottom dock (charge, power, range) replaces BluePilot's hybrid
     # battery and power-flow gauges; a details card on the right carries the rest.
@@ -158,6 +159,12 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     # BluePilot: Draw blindspot screen edge indicators ON TOP of confidence ball backdrop
     # so the red safety warning is never obscured
     self._draw_blindspot_screen_edges(self._content_rect, self.BLIND_SPOT_WIDTH)
+
+    # Custom: red accent bar on the left edge for steering override, blocked steering and critical
+    # alerts (no full-screen border); the speed card's status band names the state
+    self._hud_renderer.attention = "" if self._guest else self._attention.update()
+    if not self._guest:
+      self._attention.render(self._content_rect)
 
     self._hud_renderer.render(ui_rect)
 

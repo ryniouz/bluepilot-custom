@@ -9,7 +9,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness
+from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness, with_alpha
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -69,6 +69,7 @@ class HudRendererBP(HudRendererSP):
     self._signals = SignalTiles()
     self._signals_shown = False
     self.guest = False             # set by the road view each frame (Guest Mode drive)
+    self.attention = ""            # AttentionBar state, set by the road view each frame
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -165,19 +166,42 @@ class HudRendererBP(HudRendererSP):
     Console chip in the face's bottom-right corner instead of the gradient disc over the wheel."""
     if not self._show_lateral_control or self._lateral_mode is None:
       return
+    # Custom: a small glass badge on the round face's lower-right rim with a drawn glyph (angle: two
+    # rays and an arc; curvature: a curved path; openpilot: a ring) instead of an A / C / OP letter
     if self._lateral_mode == LateralMode.angle:
-      letter, color = "A", Console.INFO
+      kind, color = "angle", Console.INFO
     elif self._lateral_mode == LateralMode.curvature:
-      letter, color = "C", Console.WARNING
+      kind, color = "curve", Console.WARNING
     else:
-      letter, color = "OP", Console.TEXT_GHOST
-    size = 30
-    tw = measure_text_cached(self._font_semi_bold, letter, size).x
-    w, h = max(48.0, tw + 20), 44.0
-    chip = rl.Rectangle(center_x + FACE_SIZE / 2 - w + 8, center_y + FACE_SIZE / 2 - h + 8, w, h)
-    rl.draw_rectangle_rounded(chip, roundness(chip, Radius.SM), 8, Onroad.PANEL)
-    rl.draw_rectangle_rounded_lines_ex(chip, roundness(chip, Radius.SM), 8, 2, color)
-    rl.draw_text_ex(self._font_semi_bold, letter, rl.Vector2(chip.x + (w - tw) / 2, chip.y + (h - size) / 2), size, 0, color)
+      kind, color = "op", Console.TEXT_SECONDARY
+    br = 30.0
+    off = FACE_SIZE / 2 * 0.74
+    bx, by = center_x + off, center_y + off
+    c = rl.Vector2(bx, by)
+    rl.draw_circle_v(c, br + 4, rl.Color(0, 0, 0, 0x30))
+    rl.draw_circle_v(c, br, Onroad.PANEL_SOLID)
+    rl.draw_ring(c, br - 3, br, 0, 360, 48, color)
+    w = 3.5
+    if kind == "angle":
+      v = rl.Vector2(bx - 12, by + 9)
+      rl.draw_line_ex(v, rl.Vector2(bx + 13, by + 9), w, color)
+      rl.draw_line_ex(v, rl.Vector2(bx + 7, by - 12), w, color)
+      rl.draw_ring(v, 11, 11 + w * 0.8, 300, 360, 12, color)
+    elif kind == "curve":
+      pts = []
+      # a road bend: straight up from the bottom-left, sweeping right along a quadratic
+      p0, p1, p2 = (bx - 10, by + 13), (bx - 10, by - 11), (bx + 13, by - 11)
+      for i in range(17):
+        t = i / 16
+        u = 1 - t
+        pts.append(rl.Vector2(u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+                              u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]))
+      for a, b in zip(pts, pts[1:], strict=False):
+        rl.draw_line_ex(a, b, w, color)
+      rl.draw_circle_v(pts[0], w / 2, color)
+      rl.draw_circle_v(pts[-1], w / 2 + 1.5, color)
+    else:
+      rl.draw_ring(c, 8, 8 + w, 0, 360, 32, color)
 
   def lead_card_pos(self, rect: rl.Rectangle, width: float) -> tuple[float, float]:
     """Top-left of the lead card: under the experimental button, right edges aligned."""
@@ -213,6 +237,10 @@ class HudRendererBP(HudRendererSP):
       return tr("Guest mode"), Console.TEXT_GHOST
     if not self.is_cruise_available:
       return tr("Unavailable"), Console.TEXT_GHOST
+    if self.attention == "blocked":
+      return tr("Steering blocked"), Console.DANGER
+    if self.attention == "override":
+      return tr("Steering override"), Console.DANGER
     status = ui_state.status
     if status == UIStatus.ENGAGED:
       return tr("Engaged"), Onroad.ENGAGED
