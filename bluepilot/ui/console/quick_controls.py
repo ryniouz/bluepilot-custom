@@ -31,7 +31,7 @@ SHEET_PAD = 36
 HEADER_H = 88            # title row; the action buttons are this tall
 ACTION_W = 330           # header action button (icon + word)
 CARD_GAP = 24
-CARD_RADIUS = 20
+CARD_RADIUS = 24         # kit PANEL_R
 CARD_PAD = 28
 SLIDE_S = 0.18           # open animation
 
@@ -106,7 +106,7 @@ class QuickControls:
     # Cards
     top = hy + HEADER_H + CARD_GAP
     body = rl.Rectangle(sheet.x + SHEET_PAD, top, sheet.width - 2 * SHEET_PAD, sheet.y + sheet.height - SHEET_PAD - top)
-    weights = [0.8, 1.1, 1.1]
+    weights = [1.0, 1.0, 1.0]
     unit = (body.width - CARD_GAP * (len(weights) - 1)) / sum(weights)
     x = body.x
     cards = []
@@ -120,11 +120,11 @@ class QuickControls:
     c = cards[0]
     exp = bool(self._params.get_bool("ExperimentalMode"))
     confirmed = bool(self._params.get_bool("ExperimentalModeConfirmed"))
-    D.text(tr("Experimental"), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY, semi=True)
+    D.text(tr("Experimental mode"), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY, semi=True)
     if not confirmed:
       state, color = tr("Turn on in Drive settings"), Console.TEXT_GHOST
     else:
-      state, color = (tr("On"), Console.ACCENT_TEXT) if exp else (tr("Off"), Console.TEXT_MUTED)
+      state, color = tr("End-to-end speed control"), (Console.ACCENT_TEXT if exp else Console.TEXT_MUTED)
     D.text(D.fit(state, D.LABEL, c.width - 2 * CARD_PAD - 112), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 14, D.LABEL, color)
     D.toggle(c.x + c.width - CARD_PAD - 104, c.y + c.height - CARD_PAD - 60, exp, enabled=confirmed)
     if confirmed:

@@ -28,7 +28,9 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from bluepilot.ui.lib.ev_data import EvDataSource, EvSnapshot, finite, temp_range_factor, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
 from bluepilot.ui.lib.layout_presets import LayoutPreset
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness, draw_bar
+from bluepilot.ui.console import kit as K
+from bluepilot.ui.console.home import soc_color
+from bluepilot.ui.lib.theme import Console, Onroad, roundness
 
 KM_TO_MI = 0.621371
 KPA_TO_PSI = 0.145038
@@ -43,10 +45,10 @@ SMALL = 28
 BAR_H = 12
 DEV_UI_RIGHT_W = 184
 
-CARD_RADIUS = 28
+CARD_RADIUS = 24        # kit PANEL_R
 
 # Dock
-DOCK_H = 132
+DOCK_H = 148
 DOCK_MARGIN = 24        # from the inner edge of the status frame
 DOCK_PAD_X = 36
 DOCK_PAD_Y = 22
@@ -54,9 +56,9 @@ DOCK_SEG_W = 320        # one segment: value line + bar
 DOCK_GAP = 32           # between segments (a hairline sits in the middle)
 DOCK_VALUE = 50
 DOCK_UNIT = 30
-DOCK_CAPTION = 28
-DOCK_BAR_H = 16         # thick squared Console bar
-DOCK_RADIUS = 28
+DOCK_CAPTION = 30       # kit CAP
+DOCK_BAR_H = 28         # thick squared Console bar (kit K.bar)
+DOCK_RADIUS = 24        # kit PANEL_R
 
 TIRE_LOW_PSI = 30.0  # Lightning placard is 42 psi; the TPMS warning sits near 32
 
@@ -210,14 +212,10 @@ class EvHudRenderer:
 
   def _dock_soc(self, r: rl.Rectangle, s: EvSnapshot):
     soc = max(0.0, min(100.0, s.soc))
-    if soc < 10 or s.low_soc:
-      fill, word, wc = Console.DANGER, "Low", Console.DANGER
-    elif soc < 20:
-      fill, word, wc = Console.WARNING, "Low", Console.WARNING
-    else:
-      fill, word, wc = Console.SUCCESS, "Charge", None
-    self._dock_value(r, f"{soc:.0f}", "%", word, caption_color=wc)
-    draw_bar(self._dock_bar_rect(r), soc / 100.0, fill)
+    fill = Console.DANGER if s.low_soc else soc_color(soc)
+    low = soc < 20 or s.low_soc
+    self._dock_value(r, f"{soc:.0f}", "%", "Low" if low else "Charge", caption_color=fill if low else None)
+    K.bar(self._dock_bar_rect(r), soc / 100.0, fill)
 
   def _dock_power(self, r: rl.Rectangle, s: EvSnapshot):
     kw = s.power_kw
@@ -226,7 +224,7 @@ class EvHudRenderer:
                      caption_color=Console.SUCCESS if regen else None)
     # Center-zero meter: regen grows left in success, drive grows right in accent
     bar = self._dock_bar_rect(r)
-    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, Console.BG_TRACK)
+    rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)
     mid = bar.x + bar.width / 2
     drive_max = s.discharge_limit_kw if finite(s.discharge_limit_kw) and s.discharge_limit_kw > 50 else 300.0
     regen_max = s.charge_limit_kw if finite(s.charge_limit_kw) and s.charge_limit_kw > 20 else 150.0
@@ -237,8 +235,8 @@ class EvHudRenderer:
       w = min(1.0, -kw / regen_max) * bar.width / 2
       seg, color = rl.Rectangle(mid - w, bar.y, w, bar.height), Console.SUCCESS
     if w >= 1:
-      rl.draw_rectangle_rounded(seg, roundness(seg, Radius.XS), 4, color)
-    rl.draw_rectangle(int(mid - 1), int(bar.y - 6), 3, int(bar.height + 12), Console.TEXT_MUTED)
+      rl.draw_rectangle_rounded(seg, roundness(seg, 6), 4, color)
+    rl.draw_rectangle(int(mid - 2), int(bar.y - 8), 4, int(bar.height + 16), Console.TEXT_PRIMARY)
 
   def _dock_range(self, r: rl.Rectangle, s: EvSnapshot):
     metric = ui_state.is_metric
@@ -249,7 +247,7 @@ class EvHudRenderer:
       text = f"Trip {eff}"
     else:
       text = "Estimated" if s.range_estimated else "Efficiency soon"
-    rl.draw_text_ex(self._font, text, rl.Vector2(r.x, r.y + r.height - SMALL + 4), SMALL, 0, Console.TEXT_MUTED)
+    rl.draw_text_ex(self._font, text, rl.Vector2(r.x, r.y + r.height - DOCK_BAR_H / 2 - SMALL / 2 - 2), SMALL, 0, Console.TEXT_MUTED)
 
   # -- details rows ---------------------------------------------------------
 
