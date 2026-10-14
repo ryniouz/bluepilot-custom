@@ -39,7 +39,8 @@ EV_PT_MESSAGES = (
   "TrailerBrakeInfo_FD1",     # 0x445 trailer brake connection
   "PreCond_Hev_Data1_FD1",    # 0x440 charge status (AC / DC / scheduled / paused ...)
   "Cluster_HEV_Data1_FD1",    # 0x312 cluster charge status fallback
-  "MHT_EV_Wakeup_FD1",        # 0x478 battery preconditioning, coolant heater
+  "MHT_EV_Wakeup_FD1",        # 0x478 battery preconditioning, coolant heater, wake alarm
+  "HEV_Powertrain_Data6",     # 0x480 DC/DC and 12 V support requests
 )
 
 # ChrgStat_D2_Dsply (0x440)
@@ -58,7 +59,10 @@ CHARGING_PT_MESSAGES = (
   "Battery_Traction_1_FD1", "Battery_Traction_3_FD1", "Battery_Traction_4_FD1", "Battery_Traction_5_FD1",
   "Battery_Traction_6_FD1", "MtrTracData_1_FD1", "PreCond_Hev_Data2_FD1", "MtrTrac_Data2_FD1", "HEV_ChargeStat_FD1",
   "Cluster_HEV_Data9_FD1", "PreCond_Hev_Data1_FD1", "Cluster_HEV_Data1_FD1", "MHT_EV_Wakeup_FD1",
+  "Battery_Mgmt_3_FD1", "Battery_Mgmt_4_FD1", "HEV_Powertrain_Data6", "BodyInfo_3_FD1",
 )
+# Ignition_Status (0x3B3)
+IGNITION_STATUS = {1: "off", 2: "accessory", 4: "run", 8: "start"}
 # Already parsed by BluePilot when FordFlags.HEV_BATTERY_DATA is set; added here otherwise.
 HEV_BATTERY_MESSAGES = ("Battery_Traction_1_FD1", "Battery_Traction_3_FD1", "Battery_Traction_4_FD1")
 
@@ -173,6 +177,9 @@ class LightningState:
     self.low_volt = Debounce(5.0, 5.0)
     self.one_pedal = OnePedalEstimator()
     self.charging = Debounce(2.0, 2.0)
+    self.top_up = Debounce(2.0, 2.0)
+    self.top_up_prev = False
+    self.top_up_count = 0
     self.values: dict = {}
 
   # *** traction battery ***
@@ -435,11 +442,61 @@ class LightningState:
       text = ""
     v["evAlerts.alertText"] = text
 
-  def update_charging_only(self, cp, dt: float) -> dict:
-    """Offroad: battery and charging fields only (charging_monitor)."""
+  # *** offroad wake (why the truck's network is up) ***
+  def _update_wake(self, cp, can_alive: bool, dt: float) -> None:
+    v = self.values
+    body_ok = msg_fresh(cp, "BodyInfo_3_FD1")
+    pt6_ok = msg_fresh(cp, "HEV_Powertrain_Data6")
+    wake_ok = msg_fresh(cp, "MHT_EV_Wakeup_FD1")
+    ignition = IGNITION_STATUS.get(int(cp.vl["BodyInfo_3_FD1"]["Ignition_Status"]), "unknown") if body_ok else "unknown"
+    remote = body_ok and cp.vl["BodyInfo_3_FD1"]["Remote_Start_Status"] != 0
+    dcdc = pt6_ok and cp.vl["HEV_Powertrain_Data6"]["DcdcOn_B_Rq"] == 1
+    lv_support = pt6_ok and cp.vl["HEV_Powertrain_Data6"]["ULoBattSpprtSustn_B_Rq"] == 1
+    alarm = int(cp.vl["MHT_EV_Wakeup_FD1"]["WakeAlarm0_T_Rq"]) if wake_ok else -1
+    cabin = wake_ok and (cp.vl["MHT_EV_Wakeup_FD1"]["CabinDrvSustn_B_Rq"] == 1 or cp.vl["MHT_EV_Wakeup_FD1"]["BattTracDrvSustn_B_Rq"] == 1)
+
+    if not can_alive:
+      reason = "asleep"
+    elif ignition in ("run", "start"):
+      reason = "ignitionOn"
+    elif v.get("charging.charging"):
+      reason = "charging"
+    elif remote:
+      reason = "remoteStart"
+    elif ignition == "off" and lv_support:
+      reason = "lowVoltTopUp"
+    elif v.get("charging.batteryConditioning") or cabin:
+      reason = "conditioning"
+    elif ignition == "accessory":
+      reason = "accessory"
+    else:
+      reason = "unknown"
+    top_up = self.top_up.update(reason == "lowVoltTopUp", dt)
+    if top_up and not self.top_up_prev:
+      self.top_up_count += 1
+    self.top_up_prev = top_up
+
+    v["wake.dataAvailable"] = bool(body_ok or pt6_ok)
+    v["wake.reason"] = reason
+    v["wake.ignition"] = ignition
+    v["wake.remoteStart"] = bool(remote)
+    v["wake.dcdcOn"] = bool(dcdc)
+    v["wake.lowVoltSupport"] = bool(lv_support)
+    v["wake.nextWakeMinutes"] = alarm if 0 < alarm < 32767 else -1
+    v["wake.lowVoltTopUps"] = min(self.top_up_count, 65535)
+
+  def update_charging_only(self, cp, dt: float, can_alive: bool = True, s: EvSettings | None = None) -> dict:
+    """Offroad (charging_monitor): battery, charging, 12 V and wake fields."""
     self._update_battery(cp, 0.0, dt)
+    self._update_low_volt(cp, s or EvSettings(), dt)
     self._update_charging(cp, dt)
+    self._update_wake(cp, can_alive, dt)
     return self.values
+
+  @property
+  def low_volt_top_up(self) -> bool:
+    """A debounced 12 V top-up wake is in progress (ignition off, 12 V support requested, not charging)."""
+    return self.top_up_prev
 
   def update(self, cp, s: EvSettings, v_ego: float, a_ego: float, gas: bool, brake: bool, cruise: bool, dt: float) -> dict:
     self._update_battery(cp, v_ego, dt)
