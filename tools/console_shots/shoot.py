@@ -71,6 +71,10 @@ SCENES: dict[str, str] = {
   "home_small": "Home at UI size Small",
   "cellular_large": "Connect > Cellular at UI size Large",
   "theme_large": "Screen > Theme and layout at UI size Large",
+  "automations": "Connect > Home automations: at home on a home network, after joining it",
+  "automations_large": "Connect > Home automations at UI size Large",
+  "upload_settings": "Drives > Upload settings: comma connect, Citadel uploads, LTE data limit",
+  "tap_large": "UI size Large: a tap on the rail's Connect item (screen px) must open Connect",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
   "onroad_engaged": "Onroad, engaged, lead car, 65 mph, set speed 70",
@@ -144,6 +148,9 @@ def resolve_scenes(spec: str | None) -> list[str]:
       continue
     names = ALIASES.get(s, [s])
     for n in names:
+      base = n[:-6] if n.endswith("_large") else n[:-6] if n.endswith("_small") else n
+      if n not in SCENES and base in SCENES:  # any scene at UI size Large or Small
+        SCENES[n] = SCENES[base] + " (UI size " + n[-5:] + ")"
       if n not in SCENES:
         raise SystemExit(f"unknown scene '{n}'. Known: {', '.join(SCENES)}; aliases: {', '.join(ALIASES)}")
       if n not in out:
@@ -993,7 +1000,7 @@ def run_scene(sc: Scene):
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
-              "bluetooth_obd_bt", "bluetooth_obd_live", "theme"):
+              "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1103,6 +1110,37 @@ def run_scene(sc: Scene):
     if name.startswith("bluetooth_obd"):
       page._obd_step = 3 if name == "bluetooth_obd_live" else 1
       page._obd_kind = 2 if name == "bluetooth_obd_bt" else 0
+    sc.settle()
+    sc.shot()
+  elif name == "tap":
+    from openpilot.system.ui.lib.application import MouseEvent, MousePos, gui_app
+    sc.main._open_shell()
+    sc.settle()
+    x, y = 87.0, 756.0   # the Connect rail item as drawn at Large, in screen pixels
+    queue = [[MouseEvent(MousePos(x, y), 0, True, False, True, 0.0)], [MouseEvent(MousePos(x, y), 0, False, True, False, 0.1)]]
+    orig = gui_app._mouse.get_events
+    gui_app._mouse.get_events = lambda: queue.pop(0) if queue else orig()
+    sc.step(4)
+    sc.settle()
+    sc.shot()
+  elif name == "automations":
+    import json
+    from bluepilot.ui.lib.automations import automations
+    sc.put("BPHomeWifi", json.dumps(["Garage-5G", "Home-2G"]))
+    sc.put("BPHomeLocation", json.dumps({"lat": 45.4215, "lon": -75.6972}))
+    a = automations()
+    a.tick = lambda onroad: None
+    a.at_home, a.reason, a.last_action, a.last_action_at = True, "home Wi-Fi", "Joined Garage-5G", "18:02"
+    sc.main._open_shell()
+    sc.main._shell.open_panel("automations")
+    sc.settle()
+    sc.shot()
+  elif name == "upload_settings":
+    sc.put("BPServerUrl", "https://citadel.example.lan")
+    sc.put("BPRoadTripMode", True)
+    sc.put("BPCellLimitMB", 5000)
+    sc.main._open_shell()
+    sc.main._shell.open_panel("upload_settings")
     sc.settle()
     sc.shot()
   elif name == "theme":

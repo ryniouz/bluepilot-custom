@@ -41,6 +41,18 @@ def home_wifi(params: Params) -> list[str]:
     return []
 
 
+def _short_time(iso: str) -> str:
+  """'2026-10-14T07:12:30' -> '07:12' today, else 'Oct 14 07:12'."""
+  import time as _t
+  try:
+    t = _t.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
+  except ValueError:
+    return iso.replace("T", " ")[:16]
+  if _t.strftime("%Y-%m-%d") == iso[:10]:
+    return _t.strftime("%H:%M", t)
+  return _t.strftime("%b %d %H:%M", t)
+
+
 def _text(v) -> str:
   if isinstance(v, bytes):
     v = v.decode(errors="ignore")
@@ -57,6 +69,7 @@ class ConnectivityPage(Widget):
     self.on_open_export: Callable[[], None] | None = None
     self.on_open_uploads: Callable[[], None] | None = None
     self.on_open_cellular: Callable[[], None] | None = None
+    self.on_open_automations: Callable[[], None] | None = None
 
   def show_event(self):
     super().show_event()
@@ -115,13 +128,19 @@ class ConnectivityPage(Widget):
     D.text(D.fit(status, D.BODY, r.x + r.width - p - sx, semi=True), sx, y, D.BODY, semi=True)
     return y + 68
 
-  def _row(self, r: rl.Rectangle, y: float, label: str, value: str, value_color: rl.Color | None = None) -> float:
+  def _row(self, r: rl.Rectangle, y: float, label: str, value: str, value_color: rl.Color | None = None,
+           button: bool = False) -> float:
+    """A label/value row; skipped when it would run into the card's bottom button (button=True) or edge."""
     p = D.CARD_PAD
-    if y + D.BODY > r.y + r.height - p:
+    bottom = r.y + r.height - p - (72 + 12 if button else 0)
+    if y + ROW > bottom + 8:
       return y
     K.hline(r.x + p, r.x + r.width - p, y)
+    lw = D.text_w(label, D.LABEL)
+    label = D.fit(label, D.LABEL, r.width * 0.6)
     D.text(label, r.x + p, y + 20, D.LABEL, Console.TEXT_MUTED)
-    D.text_right(D.fit(value, D.LABEL, r.width * 0.55, semi=True), r.x + r.width - p, y + 20, D.LABEL, value_color, semi=True)
+    room = r.width - 2 * p - min(lw, r.width * 0.6) - 28
+    D.text_right(D.fit(value, D.LABEL, room, semi=True), r.x + r.width - p, y + 20, D.LABEL, value_color, semi=True)
     return y + ROW
 
   def _button(self, r: rl.Rectangle, label: str, fn: Callable[[], None], primary: bool = False, right_of: float = 0.0):
@@ -129,6 +148,8 @@ class ConnectivityPage(Widget):
     w = D.text_w(label, D.LABEL, semi=True) + 64
     x = r.x + p if not right_of else right_of
     b = rl.Rectangle(x, r.y + r.height - p - 72, w, 72)
+    if x + w > r.x + r.width - p + 1:  # no room left on this card's button row
+      return rl.Rectangle(x - 16, b.y, 0, 72)
     D.button(b, label, primary=primary, size=D.LABEL)
     self._hits.append((b, fn))
     return b
@@ -147,8 +168,8 @@ class ConnectivityPage(Widget):
     if on_wifi and ssid and ssid in homes:
       K.tag(r.x + r.width - D.CARD_PAD - D.text_w(tr("Home"), 26, semi=True) - 28, r.y + D.CARD_PAD + 2, tr("Home"), accent=True)
     fav = _text(_param(self._params, "WifiFavoriteSSID", ""))
-    y = self._row(r, y, tr("Preferred network"), fav or tr("None"))
-    self._row(r, y, tr("Home networks"), ", ".join(homes) if homes else tr("None yet"))
+    y = self._row(r, y, tr("Preferred network"), fav or tr("None"), button=True)
+    self._row(r, y, tr("Home networks"), ", ".join(homes) if homes else tr("None yet"), button=True)
     b = self._button(r, tr("Wi-Fi settings"), lambda: self.on_open_wifi and self.on_open_wifi())
     if on_wifi and ssid:
       is_home = ssid in homes
@@ -173,14 +194,14 @@ class ConnectivityPage(Widget):
       status = tr("Standby, Wi-Fi is in use") if ds is not None and str(ds.networkType) == "wifi" else tr("No signal")
       color = Console.TEXT_GHOST
     y = self._head(r, tr("LTE"), level, status, color)
-    y = self._row(r, y, *self.data_used())
+    y = self._row(r, y, *self.data_used(), button=True)
     cell = bridge.get("usage", "cell")
     if isinstance(cell, dict):
       tv, tu = fmt_bytes(int(cell.get("todayBytes") or 0))
-      y = self._row(r, y, tr("Today"), f"{tv} {tu}")
+      y = self._row(r, y, tr("Today"), f"{tv} {tu}", button=True)
     else:
       bv, bu = fmt_bytes(usage().boot_bytes)
-      y = self._row(r, y, tr("Since start-up"), f"{bv} {bu}")
+      y = self._row(r, y, tr("Since start-up"), f"{bv} {bu}", button=True)
     self._button(r, tr("Cellular settings"), lambda: self.on_open_cellular and self.on_open_cellular())
 
   def data_used(self) -> tuple[str, str, rl.Color | None]:
@@ -227,7 +248,7 @@ class ConnectivityPage(Widget):
       return tr("Server not reachable"), Console.WARNING, host
     if url:
       return tr("Server set, uploader off"), Console.TEXT_GHOST, url.split("://")[-1].split("/")[0]
-    return tr("Your own server isn't set up yet"), Console.TEXT_GHOST, ""
+    return tr("Server not set up yet"), Console.TEXT_GHOST, ""
 
   def _server_card(self, r: rl.Rectangle, ds):
     from bluepilot.ui.lib import upload_status as us
@@ -255,7 +276,8 @@ class ConnectivityPage(Widget):
     y = self._head(r, tr("Home location"), None, status, color)
     if h.last is not None:
       when = h.last.get("t", "")
-      y = self._row(r, y, tr("Last GPS position"), tr("Now") if h.fresh else (when.replace("T", " ")[:16] if when else tr("Saved")))
+      y = self._row(r, y, tr("Last GPS position"), tr("Now") if h.fresh else (_short_time(when) if when else tr("Saved")),
+                    button=True)
     else:
       y = self._row(r, y, tr("Last GPS position"), tr("None yet"))
     for ln in D.wrap(tr("GPS only runs while the truck is on."), D.LABEL,
@@ -263,8 +285,9 @@ class ConnectivityPage(Widget):
       if y + 40 < r.y + r.height - D.CARD_PAD - 96:
         D.text(ln, r.x + D.CARD_PAD, y + 16, D.LABEL, Console.TEXT_MUTED)
         y += 40
+    b = self._button(r, tr("Automations"), lambda: self.on_open_automations and self.on_open_automations())
     if h.last is not None:
-      b = self._button(r, tr("Set home here"), self._set_home, primary=h.home is None)
+      b = self._button(r, tr("Set home here"), self._set_home, primary=h.home is None, right_of=b.x + b.width + 16)
       if h.home is not None:
         self._button(r, tr("Clear"), h.clear_home, right_of=b.x + b.width + 16)
 

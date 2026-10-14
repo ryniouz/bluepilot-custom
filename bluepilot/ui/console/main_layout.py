@@ -32,6 +32,7 @@ from bluepilot.ui.console.quick_controls import QuickControls
 from bluepilot.ui.console.shell import ConsoleShell, Dest, Page
 from bluepilot.ui.console.standby import ConsoleStandby
 from bluepilot.ui.lib import ui_scale
+from bluepilot.ui.lib.automations import automations
 from bluepilot.ui.lib.home_location import home_location
 from bluepilot.ui.lib.net_usage import usage
 
@@ -117,6 +118,7 @@ class ConsoleMainLayout(Widget):
     self._layouts[MainState.ONROAD].set_click_callback(self._on_onroad_clicked)
     self._layouts[MainState.CHARGING].set_click_callback(self._on_charging_clicked)
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
+    automations().attach(self._shell.connectivity._wifi)
 
     gui_app.push_widget(self)
 
@@ -131,6 +133,7 @@ class ConsoleMainLayout(Widget):
   def _render(self, rect):
     self._handle_transitions()
     home_location().tick(ui_state.sm)
+    automations().tick(ui_state.started)
     if ui_state.sm.updated["deviceState"]:
       usage().tick(ui_state.sm["deviceState"])
     if self._current_mode == MainState.SHELL:
