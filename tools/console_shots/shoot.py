@@ -66,6 +66,11 @@ SCENES: dict[str, str] = {
   "onboarding_guide": "Console onboarding, driving guide (calibration step)",
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
+  "theme": "Screen > Theme and layout (theme, UI size, accent, layout)",
+  "home_large": "Home at UI size Large",
+  "home_small": "Home at UI size Small",
+  "cellular_large": "Connect > Cellular at UI size Large",
+  "theme_large": "Screen > Theme and layout at UI size Large",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
   "onroad_engaged": "Onroad, engaged, lead car, 65 mph, set speed 70",
@@ -977,12 +982,18 @@ def _inject_popup():
 
 def run_scene(sc: Scene):
   name = sc.name
+  for suffix, idx in (("_large", 2), ("_small", 0)):  # UI size variants of another scene
+    if name.endswith(suffix):
+      from bluepilot.ui.lib import ui_scale
+      sc.put("BPConsoleScale", idx)
+      ui_scale.set_scale_index(idx)
+      name = name[:-len(suffix)]
   d = default_drive()
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
-              "bluetooth_obd_bt", "bluetooth_obd_live"):
+              "bluetooth_obd_bt", "bluetooth_obd_live", "theme"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1092,6 +1103,11 @@ def run_scene(sc: Scene):
     if name.startswith("bluetooth_obd"):
       page._obd_step = 3 if name == "bluetooth_obd_live" else 1
       page._obd_kind = 2 if name == "bluetooth_obd_bt" else 0
+    sc.settle()
+    sc.shot()
+  elif name == "theme":
+    sc.main._open_shell()
+    sc.main._shell.open_panel("theme")
     sc.settle()
     sc.shot()
   elif name == "updates":

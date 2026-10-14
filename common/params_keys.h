@@ -324,6 +324,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPConsoleAccent", {PERSISTENT | BACKUP, STRING, "blue"}},
     {"BPConsoleMode", {PERSISTENT | BACKUP, STRING, "auto"}},  // auto, day, night
     {"BPLayoutPreset", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPConsoleScale", {PERSISTENT | BACKUP, INT, "1"}},  // UI size: 0 small, 1 standard, 2 large
+    {"BPAutoHomeWifi", {PERSISTENT | BACKUP, BOOL, "1"}},  // join a saved home network when parked at home
+    {"BPAutoHotspotHome", {PERSISTENT | BACKUP, BOOL, "1"}},  // turn the hotspot off at home
+    {"BPAutoHotspotAway", {PERSISTENT | BACKUP, BOOL, "0"}},  // turn the hotspot on when driving away from home
     {"BPEvHud", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},

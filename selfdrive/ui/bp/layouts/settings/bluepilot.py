@@ -16,6 +16,7 @@ from openpilot.selfdrive.ui.bp.widgets.float_control_item import float_control_i
 from openpilot.selfdrive.ui.bp.widgets.section_header import SectionHeader
 from bluepilot.ui.lib.theme import ACCENT_NAMES, ACCENT_LABELS, MODE_NAMES, MODE_LABELS, set_accent  # Custom: Console theme
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS, PRESET_DESCRIPTIONS  # Custom: Console theme
+from bluepilot.ui.lib.ui_scale import LABELS as SCALE_LABELS, set_scale_index  # Custom: Console UI size
 
 
 class BluePilotLayout(Widget):
@@ -420,6 +421,15 @@ class BluePilotLayout(Widget):
       selected_index=MODE_NAMES.index(mode) if mode in MODE_NAMES else 0,
       icon="settings.png"
     )
+    self._console_scale_btn = multiple_button_item(
+      lambda: tr("UI size"),
+      lambda: tr("Size of text, icons and buttons on the settings and home screens. The driving view keeps its own layout."),
+      buttons=[lambda n=n: tr(n) for n in SCALE_LABELS],
+      button_width=230,
+      callback=self._set_console_scale,
+      selected_index=self._console_scale_idx(),
+      icon="settings.png"
+    )
     self._console_accent_btn = multiple_button_item(
       lambda: tr("Accent"),
       lambda: tr("Console accent colour for buttons, selections and the driving path. Status colours never change."),
@@ -434,7 +444,7 @@ class BluePilotLayout(Widget):
     except (TypeError, ValueError):
       preset_idx = 1
     self._layout_preset_btn = multiple_button_item(
-      lambda: tr("Driving screen layout"),
+      lambda: tr("Driving layout"),
       lambda: tr(PRESET_DESCRIPTIONS[self._layout_preset_idx()]),
       buttons=[lambda n=n: tr(n) for n in PRESET_LABELS],
       button_width=225,
@@ -742,6 +752,19 @@ class BluePilotLayout(Widget):
       pass
     ui_state.console_mode_pref = name
 
+  def _console_scale_idx(self) -> int:
+    try:
+      return max(0, min(2, int(self._safe_get(self._params, "BPConsoleScale", 1))))
+    except (TypeError, ValueError):
+      return 1
+
+  def _set_console_scale(self, button_index: int):
+    try:
+      self._params.put("BPConsoleScale", int(button_index))
+    except UnknownKeyName:
+      pass
+    set_scale_index(button_index)
+
   def _layout_preset_idx(self) -> int:
     try:
       return max(0, min(2, int(self._safe_get(self._params, "BPLayoutPreset", 1))))
@@ -758,7 +781,7 @@ class BluePilotLayout(Widget):
   # Custom: rows the Console shell shows on its own pages
   def console_page_items(self) -> dict[str, list]:
     return {
-      "theme": [self._console_mode_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud],
+      "theme": [self._console_mode_btn, self._console_scale_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud],
       "charging": [self._charging_screen, self._charge_sleep_btn],
       "export": [self._bridge_enabled, self._keep_until_synced, self._bridge_address, self._bridge_token],
     }
