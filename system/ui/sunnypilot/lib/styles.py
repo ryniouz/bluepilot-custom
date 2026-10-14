@@ -14,28 +14,32 @@ from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 @dataclass
 class Base:
   # Widget/Control Base Dimensions
-  ITEM_BASE_HEIGHT = 170
+  # Custom: Console (Citadel form rows) sizes; stock was 170 / 50 / 40 / 150
+  ITEM_BASE_HEIGHT = 124
   ITEM_PADDING = 20
-  ITEM_TEXT_FONT_SIZE = 50
-  ITEM_DESC_FONT_SIZE = 40
-  ITEM_DESC_V_OFFSET = 150
+  ITEM_TEXT_FONT_SIZE = 34
+  ITEM_DESC_FONT_SIZE = 28
+  ITEM_DESC_V_OFFSET = 104
+  # Custom: end
   ITEM_TEXT_VALUE_COLOR = Console.TEXT_SECONDARY  # Custom: Console
   CLOSE_BTN_SIZE = 160
 
   TEXT_PADDING = 20
 
+  # Custom: Console sizes; stock toggle 120 high, buttons 120 / 150 high
   # Toggle Control
-  TOGGLE_HEIGHT = 120
+  TOGGLE_HEIGHT = 64
   TOGGLE_WIDTH = int(TOGGLE_HEIGHT * 1.75)
-  TOGGLE_BG_HEIGHT = TOGGLE_HEIGHT - 20
+  TOGGLE_BG_HEIGHT = TOGGLE_HEIGHT - 8
 
   # Button Control
-  BUTTON_ACTION_WIDTH = 300
-  BUTTON_HEIGHT = 120
+  BUTTON_ACTION_WIDTH = 260
+  BUTTON_HEIGHT = 80
 
   # Simple Button Control
-  SIMPLE_BUTTON_WIDTH = 800
-  SIMPLE_BUTTON_HEIGHT = 150
+  SIMPLE_BUTTON_WIDTH = 640
+  SIMPLE_BUTTON_HEIGHT = 88
+  # Custom: end
 
 
 @dataclass

@@ -13,20 +13,22 @@ from openpilot.system.ui.widgets.html_render import HtmlRenderer, ElementType
 from bluepilot.ui.lib.theme import Console, roundness as console_roundness  # Custom: Console theme
 
 ITEM_BASE_WIDTH = 600
-ITEM_BASE_HEIGHT = 170
+# Custom: Console (Citadel form rows) sizes; stock was 170 / 50 / 40 / 140, buttons 100 high, 35 pt
+ITEM_BASE_HEIGHT = 124
 ITEM_PADDING = 20
-ITEM_TEXT_FONT_SIZE = 50
+ITEM_TEXT_FONT_SIZE = 34
 ITEM_TEXT_COLOR = Console.TEXT_PRIMARY  # Custom: Console text ramp
 ITEM_TEXT_VALUE_COLOR = Console.TEXT_SECONDARY
 ITEM_DESC_TEXT_COLOR = Console.TEXT_MUTED
-ITEM_DESC_FONT_SIZE = 40
-ITEM_DESC_V_OFFSET = 140
+ITEM_DESC_FONT_SIZE = 28
+ITEM_DESC_V_OFFSET = 104
 RIGHT_ITEM_PADDING = 20
-ICON_SIZE = 80
-BUTTON_WIDTH = 250
-BUTTON_HEIGHT = 100
-BUTTON_BORDER_RADIUS = 50
-BUTTON_FONT_SIZE = 35
+ICON_SIZE = 56
+BUTTON_WIDTH = 220
+BUTTON_HEIGHT = 72
+BUTTON_BORDER_RADIUS = 16
+BUTTON_FONT_SIZE = 28
+# Custom: end
 BUTTON_FONT_WEIGHT = FontWeight.MEDIUM
 
 TEXT_PADDING = 20
