@@ -56,6 +56,7 @@ def sentence(text: str) -> str:
   Acronyms and mixed-case names (ACC, openpilot, BluePilot) are left alone."""
   if not text:
     return text
+  text = " ".join(text.split())  # "Reverse\nGear" and stray spacing
   if text.upper() == text and any(c.isalpha() for c in text):
     return text[:1] + text[1:].lower()
   words = text.split(" ")
@@ -70,20 +71,47 @@ def sentence(text: str) -> str:
   return " ".join(out)
 
 
+# Icon by what the alert is about, matched over title and subtitle in this order: specific causes
+# first, so "TAKE CONTROL IMMEDIATELY / CAN Bus Disconnected" shows a cable and an overheat a
+# thermometer; the generic take-control rule is last. The alert map with every alert is in
+# /mnt/project-files/comma/console-ui/driving/alerts/ALERTS.md.
+ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+  (("calibrat", "remount", "fell off mount"), "calibrate"),
+  (("experimental",), "flask"),
+  (("bookmark",), "bookmark"),
+  (("unknown vehicle", "car unrecognized"), "car"),
+  (("dashcam", "branch is not tested", "joystick", "maneuver", "audio feedback"), "bell"),
+  (("risk of collision", "brake!", "aeb"), "warning"),
+  (("touch steering wheel",), "hands"),
+  (("system unresponsive",), "cpu"),
+  (("distract", "unresponsive", "no face", "pay attention", "eyes on road"), "eye"),
+  (("blindspot", "blind spot"), "car_rear"),
+  (("lane change", "changing lanes"), "lane"),
+  (("turning left",), "lane_left"),
+  (("turning right",), "lane_right"),
+  (("can bus", "usb error", "relay", "harness", "security key"), "plug"),
+  (("overheat", "fan malfunction"), "thermo"),
+  (("low battery",), "battery"),
+  (("storage",), "download"),
+  (("memory", "process", "lagging", "system unresponsive", "communication", "initializing", "waiting to start"),
+   "cpu"),
+  (("camera",), "screen"),
+  (("locationd", "paramsd", "posenet", "sensor", "radar"), "pulse"),
+  (("cruise", "speed", "slow down", "drive above", "below", "standstill", "brake hold"), "gauge"),
+  (("gear", "door", "seatbelt", "parking brake", "pedal", "stability control", "release brake"), "car"),
+  (("personality",), "sliders"),
+  (("lkas", "lane centering", "steer", "wheel", "take control", "hands", "disengage", "lane departure", "actuation",
+    "time limit", "mismatch"), "hands"),
+)
+
+
 def alert_icon(alert) -> str:
-  t = f"{alert.text1} {alert.text2}".lower()
-  if "calibrat" in t:
-    return "calibrate"
-  if "experimental" in t:
-    return "flask"
-  if "wheel" in t or "steer" in t or "take control" in t or "hands" in t:
-    return "hands"
-  if "attention" in t or "distract" in t or "eyes" in t or "road" in t or "driver" in t:
-    return "eye"
-  if "lane change" in t or "changing lanes" in t:
-    return "lane_right" if "right" in t else "lane_left"
-  if "blindspot" in t or "blind spot" in t:
-    return "car_rear"
+  text = f"{alert.text1 or ''} {alert.text2 or ''}".lower()
+  for keys, icon in ICON_RULES:
+    if any(k in text for k in keys):
+      if icon == "lane":
+        return "lane_right" if "right" in text else "lane_left"
+      return icon
   return "alert"
 
 
@@ -138,7 +166,7 @@ class AlertRendererBP(AlertRenderer):
 
   def _get_pill_rect(self, rect: rl.Rectangle, alert) -> Optional[rl.Rectangle]:
     """Notification card rect: centred in the band between the signal tiles."""
-    line1, line2 = alert.text1 or "", alert.text2 or ""
+    line1, line2 = sentence(alert.text1 or ""), sentence(alert.text2 or "")
     if not line1 and not line2:
       return None
     band_l, band_r = self.notify_band if self.notify_band else (rect.x + PILL_SIDE_MARGIN, rect.x + rect.width - PILL_SIDE_MARGIN)
