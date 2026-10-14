@@ -380,7 +380,7 @@ class FormPage(Widget):
     top = self.header(rect)
     view = rl.Rectangle(rect.x, rect.y + top, rect.width, rect.height - top)
     self._view = view
-    sections = self.sections()
+    sections = [s for s in self.sections() if s is not None]
     placed = self._columns(rl.Rectangle(view.x, view.y, view.width - 16, view.height), sections)
     self._offset = max(0.0, min(self._offset, max(0.0, self._content_h - view.height)))
     rl.begin_scissor_mode(int(view.x), int(view.y), int(view.width), int(view.height))
