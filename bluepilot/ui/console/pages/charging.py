@@ -3,7 +3,9 @@ Console charging page for the F-150 Lightning.
 
 One layout, drawn in two places:
   ChargingScreen  full screen; takes over while the truck charges at a standstill (ignition on or
-                  off). A tap anywhere minimizes it to the driving view or Home.
+                  off). A tap anywhere minimizes it to the driving view or Home. With the truck off
+                  it shows the minimal dark view instead (BPChargeMinimal); a tap there opens the
+                  full view for a minute.
   ChargingPage    Energy > Charging in the shell; reopens the full screen while plugged in and
                   shows the last session when not.
 
@@ -23,10 +25,12 @@ from collections.abc import Callable
 import pyray as rl
 
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.system.hardware import PC
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
+from bluepilot.ui.lib.charge_screen import DIM, OFF, ON
 from bluepilot.ui.lib.ev_data import ChargeSession, EvSnapshot, finite, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
 from bluepilot.ui.lib.obd_link import fmt_value, live_values
 from bluepilot.ui.lib.theme import Console, roundness
@@ -361,22 +365,111 @@ def draw_idle(r: rl.Rectangle, s: EvSnapshot | None, session: ChargeSession | No
   tile(cells[3], tr("Peak power"), fmt_kw(last["peak_kw"]) if finite(last["peak_kw"]) else "--", "kW")
 
 
+# Minimal dark view (truck off): black, grey type, nothing white, no fixed edges, drifts every minute
+MIN_BLACK = rl.Color(0, 0, 0, 255)
+MIN_TEXT = rl.Color(150, 150, 150, 255)
+MIN_MUTED = rl.Color(92, 92, 92, 255)
+MIN_TRACK = rl.Color(24, 24, 24, 255)
+MIN_SOC = 200
+MIN_DRIFT = (96.0, 56.0)   # px each way
+FULL_VIEW_S = 60.0         # a tap on the minimal view shows the full one this long
+
+
+def minimal_lines(s: EvSnapshot, session: ChargeSession | None) -> tuple[str, str]:
+  """('AC charging · 7.2 kW', 'Full in 2:10 h') with the truck's own status where it has one."""
+  head = charge_title(s)
+  if s.charging and finite(s.charge_power_kw):
+    head += f" · {fmt_kw(s.charge_power_kw)} kW"
+  sub, _ = status_line(s)
+  if not sub:
+    if finite(s.charge_time_to_full_min) and s.charge_time_to_full_min > 0:
+      v, u = fmt_duration(s.charge_time_to_full_min)
+      sub = tr("Full in") + f" {v} {u}"
+    elif session is not None and session.active:
+      v, u = fmt_duration(session.elapsed_s() / 60.0)
+      sub = tr("Charging for") + f" {v} {u}"
+  return head, sub
+
+
+def draw_minimal(rect: rl.Rectangle, s: EvSnapshot, session: ChargeSession | None, t: float | None = None):
+  rl.draw_rectangle_rec(rect, MIN_BLACK)
+  t = time.time() if t is None else t  # noqa: TID251  wall clock: the minute drives the drift and the clock
+  minute = int(t // 60)
+  dx = ((minute * 37) % 200) / 200.0 * 2 - 1      # -1..1, a different spot every minute
+  dy = ((minute * 53) % 120) / 120.0 * 2 - 1
+  w = min(900.0, rect.width * 0.5)
+  h = MIN_SOC + 40 + 28 + 40 + 44 + 40 + 40
+  x = rect.x + (rect.width - w) / 2 + dx * MIN_DRIFT[0]
+  y = rect.y + (rect.height - h) / 2 + dy * MIN_DRIFT[1]
+  if finite(s.soc):
+    D.value_unit(f"{s.soc:.0f}", "%", x, y, MIN_SOC, 72, MIN_TEXT, light=True)
+  else:
+    D.text("--", x, y, MIN_SOC, MIN_MUTED, semi=True)
+  clock = time.strftime("%-I:%M", time.localtime(t))
+  D.text_right(clock, x + w, y + MIN_SOC - 64, 56, MIN_MUTED)
+  by = y + MIN_SOC + 40
+  bar = rl.Rectangle(x, by, w, 28)
+  rl.draw_rectangle_rec(bar, MIN_TRACK)
+  if finite(s.soc) and s.soc > 0:
+    rl.draw_rectangle_rec(rl.Rectangle(x, by, w * min(s.soc, 100.0) / 100.0, 28), K.rgba(Console.SUCCESS, 110))
+  head, sub = minimal_lines(s, session)
+  D.text(D.fit(head, 44, w, semi=True), x, by + 28 + 40, 44, MIN_TEXT, semi=True)
+  if sub:
+    D.text(D.fit(sub, 34, w), x, by + 28 + 40 + 60, 34, MIN_MUTED)
+
+
+def draw_screen_mode(rect: rl.Rectangle, mode: str):
+  """On a PC the backlight can't dim or switch off, so the simulator shows what the comma would do."""
+  if mode == DIM:
+    rl.draw_rectangle_rec(rect, rl.Color(0, 0, 0, 185))
+  elif mode == OFF:
+    rl.draw_rectangle_rec(rect, MIN_BLACK)
+    D.text(tr("Display off (simulator view). Tap to wake."), rect.x + 32, rect.y + rect.height - 56, 26, rl.Color(60, 60, 60, 255))
+
+
 def _state():
   return getattr(ui_state, "ev", None), getattr(ui_state, "charge_session", None)
 
 
 class ChargingScreen(Widget):
-  """Full-screen charging view. Any tap calls the click callback (main_layout minimizes it)."""
+  """Full-screen charging view. Any tap calls the click callback (main_layout minimizes it); on the minimal
+  view the first tap opens the full one instead."""
+
+  def __init__(self):
+    super().__init__()
+    self._full_until = 0.0
+
+  def minimal(self) -> bool:
+    policy = getattr(ui_state, "charge_policy", None)
+    return (not ui_state.ignition and policy is not None and policy.minimal
+            and time.monotonic() >= self._full_until)
+
+  def show_event(self):
+    super().show_event()
+    self._full_until = 0.0
 
   def _render(self, rect: rl.Rectangle):
-    rl.draw_rectangle_rec(rect, Console.BG_PAGE)
     s, session = _state()
     if s is None or session is None:
+      rl.draw_rectangle_rec(rect, Console.BG_PAGE)
       return
-    inner = rl.Rectangle(rect.x + MARGIN, rect.y + 56, rect.width - 2 * MARGIN, rect.height - 56 - MARGIN)
-    draw_header(rl.Rectangle(inner.x, inner.y, inner.width, 120), s, session, tr("Minimize"))
-    body = rl.Rectangle(inner.x, inner.y + 160, inner.width, inner.height - 160)
-    draw_body(body, s, session)
+    if self.minimal():
+      draw_minimal(rect, s, session)
+    else:
+      rl.draw_rectangle_rec(rect, Console.BG_PAGE)
+      inner = rl.Rectangle(rect.x + MARGIN, rect.y + 56, rect.width - 2 * MARGIN, rect.height - 56 - MARGIN)
+      draw_header(rl.Rectangle(inner.x, inner.y, inner.width, 120), s, session, tr("Minimize"))
+      body = rl.Rectangle(inner.x, inner.y + 160, inner.width, inner.height - 160)
+      draw_body(body, s, session)
+    mode = getattr(ui_state, "charge_screen_mode", ON)
+    if PC and mode != ON:
+      draw_screen_mode(rect, mode)
+
+  def _handle_mouse_release(self, mouse_pos):
+    if self.minimal():
+      self._full_until = time.monotonic() + FULL_VIEW_S
+      return
+    super()._handle_mouse_release(mouse_pos)
 
 
 class ChargingPage(Widget):

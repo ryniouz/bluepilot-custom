@@ -354,6 +354,7 @@ class ChargeSession:
 
   ENTER_S = 2.0
   EXIT_S = 5.0
+  HANDOFF_S = 30.0  # no fresh source at all: the ignition just changed and the other publisher is starting
   STANDSTILL_MS = 0.3
 
   def __init__(self):
@@ -390,7 +391,11 @@ class ChargeSession:
         else:
           if self._off_since is None:
             self._off_since = now
-          if now - self._off_since >= self.EXIT_S:
+          # Ignition on <-> off hands charging over between carStateBP (card) and chargingStateBP
+          # (charging_monitor, offroad only); neither is fresh while the processes swap, so wait longer
+          # before calling the session over rather than ending it and starting a new one.
+          limit = self.HANDOFF_S if not snap.source else self.EXIT_S
+          if now - self._off_since >= limit:
             self._end()
 
     if self.active:

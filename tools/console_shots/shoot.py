@@ -123,6 +123,10 @@ SCENES: dict[str, str] = {
   "onroad_debug_panel": "Onroad with the BluePilot controls debug panel open",
   "charging_dc": "Charging screen, DC fast charge (charge fields injected; CarStateBP.ev not on this branch yet)",
   "charging_ac": "Charging screen, AC charge limited by a cold battery",
+  "charging_off_ac": "Truck off, AC charging: the minimal dark charging screen",
+  "charging_off_dc": "Truck off, DC fast charging: the minimal dark charging screen",
+  "charging_off_full": "Truck off, AC charging, minimal screen off in settings: the full screen",
+  "charging_dim": "Truck on, AC charging past its screen window: dimmed (the simulator's view of the backlight)",
   "charging_dc_obd": "Charging screen, DC fast charge with an OBD adapter connected (extra row)",
   "truck_data": "Energy > Truck data: OBD adapter connected (faked obdStateBP)",
   "truck_data_off": "Energy > Truck data: no OBD adapter set up",
@@ -136,7 +140,7 @@ ALIASES = {
   "alert_full": ["alert_full_prompt", "alert_full_critical"],
   "alerts": ["alert_small", "alert_mid", "alert_full_prompt", "alert_full_critical"],
   "onroad": ["onroad_engaged", "onroad_disengaged", "onroad_override", "onroad_experimental"],
-  "charging": ["charging_dc", "charging_ac"],
+  "charging": ["charging_dc", "charging_ac", "charging_off_ac", "charging_off_dc", "charging_dim"],
   "energy": ["charging_dc", "charging_ac", "energy_charging", "energy_idle", "stats"],
 }
 
@@ -1120,6 +1124,17 @@ def run_scene(sc: Scene):
       ui_scale.set_scale_index(idx)
       name = name[:-len(suffix)]
   d = default_drive()
+  if name in ("charging_off_ac", "charging_off_dc", "charging_off_full"):
+    # Truck off: no drive (ignition line low), chargingStateBP's fields injected, the window set to always on
+    sc.drive = None
+    sc.put("BPChargeSleepMin", 0)
+    sc.put("BPChargeOffDcMin", 0)
+    sc.put("BPChargeMinimal", name != "charging_off_full")
+    _inject_charge("charging_dc" if name == "charging_off_dc" else "charging_ac")
+    _reload_charge_policy()
+    sc.settle()
+    sc.shot()
+    return
   if name in ("standby", "theme_light", "trips", "trips_empty", "charging_settings", "onroad_display", "display",
               "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
@@ -1510,7 +1525,12 @@ def run_scene(sc: Scene):
       d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
       if name == "onroad_ev_powerflow":
         d.update(drive=dict(throttle=34.0, threshold=70.0, mode="EV Drive", mode_value=1))
-    elif name in ("charging_dc", "charging_ac", "energy_charging"):
+    elif name in ("charging_dc", "charging_ac", "energy_charging", "charging_dim"):
+      if name == "charging_dim":
+        sc.put("BPChargeOnAcMin", 1)
+        sc.put("BPChargeOnThen", 0)
+        _reload_charge_policy()
+        name = "charging_ac"
       d.update(battery=dict(soc=41.0 if name == "charging_ac" else 62.0, volts=388.0, amps=-746.0),
                v_ego=0.0, enabled=False, state="disabled", lead=False)
       _inject_charge("charging_dc" if name == "energy_charging" else name)
@@ -1654,6 +1674,14 @@ def _inject_last_known():
   ev_data.EvDataSource.__init__ = init
 
 
+def _reload_charge_policy():
+  """Scene params land after the UI's last param poll; apply them now, as the settings page does."""
+  from openpilot.common.params import Params
+  from openpilot.selfdrive.ui.ui_state import ui_state
+  from bluepilot.ui.lib.charge_screen import ChargePolicy
+  ui_state.charge_policy = ChargePolicy.from_params(Params())
+
+
 def _inject_charge(name: str):
   """Fill the charge fields the Lightning CAN stream will publish, so the screen can be rendered now."""
   import math
@@ -1665,7 +1693,7 @@ def _inject_charge(name: str):
                 charge_power_kw=148.0 if dc else 9.4, charge_time_to_full_min=21.0 if dc else math.nan,
                 charge_inhibit_thermal=not dc, thermal_mode="cooling" if dc else "heating", heater_on=not dc,
                 pack_temp_c=31.0 if dc else -4.0, coolant_temp_c=24.0 if dc else 2.0,
-                range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0)
+                range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0, soc=62.0 if dc else 41.0)
   orig = ev_data.EvDataSource.update
 
   def update(self, sm, started_frame, now=None):

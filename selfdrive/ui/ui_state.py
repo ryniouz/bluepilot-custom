@@ -15,6 +15,7 @@ from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
 from bluepilot.ui.lib.theme import set_accent as set_console_accent, set_mode as set_console_mode, freeze_derived  # Custom: Console theme
 from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
+from bluepilot.ui.lib.charge_screen import ChargePolicy, DIM, DIM_BRIGHTNESS, OFF, ON  # Custom: charging screen timeouts
 from bluepilot.ui.lib.ev_history import EvHistory  # Custom: Statistics page and Home chart history
 from cereal.services import SERVICE_LIST  # Custom: offroad charging reader (Lightning stream, PR #2)
 CHARGING_SERVICES = ["chargingStateBP"] if "chargingStateBP" in SERVICE_LIST else []  # Custom
@@ -269,6 +270,7 @@ class UIState(UIStateSP):
       self.charge_sleep_min = int(self.params.get("BPChargeSleepMin", return_default=True) or 0)
     except (TypeError, ValueError):
       self.charge_sleep_min = 30
+    self.charge_policy = ChargePolicy.from_params(self.params)
     # Custom: end
     self._param_update_time = time.monotonic()
 
@@ -352,6 +354,8 @@ class Device(DeviceSP):
 
     if not self._awake:
       brightness = 0
+    elif getattr(ui_state, "charge_screen_mode", ON) == DIM:  # Custom: charging screen dimmed after its window
+      brightness = min(brightness, DIM_BRIGHTNESS)
 
     if brightness != self._last_brightness:
       if self._brightness_thread is None or not self._brightness_thread.is_alive():
@@ -364,7 +368,10 @@ class Device(DeviceSP):
     ignition_just_turned_off = not ui_state.ignition and self._ignition
     self._ignition = ui_state.ignition
 
-    if ignition_just_turned_off or any(ev.left_down for ev in gui_app.mouse_events):
+    touched = any(ev.left_down for ev in gui_app.mouse_events)
+    if touched:
+      self._last_touch_t = time.monotonic()  # Custom: restarts the charging screen's window
+    if ignition_just_turned_off or touched:
       if gui_app.sunnypilot_ui():
         DeviceSP.wake_from_dimmed_onroad_brightness(ui_state, gui_app.mouse_events)
 
@@ -376,14 +383,25 @@ class Device(DeviceSP):
         callback()
     self._prev_timed_out = interaction_timeout
 
-    # Custom: stay on while charging with the ignition off, until the BPChargeSleepMin delay runs out
-    charging_awake = False
+    # Custom: the charging screen's window (Energy > Charging settings): full brightness for its minutes from
+    # plug-in or the last tap, then dimmed or off. Truck off: stays awake through the window, unlike offroad.
+    # Truck on: may turn the display off, but only while the charging screen is up, i.e. plugged in and stopped.
+    charging_awake, charge_off = False, False
+    mode = ON
     session = getattr(ui_state, "charge_session", None)
-    if not ui_state.ignition and getattr(ui_state, "charging_screen", False) and session is not None:
-      sleep_min = getattr(ui_state, "charge_sleep_min", 30)
-      charging_awake = sleep_min <= 0 or session.elapsed_s() < sleep_min * 60 or not interaction_timeout
+    if getattr(ui_state, "charging_screen", False) and session is not None and session.active:
+      policy = getattr(ui_state, "charge_policy", None) or ChargePolicy()
+      since = max(time.monotonic() - session.elapsed_s(), getattr(self, "_last_touch_t", 0.0))
+      mode = policy.mode(ui_state.ignition, getattr(ui_state.ev, "charge_type", 0) == 2, time.monotonic() - since)
+      if mode != ON and touched:
+        gui_app.mouse_events.clear()  # the tap that wakes the screen does not also minimize it
+        self._last_touch_t = time.monotonic()
+        mode = ON
+      charging_awake = not ui_state.ignition and mode != OFF
+      charge_off = ui_state.ignition and mode == OFF
+    ui_state.charge_screen_mode = mode
     # Custom: end
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC or charging_awake)
+    self._set_awake((ui_state.ignition and not charge_off) or not interaction_timeout or PC or charging_awake)
 
   def _set_awake(self, on: bool):
     if on != self._awake:
