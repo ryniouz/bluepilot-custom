@@ -7,7 +7,7 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car.ford.values import CAR
 from opendbc.sunnypilot.car.ford.lightning import (
   EV_PT_MESSAGES, HEV_BATTERY_MESSAGES, LIGHTNING_TUNE, PROFILE_TUNES, STOCK_TUNE, EvSettings, LightningState,
-  OnePedalEstimator, TuneBlender, TuneSettings, TuneValues, range_impact_percent, sanitize, select_profile,
+  OnePedalEstimator, TuneBlender, TuneSettings, TuneValues, range_impact_percent, sanitize, select_profile, thermal_mode,
 )
 
 DBC = "ford_lincoln_base_pt"
@@ -240,6 +240,16 @@ class TestLightningState:
     assert values["charging.timeToFullHours"] == pytest.approx(0.7)
     assert values["charging.batteryConditioning"]
     assert not values["charging.coolantHeaterOn"]
+    assert values["charging.thermalMode"] == "conditioning"
+    # DC fast charge: pump on, cold coolant -> cooling
+    f.set("MHT_EV_Wakeup_FD1", PreCondBatt_B_Actl=0, PtcHtr_D_Stat=0)
+    f.set("PreCond_Hev_Data2_FD1", BattTrac_I_EstVsc=-300., PreCondActv_B_Actl=0, BattTracClntFlw_Pc_Rq=60.)
+    f.set("Battery_Traction_3_FD1", BattTracClnt_Te_Actl=22.)
+    f.set("Battery_Traction_6_FD1", BattTracClntPmp_D_Stat=1)
+    values = run(f, state, v_ego=0., n=10)
+    assert values["charging.coolantPumpOn"] and values["charging.coolantFlowAvailable"]
+    assert values["charging.coolantFlowPercent"] == pytest.approx(60.)
+    assert values["charging.thermalMode"] == "cooling"
     # low SOC alert is suppressed while charging
     assert values["evAlerts.lowSoc"] == "none"
 
@@ -257,6 +267,16 @@ class TestLightningState:
     f.set("PreCond_Hev_Data1_FD1", ChrgStat_D2_Dsply=13)  # target reached
     values = run(f, state, v_ego=0., n=250)
     assert not values["charging.charging"] and values["charging.state"] == "targetReached"
+
+  def test_thermal_mode(self):
+    assert thermal_mode(False, False, False, False, None) == "unknown"
+    assert thermal_mode(False, False, False, True, -10.) == "off"
+    assert thermal_mode(True, True, True, True, -10.) == "heating"
+    assert thermal_mode(False, True, True, True, -10.) == "conditioning"
+    assert thermal_mode(False, False, True, True, -5.) == "cooling"
+    assert thermal_mode(False, False, True, True, 5.) == "heating"
+    assert thermal_mode(False, False, True, True, 1.) == "circulating"
+    assert thermal_mode(False, False, True, True, None) == "circulating"
 
   def test_one_pedal_estimator(self):
     est = OnePedalEstimator()

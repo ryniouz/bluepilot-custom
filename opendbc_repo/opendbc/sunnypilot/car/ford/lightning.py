@@ -376,7 +376,28 @@ class LightningState:
     precond = (wake_ok and cp.vl["MHT_EV_Wakeup_FD1"]["PreCondBatt_B_Actl"] == 1) or \
               (msg_fresh(cp, "PreCond_Hev_Data2_FD1") and cp.vl["PreCond_Hev_Data2_FD1"]["PreCondActv_B_Actl"] == 1)
     v["charging.batteryConditioning"] = bool(precond)
-    v["charging.coolantHeaterOn"] = bool(wake_ok and cp.vl["MHT_EV_Wakeup_FD1"]["PtcHtr_D_Stat"] == 1)
+    heater = bool(wake_ok and cp.vl["MHT_EV_Wakeup_FD1"]["PtcHtr_D_Stat"] == 1)
+    v["charging.coolantHeaterOn"] = heater
+
+    pump_ok = msg_fresh(cp, "Battery_Traction_6_FD1")
+    pump = bool(pump_ok and cp.vl["Battery_Traction_6_FD1"]["BattTracClntPmp_D_Stat"] == 1)
+    flow_ok = msg_fresh(cp, "PreCond_Hev_Data2_FD1")
+    flow = float(cp.vl["PreCond_Hev_Data2_FD1"]["BattTracClntFlw_Pc_Rq"]) if flow_ok else 0.0
+    flow = flow if flow <= 100. else 0.0  # 101-127 unused
+    v["charging.coolantPumpOn"] = pump
+    v["charging.coolantFlowPercent"] = flow
+    v["charging.coolantFlowAvailable"] = flow_ok
+    v["charging.thermalMode"] = thermal_mode(heater, bool(precond), pump or flow > 0.,
+                                             wake_ok or pump_ok or flow_ok, self._coolant_minus_pack(cp))
+
+  @staticmethod
+  def _coolant_minus_pack(cp) -> float | None:
+    if not (msg_fresh(cp, "Battery_Traction_3_FD1") and msg_fresh(cp, "Battery_Traction_4_FD1")):
+      return None
+    pack = cp.vl["Battery_Traction_4_FD1"]["BattTrac_Te_Actl"]
+    if pack >= 460.:  # Fault / Unknown
+      return None
+    return float(cp.vl["Battery_Traction_3_FD1"]["BattTracClnt_Te_Actl"] - pack)
 
   # *** alerts ***
   def _update_alerts(self, s: EvSettings) -> None:
@@ -429,6 +450,26 @@ class LightningState:
     self._update_charging(cp, dt)
     self._update_alerts(s)
     return self.values
+
+
+THERMAL_DIRECTION_C = 2.0  # coolant must differ from the pack by this much to call cooling vs heating
+
+
+def thermal_mode(heater_on: bool, conditioning: bool, flowing: bool, data_ok: bool, coolant_minus_pack: float | None) -> str:
+  """Battery thermal mode for the charging screen. Inferred: Ford broadcasts no single mode signal."""
+  if not data_ok:
+    return "unknown"
+  if heater_on:
+    return "heating"
+  if conditioning:
+    return "conditioning"
+  if not flowing:
+    return "off"
+  if coolant_minus_pack is not None and coolant_minus_pack <= -THERMAL_DIRECTION_C:
+    return "cooling"
+  if coolant_minus_pack is not None and coolant_minus_pack >= THERMAL_DIRECTION_C:
+    return "heating"
+  return "circulating"
 
 
 def fill_car_state_bp(car_state_bp, values: dict) -> None:

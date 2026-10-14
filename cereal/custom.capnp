@@ -606,6 +606,10 @@ struct CarStateBP @0xb057204d7deadf3f {
     timeToFullAvailable @10 :Bool;
     batteryConditioning @11 :Bool;   # PreCondBatt_B_Actl (0x478) or PreCondActv_B_Actl (0x185)
     coolantHeaterOn @12 :Bool;       # PtcHtr_D_Stat (0x478)
+    thermalMode @13 :ThermalMode;    # inferred from heater, preconditioning, pump/flow and coolant vs pack temp
+    coolantPumpOn @14 :Bool;         # BattTracClntPmp_D_Stat (0x458)
+    coolantFlowPercent @15 :Float32; # BattTracClntFlw_Pc_Rq (0x185), requested flow
+    coolantFlowAvailable @16 :Bool;
 
     enum State {
       unknown @0;
@@ -630,6 +634,15 @@ struct CarStateBP @0xb057204d7deadf3f {
       ac @1;
       dc @2;
       other @3;
+    }
+
+    enum ThermalMode {
+      unknown @0;       # no thermal message on the bus
+      off @1;
+      cooling @2;       # coolant flowing and colder than the pack
+      heating @3;       # coolant heater on, or coolant flowing and warmer than the pack
+      conditioning @4;  # Ford reports battery preconditioning active
+      circulating @5;   # coolant flowing, direction unclear (temps within 2 C)
     }
   }
 
