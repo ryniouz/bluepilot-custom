@@ -1802,6 +1802,7 @@ def _inject_charge(name: str):
   def begin(self, snap, now):
     orig_begin(self, snap, now)
     self.start_t = time.monotonic() - (23 if dc else 95) * 60
+    self.window_t = self.start_t
     self.start_soc = 31.0 if dc else 28.0
     self.start_range_km = self.start_soc / 100 * 131000 / 300.0
     self.energy_kwh = 41.3 if dc else 13.6
