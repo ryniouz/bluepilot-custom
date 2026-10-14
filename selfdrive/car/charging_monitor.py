@@ -10,6 +10,8 @@ messages from pandad's `can` stream, and:
     while charging and power down BPChargeSleepDelayMin after the charge ends.
 
 Read-only on the bus: no diagnostic requests, nothing is sent.
+
+It also clears a one-trip Guest Mode at the start of each offroad period (see guest_mode.py).
 """
 import math
 import time
@@ -24,6 +26,7 @@ from opendbc.sunnypilot.car.ford.lightning import CHARGING_PT_MESSAGES, Lightnin
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.car.guest_mode import offroad_reset
 from openpilot.selfdrive.pandad import can_capnp_to_list
 
 RATE_HZ = 2.
@@ -92,6 +95,8 @@ class ChargingMonitor:
 
 def main():
   params = Params()
+  if offroad_reset(params):  # one process per offroad period, so this runs once after every drive
+    cloudlog.info("guest mode: one-trip guest drive ended, back to BluePilot")
   CP = load_car_params(params)
   if not supported(CP):
     cloudlog.info("charging_monitor: not a CAN FD Ford, idling")
