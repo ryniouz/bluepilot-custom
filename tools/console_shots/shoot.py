@@ -85,6 +85,8 @@ SCENES: dict[str, str] = {
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
   "boot_progress": "Start-up spinner with a progress number",
   "about": "System > About: Citadel Auto OS name, logo and version",
+  "form_gallery": "Every Console form row (bluepilot/ui/console/form.py) on one page",
+  "form_confirm": "Console confirm sheet over a form page",
   "boot_os_prompt": "OS update screen (bluepilot/ui/console/updater.py): update needed prompt",
   "boot_os_progress": "OS update screen: installing, Console progress bar",
   "boot_os_failed": "OS update screen: update failed, Reboot",
@@ -1110,7 +1112,7 @@ def run_scene(sc: Scene):
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
               "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
-              "boot_os_prompt", "boot_os_progress", "boot_os_failed"):
+              "boot_os_prompt", "boot_os_progress", "boot_os_failed", "form_gallery", "form_confirm"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1306,6 +1308,18 @@ def run_scene(sc: Scene):
       w = boot.ConsoleSpinner()
       w.set_text("47" if name == "boot_progress" else "Installing the update. This takes a few minutes.")
     gui_app.push_widget(w)
+    sc.settle()
+    sc.shot()
+  elif name in ("form_gallery", "form_confirm"):
+    from form_gallery import FormGallery
+    from bluepilot.ui.console.shell import Dest, Page
+    sc.main._open_shell()
+    page = FormGallery()
+    sc.main._shell.register_page(Dest.SYSTEM, Page("Components", "grid", page, key="form_gallery", framed=False))
+    sc.main._shell.open_panel("form_gallery")
+    if name == "form_confirm":
+      page.confirm("Reset calibration?", "The comma recalibrates over the first few minutes of the next drive.",
+                   "Reset", lambda: None, danger=True)
     sc.settle()
     sc.shot()
   elif name == "theme":
