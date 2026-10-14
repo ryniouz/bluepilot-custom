@@ -466,6 +466,50 @@ struct ChargingStateBP @0xc2243c65e0340384 {
   canAlive @2 :Bool;           # frames seen on the car's main bus in the last 2 s
   keepAwake @3 :Bool;          # BPChargeKeepAwake and charging: power monitoring will not time out
   sleepInSeconds @4 :Float32;  # countdown after a charge ends (BPChargeSleepDelayMin), -1 when not counting
+  lowVoltBattery @5 :CarStateBP.LowVoltBattery;  # 12 V battery: CAN first, then the OBD adapter
+  lowVoltSource @6 :LowVoltSource;
+  harnessVoltage @7 :Float32;  # 12 V at the comma's harness (peripheralState), 0 when unknown
+  wake @8 :Wake;
+  powerSaver @9 :Bool;         # BPLvSaver: 12 V power-saving mode is on
+  shutdownReason @10 :Text;    # what will power the comma down next, for the UI ("" = nothing pending)
+
+  enum LowVoltSource {
+    none @0;
+    can @1;
+    obd @2;
+  }
+
+  # Why the truck's network is awake while the comma is offroad. A Lightning wakes on its own every so
+  # often to top up the 12 V battery from the HV pack; that is not a drive.
+  struct Wake {
+    dataAvailable @0 :Bool;          # BodyInfo_3_FD1 (0x3B3) or HEV_Powertrain_Data6 (0x480) on the bus
+    reason @1 :Reason;
+    ignition @2 :Ignition;           # Ignition_Status (0x3B3)
+    remoteStart @3 :Bool;            # Remote_Start_Status (0x3B3) non-zero
+    dcdcOn @4 :Bool;                 # DcdcOn_B_Rq (0x480): HV-to-12 V converter requested
+    lowVoltSupport @5 :Bool;         # ULoBattSpprtSustn_B_Rq (0x480): 12 V support (top-up) requested
+    nextWakeMinutes @6 :Int32;       # WakeAlarm0_T_Rq (0x478), unverified meaning; -1 when unknown
+    lowVoltTopUps @7 :UInt16;        # 12 V top-up wakes seen since the comma started
+
+    enum Reason {
+      unknown @0;          # CAN is up but nothing explains it
+      asleep @1;           # no CAN
+      ignitionOn @2;       # Run or Start: a drive
+      charging @3;
+      lowVoltTopUp @4;     # ignition off, 12 V support requested, not charging
+      remoteStart @5;
+      conditioning @6;     # battery or cabin conditioning without a charge
+      accessory @7;
+    }
+
+    enum Ignition {
+      unknown @0;
+      off @1;
+      accessory @2;
+      run @3;
+      start @4;
+    }
+  }
 }
 
 # Custom: OBD adapter link (ELM327 over Wi-Fi, USB or Bluetooth), separate from the panda and CAN

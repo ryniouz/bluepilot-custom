@@ -335,6 +335,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPObdTransport", {PERSISTENT | BACKUP, STRING, "wifi"}},      // wifi, usb, bluetooth or simulated
     {"BPObdAddress", {PERSISTENT | BACKUP, STRING, ""}},            // wifi host[:port], usb /dev path, bluetooth MAC[#channel]
     {"BPObdPollWhenOff", {PERSISTENT | BACKUP, BOOL, "0"}},         // also poll while the truck is off and not charging (keeps modules awake)
+    {"BPLvSaver", {PERSISTENT | BACKUP, BOOL, "0"}},                // 12 V power saving: short offroad time, higher 12 V cutoffs
+    {"BPLvSaverOffroadMin", {PERSISTENT | BACKUP, INT, "10"}},      // power-saving offroad time, minutes
+    {"BPLvShutdownSoc", {PERSISTENT | BACKUP, INT, "0"}},           // power down offroad below this 12 V SOC (%); 0 = off
+    {"BPLvWakeFilter", {PERSISTENT | BACKUP, BOOL, "1"}},           // a Lightning 12 V top-up wake is not a drive
+    {"BPLvState", {CLEAR_ON_MANAGER_START, JSON}},                   // written by charging_monitor: 12 V SOC/voltage, top-up wake, timestamps
     // Custom: end
 
     // BluePilot: Portal (Web Routes Server)
