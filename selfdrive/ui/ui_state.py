@@ -254,7 +254,8 @@ class UIState(UIStateSP):
       mode_pref = mode_pref.decode("utf-8", errors="ignore")
     self.console_mode_pref = str(mode_pref).strip().lower()
     try:
-      self.layout_preset = int(self.params.get("BPLayoutPreset", return_default=True) or 1)
+      preset = self.params.get("BPLayoutPreset", return_default=True)  # 0 (Minimal) is a valid value
+      self.layout_preset = int(preset) if preset is not None else 1
     except (TypeError, ValueError):
       self.layout_preset = 1
     self.ev_hud = bool(self.params.get("BPEvHud", return_default=True))

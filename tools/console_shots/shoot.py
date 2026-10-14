@@ -72,6 +72,15 @@ ALIASES = {
   "charging": ["charging_dc", "charging_ac"],
 }
 
+# --- Stream B (driving screen) scenes ------------------------------------------------------
+SCENES.update({
+  "drive_minimal": "Driving screen, Minimal layout preset (speed card, alerts, cues only)",
+  "drive_dense": "Driving screen, Dense layout preset (dock + details card), regen",
+  "drive_notify": "Driving screen with an informational notification and turn signal",
+})
+ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "sidebar", "alert_mid"]
+# --- end stream B --------------------------------------------------------------------------
+
 SCONS_TARGETS = [
   "common/params_pyx.so",
   "msgq_repo/msgq/ipc_pyx.so",
@@ -803,6 +812,7 @@ ONROAD_ALL_PARAMS = {
 
 def scene_params(name: str) -> dict:
   base = {"BPShowConfidenceBall": True}
+  base.update(drive_scene_params(name))  # stream B
   if name in ("onroad_ev", "onroad_ev_powerflow"):
     base.update({"FordPrefHybridBatteryStatus": True})
   if name == "onroad_ev_powerflow":
@@ -812,6 +822,42 @@ def scene_params(name: str) -> dict:
   if name == "onroad_all":
     base.update(ONROAD_ALL_PARAMS)
   return base
+
+
+# --- Stream B (driving screen) scene setup ------------------------------------------------
+DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify")
+
+
+def drive_scene_params(name: str) -> dict:
+  if name == "drive_minimal":
+    return {"BPLayoutPreset": 0}
+  if name == "drive_dense":
+    return {"BPLayoutPreset": 2}
+  return {}
+
+
+def setup_drive_scene(name: str, d: dict):
+  d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
+  if name == "drive_dense":
+    d.update(battery=dict(soc=64.0, volts=380.0, amps=110.0), a_ego=-0.8)
+    _inject_ev(dict(pack_temp_c=27.0, coolant_temp_c=24.0, tire_kpa=[285.0, 287.0, 281.0, 284.0], lv_volts=14.1,
+                    outside_temp_c=4.0, trip_km=18.4, trip_used_kwh=6.2, trip_regen_kwh=1.1, wh_per_km=297.0))
+  elif name == "drive_notify":
+    d.update(alert=("small", "normal", "Lane Change Blocked", "Car Detected in Blindspot"), left_blinker=True)
+
+
+def _inject_ev(fields: dict):
+  from bluepilot.ui.lib import ev_data
+  orig = ev_data.EvDataSource.update
+
+  def update(self, sm, started_frame, now=None):
+    snap = orig(self, sm, started_frame, now)
+    for k, v in fields.items():
+      setattr(snap, k, v)
+    return snap
+
+  ev_data.EvDataSource.update = update
+# --- end stream B --------------------------------------------------------------------------
 
 
 def run_scene(sc: Scene):
@@ -887,6 +933,8 @@ def run_scene(sc: Scene):
       d.update(battery=dict(soc=62.0 if name == "charging_dc" else 41.0, volts=388.0, amps=-746.0),
                v_ego=0.0, enabled=False, state="disabled", lead=False)
       _inject_charge(name)
+    elif name in DRIVE_SCENES:  # stream B
+      setup_drive_scene(name, d)
     elif name == "onroad_all":
       d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0),
                drive=dict(throttle=34.0, threshold=70.0, mode="EV Drive", mode_value=1),

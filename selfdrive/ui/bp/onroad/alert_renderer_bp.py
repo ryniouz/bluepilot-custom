@@ -4,24 +4,27 @@ from cereal import log
 
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_PADDING, Alert
 from bluepilot.ui.lib.theme import Console, Onroad, Radius, OnroadType, roundness
-from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 
 AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
 
-# BluePilot: Pill positioned below speed display (speed unit center=290, font~66)
-# Bottom of speed area ~323. Gap 17px, pill starts at 340.
-PILL_TOP_Y = 340
-PILL_SIDE_MARGIN = 60
-PILL_PADDING_H = 30
-PILL_PADDING_V = 15
+# Custom: informational alerts are a Console notification card at the top centre, like a phone
+# banner: squared accent bar on the leading edge, line 1 primary, line 2 muted. Prompt and
+# critical alerts keep openpilot's small/mid/full sizes, timing and sounds.
+PILL_TOP_Y = 84            # below the road-name tab
+PILL_SIDE_MARGIN = 560     # keeps clear of the speed card on the left and the button on the right
+PILL_MAX_W = 1000
+PILL_PADDING_H = 36
+PILL_BAR_SPACE = 30        # status bar + gap before the text
+PILL_PADDING_V = 22
 PILL_LINE1_FONT_SIZE = OnroadType.PILL
 PILL_LINE2_FONT_SIZE = OnroadType.PILL_SUB
-PILL_LINE_SPACING = 8
-PILL_HEIGHT_SINGLE = 78
-PILL_HEIGHT_DOUBLE = 130
+PILL_LINE_SPACING = 6
+PILL_HEIGHT_SINGLE = 100
+PILL_HEIGHT_DOUBLE = 150
 
 # Console: pill is a raised panel with a hairline; full alerts are flat status grounds
 PILL_BACKGROUND_COLOR = Console.BG_PANEL
@@ -42,7 +45,14 @@ CONSOLE_ALERT_BAR = {
 
 
 class AlertRendererBP(AlertRenderer):
-  """BluePilot AlertRenderer with pill-shaped notifications below speed display."""
+  """BluePilot AlertRenderer. Custom: informational alerts as a Console notification card."""
+
+  def __init__(self):
+    super().__init__()
+    self._font_body = gui_app.font(FontWeight.NORMAL)
+    # Set by the road view each frame: the free band between the speed card (and sign) and the
+    # experimental button. The notification card centres in it.
+    self.notify_band: tuple[float, float] | None = None
 
   def _render(self, rect: rl.Rectangle):
     from openpilot.selfdrive.ui.ui_state import ui_state
@@ -68,8 +78,8 @@ class AlertRendererBP(AlertRenderer):
       if alert_rect:
         self._draw_pill_background(alert_rect)
         text_rect = rl.Rectangle(
-          alert_rect.x + PILL_PADDING_H, alert_rect.y + PILL_PADDING_V,
-          alert_rect.width - 2 * PILL_PADDING_H, alert_rect.height - 2 * PILL_PADDING_V
+          alert_rect.x + PILL_PADDING_H + PILL_BAR_SPACE, alert_rect.y + PILL_PADDING_V,
+          alert_rect.width - 2 * PILL_PADDING_H - PILL_BAR_SPACE, alert_rect.height - 2 * PILL_PADDING_V
         )
         self._draw_pill_text(text_rect, alert)
     else:
@@ -91,7 +101,8 @@ class AlertRendererBP(AlertRenderer):
     if not line1 and not line2:
       return None
 
-    available_width = rect.width - 2 * PILL_SIDE_MARGIN
+    band_l, band_r = self.notify_band if self.notify_band else (rect.x + PILL_SIDE_MARGIN, rect.x + rect.width - PILL_SIDE_MARGIN)
+    available_width = min(PILL_MAX_W, band_r - band_l)
     if available_width < 100:
       return None
 
@@ -107,16 +118,18 @@ class AlertRendererBP(AlertRenderer):
       text_width = text_size.x
       pill_height = PILL_HEIGHT_SINGLE
 
-    pill_width = min(text_width + 2 * PILL_PADDING_H, available_width)
-    pill_x = rect.x + (rect.width - pill_width) / 2
+    pill_width = min(max(text_width + 2 * PILL_PADDING_H + PILL_BAR_SPACE, 520), available_width)
+    pill_x = band_l + (band_r - band_l - pill_width) / 2
     pill_y = rect.y + PILL_TOP_Y
 
     return rl.Rectangle(pill_x, pill_y, pill_width, pill_height)
 
   def _draw_pill_background(self, rect: rl.Rectangle) -> None:
-    r = roundness(rect, Radius.MD * 2)
+    r = roundness(rect, ALERT_RADIUS)
     rl.draw_rectangle_rounded(rect, r, 10, PILL_BACKGROUND_COLOR)
     rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, PILL_OUTLINE_COLOR)
+    bar = rl.Rectangle(rect.x + PILL_PADDING_H, rect.y + PILL_PADDING_V, ALERT_STATUS_BAR_W, rect.height - 2 * PILL_PADDING_V)
+    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, CONSOLE_ALERT_BAR[AlertStatus.normal])
 
   def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
     """Console alert ground: flat status colour, 24 px corners, squared status bar on the left
@@ -145,14 +158,12 @@ class AlertRendererBP(AlertRenderer):
       total_height = line1_size.y + PILL_LINE_SPACING + line2_size.y
       start_y = rect.y + (rect.height - total_height) / 2
 
-      line1_x = rect.x + (rect.width - line1_size.x) / 2
-      rl.draw_text_ex(self.font_bold, line1, rl.Vector2(line1_x, start_y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)
-      line2_x = rect.x + (rect.width - line2_size.x) / 2
+      rl.draw_text_ex(self.font_bold, line1, rl.Vector2(rect.x, start_y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)
       line2_y = start_y + line1_size.y + PILL_LINE_SPACING
-      rl.draw_text_ex(self.font_bold, line2, rl.Vector2(line2_x, line2_y), PILL_LINE2_FONT_SIZE, 0, Console.TEXT_MUTED)
+      rl.draw_text_ex(self._font_body, line2, rl.Vector2(rect.x, line2_y), PILL_LINE2_FONT_SIZE, 0, Console.TEXT_MUTED)
     else:
       text = line1 or line2
       text_size = measure_text_cached(self.font_bold, text, PILL_LINE1_FONT_SIZE)
-      x = rect.x + (rect.width - text_size.x) / 2
+      x = rect.x
       y = rect.y + (rect.height - text_size.y) / 2
       rl.draw_text_ex(self.font_bold, text, rl.Vector2(x, y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)

@@ -4,7 +4,11 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
-from bluepilot.ui.lib.theme import Console, Onroad, copy as copy_color  # Custom: Console theme
+from bluepilot.ui.lib.theme import Console, Onroad, roundness, copy as copy_color  # Custom: Console theme
+
+# Custom: Console rounded-square button, inset in the stock touch area
+FACE_SIZE = 164
+FACE_RADIUS = 28
 
 
 class ExpButton(Widget):
@@ -59,11 +63,18 @@ class ExpButton(Widget):
 
     is_exp = self._held_or_actual_mode()
     texture = self._txt_exp if is_exp else self._txt_wheel
-    rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
-    rl.draw_ring(rl.Vector2(center_x, center_y), self._rect.width / 2 - 2, self._rect.width / 2, 0, 360, 64,
-                 Console.ACCENT if is_exp else Console.BORDER_DEFAULT)  # Custom: Console ring, accent in experimental
+    # Custom: Console face. Accent fill marks experimental mode; a hairline otherwise.
+    face = rl.Rectangle(center_x - FACE_SIZE / 2, center_y - FACE_SIZE / 2, FACE_SIZE, FACE_SIZE)
+    r = roundness(face, FACE_RADIUS)
+    if is_exp:
+      rl.draw_rectangle_rounded(face, r, 10, Console.ACCENT_FILL)
+    else:
+      rl.draw_rectangle_rounded(face, r, 10, Console.BG_HIGH if self.is_pressed else self._black_bg)
+      rl.draw_rectangle_rounded_lines_ex(face, r, 10, 2, Console.BORDER_DEFAULT)
 
-    if is_exp or not self._animate_wheel:
+    if is_exp:
+      rl.draw_texture(texture, center_x - texture.width // 2, center_y - texture.height // 2, Console.ON_ACCENT)
+    elif not self._animate_wheel:
       rl.draw_texture(texture, center_x - texture.width // 2, center_y - texture.height // 2, self._white_color)
     else:
       # Rotate wheel icon to match steering angle

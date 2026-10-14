@@ -1,8 +1,9 @@
 import pyray as rl
 from openpilot.common.params import Params
-from openpilot.selfdrive.ui.onroad.hud_renderer import UI_CONFIG, FONT_SIZES, COLORS, CRUISE_DISABLED_CHAR
+from openpilot.selfdrive.ui.onroad.hud_renderer import UI_CONFIG, CRUISE_DISABLED_CHAR
 from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.lib.theme import Console, Onroad, Radius, draw_panel, roundness
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
@@ -10,11 +11,23 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 
 # BluePilot: Y center for speed display (matching upstream hardcoded values)
-SPEED_CENTER_Y = 180
+SPEED_CENTER_Y = 180  # stock values, kept for importers
 SPEED_UNIT_CENTER_Y = 290
 
-# Console: set-speed panel state bar
-SET_SPEED_STATE_BAR_H = 8
+# Console speed card (top-left of the driving screen)
+SET_SPEED_STATE_BAR_H = 10
+CLUSTER_MARGIN = 24          # from the inner edge of the status frame
+CLUSTER_PAD = 28
+CLUSTER_H = 252
+CLUSTER_MIN_W = 300
+CLUSTER_RADIUS = 28
+CLUSTER_GAP = 20             # card to speed-limit sign
+CLUSTER_LABEL = 30           # state word, MAX caption
+CLUSTER_SPEED = 150          # current speed numeral
+CLUSTER_UNIT = 40
+CLUSTER_SET = 76             # set speed numeral
+CLUSTER_SET_W = 116
+TURN_SIGNAL_DROP = 60
 
 
 class HudRendererBP(HudRendererSP):
@@ -31,6 +44,7 @@ class HudRendererBP(HudRendererSP):
     self._brakes_on = False
     self.speed_right = 0
     self._gradient_rect = None  # BluePilot: Full-width rect for header gradient
+    self.cluster_rect = rl.Rectangle(0, 0, 0, 0)  # Custom: Console speed card, for neighbours to avoid
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -59,40 +73,131 @@ class HudRendererBP(HudRendererSP):
 
     bp_ui_log.state("HudRendererBP", "brakes_on", self._brakes_on)
 
+  # ---------------------------------------------------------------------------------------
+  # Custom: Console driving screen. One speed card top-left (state, speed, set speed), the
+  # speed-limit sign beside it, the experimental button top-right. No header fade: every
+  # element carries its own ground, so the camera stays clear in the middle.
+  # ---------------------------------------------------------------------------------------
+
   def _render(self, rect: rl.Rectangle) -> None:
     preset = current_preset()
 
-    # Console: page-ground header fade at full content width (not offset by confidence ball).
-    # The one gradient Console allows: it keeps the HUD legible over a bright camera.
-    gradient_rect = self._gradient_rect if self._gradient_rect else rect
-    rl.draw_rectangle_gradient_v(int(gradient_rect.x), int(gradient_rect.y), int(gradient_rect.width),
-                                 UI_CONFIG.header_height, COLORS.HEADER_GRADIENT_START, COLORS.HEADER_GRADIENT_END)
-
-    # HUD elements use the (possibly offset) rect for positioning
-    if self.is_cruise_available:
-      self._draw_set_speed(rect)
-    self._draw_current_speed(rect)
+    self.cluster_rect = self._draw_cluster(rect)
 
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
     self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
 
     # SP additions. Console layout presets decide which of the optional ones draw:
-    # minimal keeps speed limit and turn signals (driving cues) and drops the rest.
+    # Minimal keeps speed limit and turn signals (driving cues) and drops the rest.
     if preset != LayoutPreset.MINIMAL:
       self.developer_ui.render(rect)
       self.road_name_renderer.render(rect)
-    self.speed_limit_renderer.render(rect)
+    self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
     if preset != LayoutPreset.MINIMAL:
       self.smart_cruise_control_renderer.render(rect)
-    self.turn_signal_controller.render(rect)
+    # Signals sit lower than stock so a top notification never covers them
+    self.turn_signal_controller.render(rl.Rectangle(rect.x, rect.y + TURN_SIGNAL_DROP, rect.width, rect.height))
     if preset != LayoutPreset.MINIMAL:
       self.circular_alerts_renderer.render(rect)
       self.rocket_fuel.render(rect, ui_state.sm)
 
+  def notify_band(self, rect: rl.Rectangle) -> tuple[float, float]:
+    """Free horizontal band right of the speed card and sign, left of the experimental button."""
+    left = self.cluster_rect.x + self.cluster_rect.width + CLUSTER_GAP
+    if ui_state.speed_limit_mode != SpeedLimitMode.off:
+      left += (UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial) + CLUSTER_GAP
+    right = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size - CLUSTER_GAP
+    return left, right
+
+  def _speed_limit_anchor(self, rect: rl.Rectangle) -> rl.Rectangle:
+    """SpeedLimitRenderer places its sign at rect.x + 60 + w + 24; shift rect so the sign sits
+    CLUSTER_GAP right of the speed card, top-aligned with it."""
+    width = UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial
+    c = self.cluster_rect
+    x = c.x + c.width + CLUSTER_GAP - (60 + width + 24)
+    y = c.y + 6 - 45
+    return rl.Rectangle(x, y, rect.width, rect.height)
+
+  def _status(self) -> tuple[str, rl.Color]:
+    if not self.is_cruise_available:
+      return tr("Unavailable"), Console.TEXT_GHOST
+    status = ui_state.status
+    if status == UIStatus.ENGAGED:
+      return tr("Engaged"), Onroad.ENGAGED
+    if status == UIStatus.OVERRIDE:
+      return tr("Override"), Onroad.OVERRIDE
+    if status == UIStatus.LAT_ONLY:
+      return tr("Steering only"), Onroad.LAT_ONLY
+    if status == UIStatus.LONG_ONLY:
+      return tr("Speed only"), Onroad.LONG_ONLY
+    return (tr("Ready") if self.is_cruise_set else tr("Off")), Onroad.DISENGAGED
+
+  def _draw_cluster(self, rect: rl.Rectangle) -> rl.Rectangle:
+    """Speed card: state word with dot, current speed with unit, set speed in its own column."""
+    long_plan_sp = ui_state.sm['longitudinalPlanSP']
+    long_override = ui_state.sm['carControl'].cruiseControl.override
+    sla_active = long_plan_sp.speedLimit.assist.active
+    self._get_icbm_status()
+
+    hide_speed = self._bp_params.get_bool("HideVEgoUI")
+    speed_text = str(round(self.speed))
+    unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
+    speed_w = 0.0 if hide_speed else max(measure_text_cached(self._font_bold, "88", CLUSTER_SPEED).x,
+                                         measure_text_cached(self._font_bold, speed_text, CLUSTER_SPEED).x)
+    unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, CLUSTER_UNIT).x
+    speed_col = 0.0 if hide_speed else speed_w + 14 + unit_w
+
+    show_set = self.is_cruise_available
+    set_col = CLUSTER_SET_W if show_set else 0.0
+    inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
+    w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
+    x, y = rect.x + CLUSTER_MARGIN, rect.y + CLUSTER_MARGIN
+    card = rl.Rectangle(x, y, w, CLUSTER_H)
+    draw_panel(card, Onroad.PANEL, CLUSTER_RADIUS)
+
+    # State: dot + word (Console status is always a word, never colour alone)
+    word, dot = self._status()
+    if sla_active and self.is_cruise_set:
+      word, dot = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
+    rl.draw_circle(int(x + CLUSTER_PAD + 9), int(y + CLUSTER_PAD + 17), 9, dot)
+    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 30, y + CLUSTER_PAD), CLUSTER_LABEL, 0,
+                    Console.TEXT_SECONDARY)
+
+    body_y = y + CLUSTER_PAD + CLUSTER_LABEL + 6
+    cx = x + CLUSTER_PAD
+    if not hide_speed:
+      # BluePilot: speed turns red while the brake lights are on (ShowBrakeStatus)
+      speed_color = Console.DANGER if self._brakes_on else Console.TEXT_PRIMARY
+      sw = measure_text_cached(self._font_bold, speed_text, CLUSTER_SPEED).x
+      rl.draw_text_ex(self._font_bold, speed_text, rl.Vector2(cx + speed_w - sw, body_y), CLUSTER_SPEED, 0, speed_color)
+      rl.draw_text_ex(self._font_medium, unit_text, rl.Vector2(cx + speed_w + 14, body_y + CLUSTER_SPEED * 0.80 - CLUSTER_UNIT * 0.80),
+                      CLUSTER_UNIT, 0, Console.TEXT_MUTED)
+      self.speed_right = cx + speed_col
+      cx += speed_col + CLUSTER_PAD
+      if show_set:
+        rl.draw_rectangle(int(cx), int(body_y + 18), 2, int(CLUSTER_H - (body_y - y) - CLUSTER_PAD - 18), Console.BORDER_DEFAULT)
+        cx += 2 + CLUSTER_PAD
+    else:
+      self.speed_right = 0
+
+    if show_set:
+      if self.show_icbm_status:
+        label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
+      else:
+        label, label_color = tr("MAX"), Console.TEXT_MUTED
+      rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(cx, body_y + 14), CLUSTER_LABEL, 0, label_color)
+      set_text = CRUISE_DISABLED_CHAR if not self.is_cruise_set else str(round(self.set_speed))
+      set_color = Console.TEXT_PRIMARY if self.is_cruise_set else Console.TEXT_GHOST
+      rl.draw_text_ex(self._font_bold, set_text, rl.Vector2(cx, body_y + 14 + CLUSTER_LABEL + 4), CLUSTER_SET, 0, set_color)
+      # Squared state bar under the set speed, in the engagement colour
+      bar = rl.Rectangle(cx, y + CLUSTER_H - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, CLUSTER_SET_W, SET_SPEED_STATE_BAR_H)
+      rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, self._set_speed_state_color(long_override, sla_active))
+    return card
+
   def _set_speed_state_color(self, long_override: bool, sla_active: bool) -> rl.Color:
     if not self.is_cruise_set:
-      return Console.BORDER_DEFAULT
+      return Console.BG_TRACK
     if sla_active:
       return Console.WARNING if long_override else Console.INFO
     if ui_state.status == UIStatus.ENGAGED:
@@ -105,62 +210,9 @@ class HudRendererBP(HudRendererSP):
       return Onroad.LONG_ONLY
     return Onroad.DISENGAGED
 
+  # The stock pieces are drawn by _draw_cluster; keep the hooks inert for callers of the base API
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
-    """Console set-speed panel: flat panel, squared state bar on top, caption label, 600 numeral."""
-    long_plan_sp = ui_state.sm['longitudinalPlanSP']
-    long_override = ui_state.sm['carControl'].cruiseControl.override
-    sla_active = long_plan_sp.speedLimit.assist.active
-    self._get_icbm_status()
-
-    set_speed_width = UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial
-    x = rect.x + 60 + (UI_CONFIG.set_speed_width_imperial - set_speed_width) // 2
-    y = rect.y + 45
-    panel = rl.Rectangle(x, y, set_speed_width, UI_CONFIG.set_speed_height)
-    draw_panel(panel, Onroad.PANEL, Radius.MD * 2)
-
-    state_color = self._set_speed_state_color(long_override, sla_active)
-    bar = rl.Rectangle(x + 20, y + 16, set_speed_width - 40, SET_SPEED_STATE_BAR_H)
-    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, state_color)
-
-    # Label: "MAX", or the cluster speed while ICBM is adjusting
-    if self.show_icbm_status:
-      label, label_size, label_color = str(round(self.speed_cluster)), 52, Console.ACCENT_TEXT
-    else:
-      label, label_size, label_color = tr("MAX"), FONT_SIZES.max_speed, Console.TEXT_MUTED
-    label_w = measure_text_cached(self._font_semi_bold, label, label_size).x
-    rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(x + (set_speed_width - label_w) / 2, y + 40),
-                    label_size, 0, label_color)
-
-    set_speed_text = CRUISE_DISABLED_CHAR if not self.is_cruise_set else str(round(self.set_speed))
-    value_color = Console.TEXT_PRIMARY if self.is_cruise_set else Console.TEXT_GHOST
-    value_w = measure_text_cached(self._font_bold, set_speed_text, FONT_SIZES.set_speed).x
-    rl.draw_text_ex(self._font_bold, set_speed_text, rl.Vector2(x + (set_speed_width - value_w) / 2, y + 92),
-                    FONT_SIZES.set_speed, 0, value_color)
+    pass
 
   def _draw_current_speed(self, rect: rl.Rectangle) -> None:
-    """Override to add brake status red coloring and track speed_right."""
-    # BluePilot: Respect "Speedometer: Hide from Onroad Screen" (HideVEgoUI) from Visuals.
-    # Read param directly for immediate response (ui_state.hide_v_ego_ui refreshes every 5s).
-    if self._bp_params.get_bool("HideVEgoUI"):
-      self.speed_right = 0
-      return
-    speed_text = str(round(self.speed))
-    speed_text_size = measure_text_cached(self._font_bold, speed_text, FONT_SIZES.current_speed)
-    speed_pos = rl.Vector2(
-      rect.x + rect.width / 2 - speed_text_size.x / 2,
-      SPEED_CENTER_Y - speed_text_size.y / 2
-    )
-    self.speed_right = speed_pos.x + speed_text_size.x
-
-    # BluePilot: Show red when braking if brake status is enabled
-    speed_color = Console.DANGER if self._brakes_on else COLORS.WHITE
-    rl.draw_text_ex(self._font_bold, speed_text, speed_pos, FONT_SIZES.current_speed, 0, speed_color)
-
-    unit_text = "km/h" if ui_state.is_metric else "mph"
-    unit_text_size = measure_text_cached(self._font_medium, unit_text, FONT_SIZES.speed_unit)
-    unit_pos = rl.Vector2(rect.x + rect.width / 2 - unit_text_size.x / 2, SPEED_UNIT_CENTER_Y - unit_text_size.y / 2)
-    # Draw drop shadow for readability over camera feed
-    shadow_offset = 2
-    shadow_pos = rl.Vector2(unit_pos.x + shadow_offset, unit_pos.y + shadow_offset)
-    rl.draw_text_ex(self._font_medium, unit_text, shadow_pos, FONT_SIZES.speed_unit, 0, Onroad.SHADOW)
-    rl.draw_text_ex(self._font_medium, unit_text, unit_pos, FONT_SIZES.speed_unit, 0, COLORS.WHITE_TRANSLUCENT)
+    pass
