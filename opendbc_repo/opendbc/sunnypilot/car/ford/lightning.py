@@ -53,6 +53,12 @@ CHARGE_STATE_CLUSTER = {
   0: "notReady", 1: "fault", 2: "fault", 3: "fault", 4: "chargingUnknownType", 5: "scheduled", 6: "targetReached",
 }
 CHARGE_TYPE = {"chargingAc": "ac", "chargingDc": "dc", "chargingInductive": "other", "chargingUnknownType": "other"}
+# What the offroad charging monitor parses: battery, current and charge status only
+CHARGING_PT_MESSAGES = (
+  "Battery_Traction_1_FD1", "Battery_Traction_3_FD1", "Battery_Traction_4_FD1", "Battery_Traction_5_FD1",
+  "Battery_Traction_6_FD1", "MtrTracData_1_FD1", "PreCond_Hev_Data2_FD1", "MtrTrac_Data2_FD1", "HEV_ChargeStat_FD1",
+  "Cluster_HEV_Data9_FD1", "PreCond_Hev_Data1_FD1", "Cluster_HEV_Data1_FD1", "MHT_EV_Wakeup_FD1",
+)
 # Already parsed by BluePilot when FordFlags.HEV_BATTERY_DATA is set; added here otherwise.
 HEV_BATTERY_MESSAGES = ("Battery_Traction_1_FD1", "Battery_Traction_3_FD1", "Battery_Traction_4_FD1")
 
@@ -407,6 +413,12 @@ class LightningState:
     else:
       text = ""
     v["evAlerts.alertText"] = text
+
+  def update_charging_only(self, cp, dt: float) -> dict:
+    """Offroad: battery and charging fields only (charging_monitor)."""
+    self._update_battery(cp, 0.0, dt)
+    self._update_charging(cp, dt)
+    return self.values
 
   def update(self, cp, s: EvSettings, v_ego: float, a_ego: float, gas: bool, brake: bool, cruise: bool, dt: float) -> dict:
     self._update_battery(cp, v_ego, dt)

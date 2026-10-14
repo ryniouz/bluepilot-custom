@@ -321,6 +321,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPCriticalSocAlertPct", {PERSISTENT | BACKUP, INT, "10"}},
     {"BPTireLowPressureKpa", {PERSISTENT | BACKUP, INT, "240"}},
     {"BPLowVoltAlertV", {PERSISTENT | BACKUP, FLOAT, "11.8"}},
+    {"BPChargeKeepAwake", {PERSISTENT | BACKUP, BOOL, "1"}},        // stay on offroad while the truck charges
+    {"BPChargeSleepDelayMin", {PERSISTENT | BACKUP, INT, "30"}},    // power down this long after an offroad charge ends; 0 = use MaxTimeOffroad
+    {"BPChargingActive", {CLEAR_ON_MANAGER_START, BOOL, "0"}},      // written by charging_monitor
+    {"BPChargeLastActiveTs", {CLEAR_ON_MANAGER_START, FLOAT}},      // time.monotonic() of the last charging sample
     // Custom: end
 
     // BluePilot: Portal (Web Routes Server)

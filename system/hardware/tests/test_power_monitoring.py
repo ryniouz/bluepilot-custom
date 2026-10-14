@@ -232,3 +232,46 @@ class TestPowerMonitoring:
     result = pm.max_time_offroad_exceeded(offroad_time_s)
 
     assert result == expected_result
+
+  # Custom: offroad charging keep-awake and post-charge sleep delay
+  @pytest.mark.parametrize(
+    "active, last_age_s, keep_awake, delay_min, charged_after_offroad, expected",
+    [
+      (True, 5, True, 30, True, (True, False)),      # charging: hold
+      (True, 5, False, 30, True, (False, False)),    # keep-awake off: normal rules
+      (True, 120, True, 30, True, (False, False)),   # stale (monitor gone): no hold
+      (False, 60, True, 30, True, (False, False)),   # charge ended 1 min ago: still waiting
+      (False, 1801, True, 30, True, (False, True)),  # 30 min after the charge: power down
+      (False, 1801, True, 0, True, (False, False)),  # delay 0: MaxTimeOffroad decides
+      (False, 1801, True, 30, False, (False, False)),  # charge was before this offroad period
+    ]
+  )
+  def test_charging_shutdown_state(self, active, last_age_s, keep_awake, delay_min, charged_after_offroad, expected):
+    now = 100_000.
+    last = now - last_age_s
+    offroad_ts = last - 10 if charged_after_offroad else last + 1
+    self.params.put_bool("BPChargingActive", active)
+    self.params.put("BPChargeLastActiveTs", last)
+    self.params.put_bool("BPChargeKeepAwake", keep_awake)
+    self.params.put("BPChargeSleepDelayMin", delay_min)
+    try:
+      assert PowerMonitoring().charging_shutdown_state(now, offroad_ts) == expected
+    finally:
+      for k in ("BPChargingActive", "BPChargeLastActiveTs", "BPChargeKeepAwake", "BPChargeSleepDelayMin"):
+        self.params.remove(k)
+
+  def test_charging_holds_against_max_time_offroad(self, mocker):
+    pm = PowerMonitoring()
+    pm.car_voltage_mV = GOOD_VOLTAGE
+    self.params.put("MaxTimeOffroad", 10)
+    self.params.put_bool("BPChargingActive", True)
+    offroad_ts = ssb
+    try:
+      mocker.patch("time.monotonic", return_value=offroad_ts + 3600)
+      self.params.put("BPChargeLastActiveTs", offroad_ts + 3595)
+      assert not pm.should_shutdown(False, True, offroad_ts, True)
+      self.params.put_bool("BPChargingActive", False)
+      assert pm.should_shutdown(False, True, offroad_ts, True)
+    finally:
+      for k in ("MaxTimeOffroad", "BPChargingActive", "BPChargeLastActiveTs"):
+        self.params.remove(k)

@@ -458,7 +458,14 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
 struct CustomReserved10 @0xcb9fd56c7057593a {
 }
 
-struct CustomReserved11 @0xc2243c65e0340384 {
+# Custom: offroad charging state, published by selfdrive/car/charging_monitor.py while offroad (stream B).
+# Onroad, the same data is in carStateBP.charging.
+struct ChargingStateBP @0xc2243c65e0340384 {
+  charging @0 :CarStateBP.Charging;
+  evBattery @1 :CarStateBP.EvBattery;
+  canAlive @2 :Bool;           # frames seen on the car's main bus in the last 2 s
+  keepAwake @3 :Bool;          # BPChargeKeepAwake and charging: power monitoring will not time out
+  sleepInSeconds @4 :Float32;  # countdown after a charge ends (BPChargeSleepDelayMin), -1 when not counting
 }
 
 struct CustomReserved12 @0x9ccdc8676701b412 {
