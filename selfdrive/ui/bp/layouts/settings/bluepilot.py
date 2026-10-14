@@ -521,17 +521,14 @@ class BluePilotLayout(Widget):
       # Custom: Console theme, charging and data export rows live on their own Console shell pages
       # (Screen > Theme and layout, Energy > Charging, Connect > Data export); see console_page_items()
       SectionHeader(tr("Visuals")),
-      self._hide_onroad_border,
+      # Custom: no onroad border and no hybrid gauges on the Console driving view (the EV dock replaces
+      # them), so their rows are left out: Hide Onroad Border, Battery/Power flow gauge, size, style
       self._show_blindspot,
       self._show_brake_status,
       self._show_confidence_ball,
       self._animate_steering_wheel,
       self._show_ford_radar_overlay,
       self._radar_overlay_size_btn,
-      self._show_hybrid_battery_status,
-      self._show_hybrid_power_flow,
-      self._hybrid_gauge_size_btn,
-      self._hybrid_gauge_style_btn,
       SectionHeader(tr("Longitudinal Tuning")),
       self._disable_BP_long,
       self._disable_dowhill_comp,

@@ -35,7 +35,8 @@ TABS = ["Driving", "Alerts", "Guest", "Power"]
 
 def platform_name(fp: str) -> str:
   """FORD_BRONCO_SPORT_MK1 -> Ford Bronco Sport Mk1."""
-  return " ".join(w.capitalize() for w in str(fp).split("_")) if fp else ""
+  name = " ".join(w.capitalize() for w in str(fp).split("_")) if fp else ""
+  return name.replace("F 150", "F-150").replace("F 250", "F-250")
 
 
 class VehiclePage(CardPage):
@@ -139,7 +140,7 @@ class VehiclePage(CardPage):
       op = max(0, min(2, as_int(self._get("BPOnePedalMode", 2), 2)))
       y = self._seg_row(r, y, tr("One-pedal drive"), [tr("Off"), tr("On"), tr("Detect")], op,
                         lambda i: self._put("BPOnePedalMode", int(i)))
-    self._note(r, y, tr("Towing Auto follows a hitched trailer or Tow/Haul. One-pedal Detect tells from how the truck slows."), 2)
+    self._note(r, y, tr("Towing Auto follows a hitched trailer or Tow/Haul. One-pedal Detect tells from how the truck slows."), 3)
 
   def _alerts_card(self, r: rl.Rectangle):
     y = self._title(r, tr("Alerts"), "bell")
