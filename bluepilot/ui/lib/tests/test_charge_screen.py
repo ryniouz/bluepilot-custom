@@ -76,3 +76,30 @@ def test_session_ends_when_charging_stops_or_truck_moves():
   assert cs.active
   cs.update(snap(True, "car"), 2.0, t)
   assert not cs.active
+
+
+def test_window_restarts_on_ignition_off_and_replug():
+  cs = ChargeSession()
+  t = 0.0
+  for _ in range(30):  # truck on, charging
+    cs.update(snap(True, "car"), 0.0, t)
+    t += 0.1
+  w0 = cs.window_t
+  for _ in range(1200):  # 2 min, truck on
+    cs.update(snap(True, "car"), 0.0, t)
+    t += 0.1
+  assert cs.window_t == w0
+  for _ in range(50):  # handoff gap: no source, window untouched
+    cs.update(snap(False, ""), 0.0, t)
+    t += 0.1
+  assert cs.window_t == w0
+  cs.update(snap(True, "charger"), 0.0, t)  # truck off: the truck-off window starts now
+  assert cs.window_t == t and cs.start_t < w0 + 1
+  t_off = t
+  for _ in range(30):  # a short unplug (debounced charging false), then charging again
+    t += 0.1
+    cs.update(snap(False, "charger"), 0.0, t)
+  assert cs.active and cs.window_t > t_off
+  t += 0.1
+  cs.update(snap(True, "charger"), 0.0, t)
+  assert cs.window_t == t

@@ -362,6 +362,8 @@ class ChargeSession:
     self.dismissed = False      # driver tapped back to the driving view for this session
     self.reopened = False       # driver reopened the page (shows even with BPChargingScreen off)
     self.start_t = 0.0
+    self.window_t = 0.0         # when the screen's on-time window last restarted (see charge_screen.py)
+    self._window_key: tuple | None = None
     self.start_soc = NAN
     self.start_range_km = NAN
     self.energy_kwh = 0.0
@@ -399,6 +401,14 @@ class ChargeSession:
             self._end()
 
     if self.active:
+      # The screen window restarts when the situation changes: the truck turned off or on (the publisher
+      # switches between carStateBP and chargingStateBP), AC <-> DC, or charging stopped/started (a re-plug).
+      # Without this, a session that began with the truck on spent its truck-off window before the truck was off.
+      key = (bool(snap.charging), snap.charge_type, snap.source)
+      if snap.source and key != self._window_key:
+        if self._window_key is not None:
+          self.window_t = now
+        self._window_key = key
       if self._last_t is not None and snap.charging and finite(snap.charge_power_kw):
         dt = min(max(now - self._last_t, 0.0), 0.5)
         self.energy_kwh += max(snap.charge_power_kw, 0.0) * dt / 3600.0
@@ -426,6 +436,8 @@ class ChargeSession:
     self.dismissed = False
     self.reopened = False
     self.start_t = now
+    self.window_t = now
+    self._window_key = None
     self.start_soc = snap.soc
     self.start_range_km = snap.range_km
     self.energy_kwh = 0.0
