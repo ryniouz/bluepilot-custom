@@ -3,8 +3,10 @@ Console driving cues: one visual language for everything that pops up on the dri
 
   notice()            the notification card (informational alerts, lane changes, green light,
                       lead departing, stopped timer); a tinted icon tile and two lines
-  SignalTiles         turn signals and blind-spot warnings as two tiles flanking the
-                      notification slot; a signal into an occupied lane turns its tile red
+  SignalTiles         turn signals as two tiles at the top centre; a signal into an occupied lane
+                      turns its tile red
+  BlindSpotMarkers    a car in the blind spot: a glass disc at that screen edge, amber, red when
+                      you signal into it
   draw_blindspot_edge squared danger bars on the screen edges (no gradient)
   ConsoleConfidence   model confidence level (drawn inside the driver-monitor chip)
   CanadianSpeedLimit  Canadian regulatory sign (MAXIMUM / value / km/h) for SP's speed limit
@@ -37,7 +39,7 @@ from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
 NOTICE_R = 24
 NOTICE_PAD_X = 32
 NOTICE_PAD_Y = 22
-NOTICE_ICON = 76         # free-standing icon (smaller on a one-line card)
+NOTICE_ICON = 88         # free-standing icon (smaller on a one-line card)
 NOTICE_TITLE = 46
 NOTICE_SUB = 36
 NOTICE_H1 = 104          # one line
@@ -85,14 +87,42 @@ def notice_size(title: str, sub: str, max_w: float) -> tuple[float, float]:
   return w, h
 
 
-def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None = None, icon: str = "bell"):
+_NOTICE_SEEN: dict[str, tuple[float, float]] = {}
+NOTICE_IN_S = 0.24        # slide-in time
+NOTICE_DROP = 28          # px it drops in from
+GO_PULSE_S = 1.6          # "go" notices (green light, lead moving) ring outward for this long
+
+
+def _since_shown(key: str) -> float:
+  """Seconds since this notice appeared; a notice gone for half a second counts as new next time."""
+  now = time.monotonic()
+  first, last = _NOTICE_SEEN.get(key, (now, now))
+  if now - last > 0.5:
+    first = now
+  _NOTICE_SEEN[key] = (first, now)
+  return now - first
+
+
+def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None = None, icon: str = "bell", go: bool = False):
   """Notification card, same family as the prompt card: translucent panel, a free-standing icon in
-  the status colour, title (primary) over subtitle (muted)."""
+  the status colour, title (primary) over subtitle (muted). It drops in from just above; a "go" notice
+  (time to move off) gets a green edge and rings outward a few times so it catches the eye."""
   semi, body = _fonts()
   bar = bar if bar is not None else Console.ACCENT
+  age = _since_shown(title)
+  e = 1 - (1 - min(1.0, age / NOTICE_IN_S)) ** 3
+  rect = rl.Rectangle(rect.x, rect.y - NOTICE_DROP * (1 - e), rect.width, rect.height)
   r = roundness(rect, NOTICE_R)
+  if go and age < GO_PULSE_S:
+    for k in range(2):
+      u = (age / 0.8 + k * 0.5) % 1.0
+      grow = 6 + 26 * u
+      ring = rl.Rectangle(rect.x - grow, rect.y - grow, rect.width + 2 * grow, rect.height + 2 * grow)
+      rl.draw_rectangle_rounded_lines_ex(ring, roundness(ring, NOTICE_R + grow), 10, 4, with_alpha(bar, int(150 * (1 - u))))
   rl.draw_rectangle_rounded(rect, r, 10, Onroad.PANEL)
-  rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, Console.BORDER_DEFAULT)
+  if go:
+    rl.draw_rectangle_rounded(rect, r, 10, with_alpha(bar, 0x1C))
+  rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 3 if go else 2, with_alpha(bar, 0xB0) if go else Console.BORDER_DEFAULT)
   isz = min(NOTICE_ICON, rect.height - 2 * NOTICE_PAD_Y)
   cue_icon(icon, rect.x + NOTICE_PAD_X, rect.y + (rect.height - isz) / 2, isz, bar)
   tx = rect.x + NOTICE_PAD_X + isz + 28
@@ -155,6 +185,34 @@ def cue_icon(name: str, x: float, y: float, size: float, color: rl.Color):
       rl.draw_circle_v(rl.Vector2(x + lx * s, y + 13.6 * s), 1.4 * s, color)
     for wx in (4.5, 16):
       rl.draw_rectangle_rounded(rl.Rectangle(x + wx * s, y + 17.5 * s, 3.5 * s, 3.5 * s), 0.4, 4, color)
+  elif name in ("blindspot_left", "blindspot_right"):
+    # Blind spot (candidate B1, Lucas 22:42): a top-down car with two sensor arcs on the side being
+    # watched; mirrored for the right
+    fx = (lambda v: v) if name == "blindspot_left" else (lambda v: 24 - v)
+    car = rl.Rectangle(x + min(fx(10), fx(19)) * s, y + 3.5 * s, 9 * s, 17 * s)
+    rl.draw_rectangle_rounded_lines_ex(car, 0.66, 10, w, color)
+    for yy in (8.5, 16):
+      _seg([(fx(11.5), yy), (fx(17.5), yy)], x, y, s, w, color)
+    for rad, cx in ((5.0, 11.5), (9.0, 12.0)):
+      sweep = [math.radians(a) for a in range(135, 226, 9)]
+      pts = [(fx(cx + rad * math.cos(t)), 12 + rad * math.sin(t)) for t in sweep]
+      _seg(pts, x, y, s, w, color)
+  elif name == "light_go":
+    # traffic light gone green: housing, the two upper lamps as thin rings, the bottom lamp lit and larger
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 6.5 * s, y + 1 * s, 11 * s, 22 * s), 0.45, 8, w, color)
+    for cy in (5.6, 11.0):
+      rl.draw_ring(rl.Vector2(x + 12 * s, y + cy * s), 1.9 * s, 1.9 * s + w * 0.55, 0, 360, 24, with_alpha(color, 0x80))
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 17.3 * s), 3.2 * s, color)
+  elif name == "lead_go":
+    # the car ahead pulling away: a rear-view car with an arrow rising above it
+    _seg([(12, 8), (12, 1.5)], x, y, s, w, color)
+    _seg([(8.8, 4.6), (12, 1.4), (15.2, 4.6)], x, y, s, w, color)
+    _seg([(6.2, 14), (7.8, 10.5), (16.2, 10.5), (17.8, 14)], x, y, s, w, color)
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3.5 * s, y + 14 * s, 17 * s, 5.5 * s), 0.4, 8, w, color)
+    for lx in (7, 17):
+      rl.draw_circle_v(rl.Vector2(x + lx * s, y + 16.75 * s), 1.2 * s, color)
+    for wx in (5, 16):
+      rl.draw_rectangle_rounded(rl.Rectangle(x + wx * s, y + 19.5 * s, 3 * s, 3 * s), 0.4, 4, color)
   elif name == "rec":
     # recording: a filled dot in a ring
     rl.draw_ring(rl.Vector2(x + 12 * s, y + 12 * s), 9 * s - w / 2, 9 * s + w / 2, 0, 360, 40, color)
@@ -192,8 +250,7 @@ class SignalTiles:
   """Two tiles side by side at the top centre, like a cluster's indicators.
 
   Blinker only            translucent tile, arrow in success, lit while the indicator is on
-  Car in the blind spot   panel tile with a thick danger outline, car mark, "Car" (ShowBlindspot)
-  Blinker into that lane  red tile with a pulsing halo, car mark, "Blocked" (lane change unsafe)
+  Blinker into a car      red tile, white arrow (the car itself shows on BlindSpotMarkers at that edge)
   """
 
   def __init__(self):
@@ -201,11 +258,8 @@ class SignalTiles:
 
   @staticmethod
   def _state(blinker: bool, blindspot: bool) -> str | None:
-    bs = blindspot and ui_state.blindspot
-    if blinker and bs:
+    if blinker and blindspot and ui_state.blindspot:
       return "danger"
-    if bs:
-      return "car"
     if blinker and ui_state.turn_signals:
       return "signal"
     return None
@@ -230,17 +284,10 @@ class SignalTiles:
       r = rl.Rectangle(x, y, TILE, TILE)
       rr = roundness(r, TILE_R)
       if st == "danger":
-        # Lane change into a car: solid red tile with a pulsing halo, car mark and "Blocked"
-        halo = rl.Rectangle(r.x - 8, r.y - 8, TILE + 16, TILE + 16)
-        rl.draw_rectangle_rounded(halo, roundness(halo, TILE_R + 8), 10, with_alpha(Console.DANGER_FILL, int(90 + 110 * pulse)))
-        rl.draw_rectangle_rounded(r, rr, 10, Console.DANGER_FILL)
-        cue_icon("car_" + side, r.x + (TILE - 88) / 2, r.y + 16, 88, Console.ON_ACCENT)
-        D.text_center(tr("Blocked"), r.x + TILE / 2, r.y + TILE - 46, 30, Console.ON_ACCENT, semi=True)
-      elif st == "car":
-        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
-        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 4, Console.DANGER)
-        cue_icon("car_" + side, r.x + (TILE - 88) / 2, r.y + 16, 88, Console.DANGER)
-        D.text_center(tr("Car"), r.x + TILE / 2, r.y + TILE - 46, 30, Console.DANGER, semi=True)
+        # Signalling into a car: the arrow tile turns red and blinks white; the car shows at that edge
+        rl.draw_rectangle_rounded(r, rr, 10, with_alpha(Console.DANGER_FILL, int(200 + 55 * pulse)))
+        cue_icon(f"arrow_{side}", r.x + (TILE - 100) / 2, r.y + (TILE - 100) / 2, 100,
+                 Console.ON_ACCENT if on else with_alpha(Console.ON_ACCENT, 0x80))
       else:
         # Turn signal: the arrow alone, lit tile while the indicator is on (no word, like a cluster)
         rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
@@ -249,6 +296,72 @@ class SignalTiles:
         rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 2, with_alpha(Console.SUCCESS, 0x90) if on else Console.BORDER_DEFAULT)
         cue_icon(f"arrow_{side}", r.x + (TILE - 100) / 2, r.y + (TILE - 100) / 2, 100, Console.SUCCESS if on else Console.TEXT_GHOST)
     return shown
+
+
+BS_FACE = 184             # glass disc for a car in the blind spot (Lucas 22:42: larger, recognisable)
+BS_ICON = 124
+BS_EDGE = 44              # from the screen edge
+BS_Y = 0.64               # disc centre, as a share of the screen height: beside the road, under the lead card
+BS_SLIDE = 36
+
+
+class BlindSpotMarkers:
+  """A car in the blind spot shows where it is: a round glass disc at that edge of the screen, level
+  with the road, like the indicator in a side mirror.
+
+  Car beside you           amber icon and rim on the glass (caution: look before you move over)
+  Signalling into it       solid red disc with a pulsing halo, white icon and a "Blocked" chip; the
+                           top arrow tile turns red too
+  It slides in from the edge and fades, so it never pops. Needs ui_state.blindspot (BlindSpot)."""
+
+  def __init__(self):
+    self._a = {"left": 0.0, "right": 0.0}
+    self._t0 = time.monotonic()
+
+  def render(self, rect: rl.Rectangle):
+    if not ui_state.blindspot:
+      return
+    try:
+      cs = ui_state.sm['carState']
+      sides = (("left", cs.leftBlindspot, cs.leftBlinker), ("right", cs.rightBlindspot, cs.rightBlinker))
+    except Exception:
+      return
+    t = time.monotonic() - self._t0
+    pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi / 0.8)
+    semi, _ = _fonts()
+    for side, bs, blinker in sides:
+      self._a[side] += ((1.0 if bs else 0.0) - self._a[side]) * 0.25
+      a = self._a[side]
+      if a < 0.02:
+        continue
+      blocked = bs and blinker
+      ease = 1 - (1 - a) ** 3
+      off = BS_SLIDE * (1 - ease)
+      r = BS_FACE / 2
+      cx = rect.x + BS_EDGE + r - off if side == "left" else rect.x + rect.width - BS_EDGE - r + off
+      cy = rect.y + rect.height * BS_Y
+      c = rl.Vector2(cx, cy)
+      rl.draw_ring(c, r, r + 6, 0, 360, 72, rl.Color(0, 0, 0, int(0x30 * a)))
+      if blocked:
+        rl.draw_ring(c, r + 6, r + 18 + 8 * pulse, 0, 360, 72, with_alpha(Console.DANGER_FILL, int((70 + 90 * pulse) * a)))
+        rl.draw_circle_v(c, r, with_alpha(Console.DANGER_FILL, int(0xF0 * a)))
+        ink = with_alpha(Console.ON_ACCENT, int(255 * a))
+        rim = with_alpha(Console.ON_ACCENT, int(0x50 * a))
+      else:
+        rl.draw_circle_v(c, r, with_alpha(Console.BG_PANEL, int(0xC0 * a)))
+        rl.draw_circle_v(c, r - 4, with_alpha(Console.WARNING, int(0x22 * a)))
+        ink = with_alpha(Console.WARNING, int(255 * a))
+        rim = with_alpha(Console.WARNING, int(0xD0 * a))
+      rl.draw_circle_gradient(rl.Vector2(cx, cy - r * 0.38), r * 0.6, rl.Color(255, 255, 255, int(0x1C * a)), rl.Color(255, 255, 255, 0))
+      rl.draw_ring(c, r - 5, r, 0, 360, 72, rim)
+      cue_icon(f"blindspot_{side}", cx - BS_ICON / 2, cy - BS_ICON / 2, BS_ICON, ink)
+      if blocked:
+        label = tr("Blocked")
+        fs = 32
+        tw = measure_text_cached(semi, label, fs).x
+        chip = rl.Rectangle(cx - tw / 2 - 20, cy + r + 18, tw + 40, fs + 18)
+        rl.draw_rectangle_rounded(chip, 1.0, 10, with_alpha(Console.DANGER_FILL, int(0xF0 * a)))
+        rl.draw_text_ex(semi, label, rl.Vector2(chip.x + 20, chip.y + 8), fs, 0, ink)
 
 
 EDGE_W = 32               # car in the blind spot
@@ -492,16 +605,18 @@ def cruise_chips(scc, x: float, y: float):
 
 # -- e2e pop-ups (green light, lead departing, stopped timer) -----------------------------
 
-def e2e_notice(ca) -> tuple[str, str, rl.Color, str] | None:
-  """Read SP CircularAlertsRenderer state and return (title, sub, bar, icon) to show, if any."""
+def e2e_notice(ca) -> tuple[str, str, rl.Color, str, bool] | None:
+  """Read SP CircularAlertsRenderer state and return (title, sub, bar, icon, go) to show, if any.
+  Green light and the lead moving off are "go" notices (green, they ring to catch the eye at a stop);
+  the stopped timer is quiet information (muted, no motion)."""
   if not ca._allow_e2e_alerts:
     return None
   if ca._e2e_alert_display_timer > 0:
     if ca._green_light_alert:
-      return "Green light", "The light ahead changed", Console.SUCCESS, "light"
+      return tr("Green light"), tr("Time to go"), Console.SUCCESS, "light_go", True
     if ca._lead_depart_alert:
-      return "Lead vehicle departing", "Traffic ahead is moving", Console.SUCCESS, "car"
+      return tr("Lead is moving"), tr("The car ahead pulled away"), Console.SUCCESS, "lead_go", True
     return None
   if ui_state.standstill_timer and ca._is_standstill:
-    return f"Stopped {ca._alert_text}", "", Console.WARNING, "timer"
+    return f"{tr('Stopped')} {ca._alert_text}", "", Console.TEXT_SECONDARY, "timer", False
   return None

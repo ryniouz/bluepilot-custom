@@ -15,7 +15,7 @@ from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, 
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
-from openpilot.selfdrive.ui.bp.onroad.console_cues import (SIGN_H, SIGN_W, CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
+from openpilot.selfdrive.ui.bp.onroad.console_cues import (SIGN_H, SIGN_W, BlindSpotMarkers, CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
                                                           notice, notice_size)
 
 # BluePilot: Y center for speed display (matching upstream hardcoded values)
@@ -73,6 +73,7 @@ class HudRendererBP(HudRendererSP):
     # Custom: Console cues replace SP's sign art, turn-signal icons and circular pop-ups
     self.speed_limit_renderer = CanadianSpeedLimit()
     self._signals = SignalTiles()
+    self._bs_markers = BlindSpotMarkers()
     self._signals_shown = False
     self.guest = False             # set by the road view each frame (Guest Mode drive)
     self.attention = ""            # AttentionBar state, set by the road view each frame
@@ -132,6 +133,7 @@ class HudRendererBP(HudRendererSP):
     if self.guest:
       self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
       self._signals_shown = self._signals.render_center(rect.x + rect.width / 2, rect.y + NOTICE_TOP)
+      self._bs_markers.render(rect)
       title, sub = tr("Factory driver assist"), tr("comma recording only")
       band_l, band_r = self.notify_band(rect)
       w, h = notice_size(title, sub, band_r - band_l)
@@ -150,8 +152,9 @@ class HudRendererBP(HudRendererSP):
       self.road_name_renderer.render(rect)
     self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
 
-    # Custom: turn signals and blind spot as two tiles at the top centre
+    # Custom: turn signals as two tiles at the top centre; a car in the blind spot at that screen edge
     self._signals_shown = self._signals.render_center(rect.x + rect.width / 2, rect.y + NOTICE_TOP)
+    self._bs_markers.render(rect)
 
     if preset != LayoutPreset.MINIMAL:
       scc = self.smart_cruise_control_renderer
@@ -161,10 +164,10 @@ class HudRendererBP(HudRendererSP):
       # SP green light / lead departing / stopped timer, as a notification card
       pop = e2e_notice(self.circular_alerts_renderer)
       if pop is not None:
-        title, sub, bar, icon = pop
+        title, sub, bar, icon, go = pop
         band_l, band_r = self.notify_band(rect)
         w, h = notice_size(title, sub, band_r - band_l)
-        notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, bar, icon)
+        notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, bar, icon, go=go)
       self.rocket_fuel.render(rect, ui_state.sm)
 
   def _draw_lateral_control_overlay(self, center_x: float, center_y: float) -> None:
