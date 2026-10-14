@@ -257,6 +257,14 @@ def main(exit_event: threading.Event | None = None) -> None:
         time.sleep(60 if offroad else 5)
       continue
 
+    # Custom: comma connect uploads on unmetered Wi-Fi only (BPCommaConnectWifiOnly); Citadel uploads are separate
+    if not force_wifi and params.get_bool("BPCommaConnectWifiOnly") and \
+       (network_type not in (NetworkType.wifi, NetworkType.ethernet) or sm['deviceState'].networkMetered):
+      if allow_sleep:
+        time.sleep(60 if offroad else 10)
+      continue
+    # End Custom
+
     success = uploader.step(sm['deviceState'].networkType.raw, sm['deviceState'].networkMetered)
     if success is None:
       backoff = 60 if offroad else 5
