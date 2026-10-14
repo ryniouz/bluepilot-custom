@@ -78,7 +78,8 @@ SCENES: dict[str, str] = {
   "vehicle": "System > Vehicle: the Lightning, platform lock, Driving tab",
   "vehicle_alerts": "System > Vehicle: Alerts tab (battery %, tire PSI, 12 V)",
   "vehicle_guest": "System > Vehicle: Guest Mode tab",
-  "vehicle_power": "System > Vehicle: Power tab",
+  "vehicle_power": "System > Vehicle: Charging tab",
+  "vehicle_12v": "System > Vehicle: 12 V tab, power saver on, OBD 12 V charge (stream B 12 V keys faked)",
   "vehicle_mismatch": "System > Vehicle: the comma refused another car",
   "steering": "Drive > Steering: torque and NNLC rows hidden",
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
@@ -1107,7 +1108,7 @@ def run_scene(sc: Scene):
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
-              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
+              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
               "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
               "boot_os_prompt", "boot_os_progress", "boot_os_failed"):
     sc.drive = None
@@ -1265,7 +1266,14 @@ def run_scene(sc: Scene):
     sc.main._open_shell()
     sc.main._shell.open_panel("vehicle")
     page = sc.main._shell.current_page().widget
-    page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3}.get(name, 0)
+    page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3, "vehicle_12v": 4}.get(name, 0)
+    if name == "vehicle_12v":
+      from bluepilot.ui.console.pages import vehicle as vmod
+      fake_obd("connected")
+      lv = {"BPLvSaver": True, "BPLvSaverOffroadMin": 10, "BPLvShutdownSoc": 50, "BPLvWakeFilter": True}
+      real_has, real_get = vmod.has_param, page._get
+      vmod.has_param = lambda p, k: k in lv or real_has(p, k)
+      page._get = lambda k, d=None: lv[k] if k in lv else real_get(k, d)
     sc.settle()
     sc.shot()
   elif name.startswith("truck_data"):
