@@ -22,15 +22,19 @@ from bluepilot.ui.console.pages.cards import GAP, CardPage
 from bluepilot.ui.lib.obd_link import ObdValue, fmt_value, live_values, status
 from bluepilot.ui.lib.theme import Console
 
-ROW = 72
+ROW = 64
 
-BATTERY = [("HvbSocD", "Charge"), ("HvbSoc", "Charge (cells)"), ("HvbEte", "Energy left"),
-           ("HvbT", "Temperature"), ("HvbCit", "Coolant in"), ("HvbAvgModV", "Modules avg"),
-           ("HvbMinModV", "Modules low"), ("HvbAge", "Age")]
-CHARGER = [("HvbV", "Pack"), ("HvbA", "Current"), ("ChgOV", "Output")]
+BATTERY = [("HvbSoh", "Health"), ("HvbCapAh", "Capacity"), ("HvbSocD", "Charge"), ("HvbEte", "Energy left"),
+           ("HvbT", "Temperature"), ("HvbCit", "Coolant in"), ("HvbCHP", "Coolant heater"), ("HvbAvgModV", "Modules avg"),
+           ("HvbMinModV", "Modules low"), ("HvbAge", "Age"), ("HvbSoc", "Charge (cells)")]
+CHARGER = [("HvbV", "Pack"), ("HvbA", "Current"), ("ChgOV", "Output"), ("ChgInPwr", "Input power"), ("ChgMaxP", "Max power"),
+           ("ChgACT", "Port temp"), ("ACInV", "AC voltage"), ("ACInA", "AC current"), ("ACInF", "AC frequency"),
+           ("PilotDC", "Pilot duty")]
 LOW_VOLT = [("LvV", "Voltage"), ("LvSoc", "Charge")]
 TIRES = [("TireLF", "Front left"), ("TireRF", "Front right"), ("TireLR", "Rear left"), ("TireRR", "Rear right")]
-KNOWN = {k for group in (BATTERY, CHARGER, LOW_VOLT, TIRES) for k, _ in group} | {"ChgSt", "Evse"}
+# status codes whose meanings aren't mapped yet stay off the page rather than show a bare number
+CODES = {"ChgSt", "Evse", "HvbCHOp", "DCChgSt", "ProxSt"}
+KNOWN = {k for group in (BATTERY, CHARGER, LOW_VOLT, TIRES) for k, _ in group} | CODES
 
 
 def fmt(short: str, v: ObdValue) -> str:
@@ -73,10 +77,9 @@ class TruckDataPage(CardPage):
     c3.width -= GAP * 2 / 3
 
     self._group(c1, tr("HV battery"), "battery", BATTERY, vals, extra=self._spread_row(vals))
-    col2 = [(tr("Charger"), "plug", CHARGER), (tr("12 V battery"), "bolt", LOW_VOLT)]
-    self._stack(c2, col2, vals)
-    others = [(v.name, v.name) for k, v in sorted(vals.items()) if k not in KNOWN]
-    col3 = [(tr("Tires"), "gauge", TIRES)] + ([(tr("Other"), "list", others)] if others else [])
+    self._stack(c2, [(tr("Charger"), "plug", CHARGER)], vals)
+    others = [(v.name, v.label or v.name) for k, v in sorted(vals.items()) if k not in KNOWN]
+    col3 = [(tr("Tires"), "gauge", TIRES), (tr("12 V battery"), "bolt", LOW_VOLT)] + ([(tr("Other"), "list", others)] if others else [])
     self._stack(c3, col3, vals)
 
   # -- connected ------------------------------------------------------------------------------
@@ -116,10 +119,10 @@ class TruckDataPage(CardPage):
         break
       K.hline(x, right, y)
       vw = min(D.text_w(value, D.BODY, semi=True), (right - x) * 0.6)
-      D.text(D.fit(label, D.LABEL, right - x - vw - (44 if color is not None else 20)), x, y + 18, D.LABEL, Console.TEXT_MUTED)
+      D.text(D.fit(label, D.LABEL, right - x - vw - (44 if color is not None else 20)), x, y + 14, D.LABEL, Console.TEXT_MUTED)
       if color is not None:
-        D.dot(right - vw - 24, y + 18 + D.BODY / 2, 8, color)
-      D.text_right(D.fit(value, D.BODY, (right - x) * 0.6, semi=True), right, y + 14, D.BODY, semi=True)
+        D.dot(right - vw - 24, y + 14 + D.BODY / 2, 8, color)
+      D.text_right(D.fit(value, D.BODY, (right - x) * 0.6, semi=True), right, y + 10, D.BODY, semi=True)
       y += ROW
 
   # -- not connected --------------------------------------------------------------------------

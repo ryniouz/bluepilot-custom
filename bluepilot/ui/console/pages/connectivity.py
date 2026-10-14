@@ -254,7 +254,7 @@ class ConnectivityPage(Widget):
     from bluepilot.ui.lib import upload_status as us
     status, color, host = self.server_state()
     y = self._head(r, tr("Uploads and sync"), None, status, color)
-    D.text(D.fit(host or tr("Citadel server comes with the self-hosted services"), D.LABEL, r.width - 2 * D.CARD_PAD - 36),
+    D.text(D.fit(host or tr("Set it up in Data export"), D.LABEL, r.width - 2 * D.CARD_PAD - 36),
            r.x + D.CARD_PAD + 36, y - 30, D.LABEL, Console.TEXT_MUTED)
     y += 24
     idx = indexer().index

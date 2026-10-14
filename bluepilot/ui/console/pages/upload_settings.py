@@ -91,12 +91,12 @@ class UploadSettingsPage(CardPage):
       return tr("Citadel can't reach the truck while away")
     st = bridge.get("services", "citadel", "link")
     if not isinstance(st, dict):
-      return tr("Citadel: settings and live data while away")
+      return tr("From Citadel while away")
     state = str(st.get("state") or "")
     reason = {"no_server": tr("no server"), "no_network": tr("no signal"), "over_limit": tr("data limit reached"),
               "server_error": tr("server error"), "disabled": tr("turned off")}.get(str(st.get("pausedReason")), "")
     return {"connected": tr("Connected"), "connecting": tr("Connecting"), "waiting": tr("Waiting for a connection"),
-            "paused": tr("Paused") + (f": {reason}" if reason else "")}.get(state, tr("Citadel: settings and live data while away"))
+            "paused": tr("Paused") + (f": {reason}" if reason else "")}.get(state, tr("From Citadel while away"))
 
   def _limit_card(self, r: rl.Rectangle):
     y = self._title(r, tr("LTE data limit"), "cell")
@@ -124,7 +124,7 @@ class UploadSettingsPage(CardPage):
     day = max(1, min(31, as_int(_param(self._params, "BPCellResetDay", 1), 1)))
     plus = rl.Rectangle(right - 72, y + 20, 72, 64)
     minus = rl.Rectangle(plus.x - 16 - 72 - 96, y + 20, 72, 64)
-    D.text(D.fit(tr("Month starts on day"), D.BODY, minus.x - x - 16, semi=True), x, y + 34, D.BODY, semi=True)
+    D.text(D.fit(tr("Resets on day"), D.BODY, minus.x - x - 16, semi=True), x, y + 34, D.BODY, semi=True)
     D.button(minus, "-", primary=False)
     D.text_center(str(day), minus.x + 72 + 8 + 48, y + 30, D.H2, semi=True)
     D.button(plus, "+", primary=False)

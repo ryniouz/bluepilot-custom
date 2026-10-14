@@ -294,6 +294,10 @@ def obd_items() -> list[tuple[str, str]]:
     out.append((tr("Charger out"), fmt_value(vals["ChgOV"])))
   if "HvbMinModV" in vals and "HvbAvgModV" in vals:
     out.append((tr("Modules"), f"{vals['HvbMinModV'].value:.2f}–{vals['HvbAvgModV'].value:.2f} V"))
+  if "ChgInPwr" in vals:
+    out.append((tr("Charger in"), fmt_value(vals["ChgInPwr"])))
+  if "HvbCHP" in vals and vals["HvbCHP"].value >= 0.1:
+    out.append((tr("Heater"), fmt_value(vals["HvbCHP"])))
   if "HvbCit" in vals:
     cv, cu = fmt_temp(vals["HvbCit"].value)
     out.append((tr("Coolant in"), f"{cv} {cu}"))

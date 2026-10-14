@@ -279,7 +279,7 @@ class ConsoleHome(Widget):
         self._hits.append((sr, lambda v=i: self._put("BPTowProfile", v)))
       y += D.CONTROL_H + 36
 
-    if has_param(self._params, "BPOnePedalMode") and y + 100 < link_y - 24:
+    if has_param(self._params, "BPOnePedalMode") and y + 28 + 48 + D.LABEL + 8 < link_y - 24:
       K.hline(x, right, y - 4)
       y += 28
       try:
@@ -287,7 +287,8 @@ class ConsoleHome(Widget):
       except (TypeError, ValueError):
         op = 2
       D.text(tr("One-pedal driving"), x, y + 2, D.BODY, semi=True)
-      D.text(tr("Estimated from coast-down") if op == 2 else (tr("On") if op == 1 else tr("Off")), x, y + 48, D.LABEL, Console.TEXT_MUTED)
+      D.text(D.fit(tr("Estimated from coast-down") if op == 2 else (tr("On") if op == 1 else tr("Off")), D.LABEL, r.width - 2 * p - 130),
+             x, y + 48, D.LABEL, Console.TEXT_MUTED)
       tg = D.toggle(right - 104, y + 14, op != 0)
       self._hits.append((tg, lambda op=op: self._put("BPOnePedalMode", 0 if op != 0 else 2)))
 
@@ -367,7 +368,7 @@ class ConsoleHome(Widget):
     else:
       rows.append((tr("LTE"), 0, tr("Standby") if nt == "wifi" else tr("No signal"), Console.TEXT_GHOST))
     status, color, _ = ConnectivityPage.server_state(self)
-    short = {tr("Your own server isn't set up yet"): tr("Not set up"), tr("Server connected"): tr("Connected"),
+    short = {tr("Server not set up yet"): tr("Not set up"), tr("Server connected"): tr("Connected"),
              tr("Server not reachable"): tr("Not reachable"), tr("Server set, uploader off"): tr("Uploader off")}
     rows.append((tr("Server"), None, short.get(status, status), color))
     for label, lvl, value, color in rows:

@@ -205,6 +205,7 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     # engagement state. Quick controls read where the dock is so a swipe up from it opens them.
     ui_state.qc_dock = dock
     ui_state.qc_blocked = alert_blocks_dock or self._guest
+    ui_state.qc_bottom_inset = 0.0  # px a theme's bottom cluster reserves above the screen edge
 
   def _render_rad_racer_scene(self, rect: rl.Rectangle):
     """Render the full Rad Racer 8-bit scene: skyline, road, sprites, gauge cluster.
