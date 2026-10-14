@@ -90,6 +90,10 @@ SCENES: dict[str, str] = {
   "device": "System > Device (Console form page)",
   "device_languages": "System > Device > Language list",
   "updates_branches": "System > Updates > branch list",
+  "maps": "System > Maps (Console form page)",
+  "maps_pick": "System > Maps > country list",
+  "developer": "System > Developer (Console form page)",
+  "developer_log": "System > Developer > Error log",
   "form_gallery": "Every Console form row (bluepilot/ui/console/form.py) on one page",
   "form_confirm": "Console confirm sheet over a form page",
   "boot_os_prompt": "OS update screen (bluepilot/ui/console/updater.py): update needed prompt",
@@ -1118,7 +1122,7 @@ def run_scene(sc: Scene):
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
               "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
               "boot_os_prompt", "boot_os_progress", "boot_os_failed", "form_gallery", "form_confirm",
-              "device", "device_languages", "updates_branches"):
+              "device", "device_languages", "updates_branches", "maps", "maps_pick", "developer", "developer_log"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1324,6 +1328,42 @@ def run_scene(sc: Scene):
     sc.main._shell.open_panel(PanelType.DEVICE)
     if name == "device_languages":
       sc.main._shell.current_page().widget._open_languages()
+    sc.settle()
+    sc.shot()
+  elif name in ("maps", "maps_pick"):
+    from openpilot.selfdrive.ui.layouts.settings.settings import PanelType
+    sc.put("OsmLocationName", "CA")
+    sc.put("OsmLocationTitle", "Canada")
+    sc.put("OsmDownloadedDate", "1789000000")
+    sc.put("MapdVersion", "v2.1.4")
+    sc.main._open_shell()
+    sc.main._shell.open_panel(getattr(PanelType, "OSM", "maps"))
+    page = sc.main._shell.current_page().widget
+    page._measure = lambda: None
+    sc.settle()
+    page._size = 1_870_000_000
+    if name == "maps_pick":
+      page._pick = ("Country", [("CA", "Canada"), ("US", "United States"), ("AU", "Australia"), ("AT", "Austria"),
+                                ("BE", "Belgium"), ("BR", "Brazil"), ("DK", "Denmark"), ("FI", "Finland")])
+    sc.settle()
+    sc.shot()
+  elif name in ("developer", "developer_log"):
+    import os as _os
+    from openpilot.selfdrive.ui.layouts.settings.settings import PanelType
+    from bluepilot.ui.console.pages import developer as dev
+    sc.put("SshEnabled", True)
+    sc.put("GithubUsername", "ryniouz")
+    sc.put("GithubSshKeys", "ssh-ed25519 AAAA")
+    sc.put("ShowAdvancedControls", True)
+    _os.makedirs(_os.path.dirname(dev.ERROR_LOG), exist_ok=True)
+    with open(dev.ERROR_LOG, "w") as f:
+      f.write("Traceback (most recent call last):\n  File \"selfdrive/ui/ui.py\", line 42, in main\n    ui.render()\n" +
+              "  File \"bluepilot/ui/console/shell.py\", line 310, in _render\n    page.widget.render(r)\n" +
+              "ZeroDivisionError: float division by zero\n")
+    sc.main._open_shell()
+    sc.main._shell.open_panel(getattr(PanelType, "DEVELOPER", "developer"))
+    if name == "developer_log":
+      sc.main._shell.current_page().widget._open_log()
     sc.settle()
     sc.shot()
   elif name == "updates_branches":
