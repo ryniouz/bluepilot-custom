@@ -117,10 +117,10 @@ class ChargingMonitor:
 
     # power monitoring reads these; write on change and refresh the timestamp while charging
     if charging != self.charging_last:
-      self.params.put_bool_nonblocking("BPChargingActive", charging)
+      self.params.put_bool("BPChargingActive", charging)
       self.charging_last = charging
     if charging and now - self.last_param_write >= PARAM_REFRESH_S:
-      self.params.put_nonblocking("BPChargeLastActiveTs", now)
+      self.params.put("BPChargeLastActiveTs", now)
       self.last_param_write = now
 
     # 12 V battery: CAN, else the OBD adapter's LvSoc / LvV
@@ -142,7 +142,7 @@ class ChargingMonitor:
     top_up = self.state.low_volt_top_up and values["wake.reason"] == "lowVoltTopUp"
     if top_up != self.top_up_last or (top_up and now - self.last_lv_write >= TOP_UP_REFRESH_S) or \
        now - self.last_lv_write >= LV_REFRESH_S:
-      self.params.put_nonblocking(lv_power.LV_STATE_KEY, {
+      self.params.put(lv_power.LV_STATE_KEY, {
         "ts": now, "soc": soc if soc > 0 else None, "volts": volts if volts > 0 else None, "src": source,
         "topUp": top_up, "topUpTs": now, "topUps": values["wake.lowVoltTopUps"],
       })

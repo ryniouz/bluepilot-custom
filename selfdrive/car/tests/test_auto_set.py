@@ -18,7 +18,7 @@ class FakeParams:
   def get(self, k, return_default=False):
     return self.vals[k]
 
-  def put_nonblocking(self, k, v):
+  def put(self, k, v):
     self.puts.append((k, v))
 
 

@@ -282,7 +282,7 @@ class DrivingModelPage(FormPage):
       self._remove("ModelRunnerTypeCache")
       self._remove("ModelManager_ActiveBundle")
       try:
-        self.p._params.put_bool_nonblocking("DoReboot", True)
+        self.p._params.put_bool("DoReboot", True)
       except Exception:
         self.p.put("DoReboot", True)
     self.confirm(tr("Reset the model and reboot?"),

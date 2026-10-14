@@ -171,7 +171,7 @@ def _save_last_good(s: EvSnapshot) -> None:
   try:
     from openpilot.common.params import Params
     d = {k: (None if isinstance(getattr(s, k), float) and not math.isfinite(getattr(s, k)) else getattr(s, k)) for k in _SAVED_FIELDS}
-    Params().put_nonblocking("BPLastEvSnapshot", d)
+    Params().put("BPLastEvSnapshot", d)
   except Exception:
     pass
 

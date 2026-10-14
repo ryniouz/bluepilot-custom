@@ -62,7 +62,7 @@ class HomeLocation:
     if now - self._saved_at > SAVE_EVERY_S:
       self._saved_at = now
       try:
-        self._params.put_nonblocking("BPLastLocation", json.dumps(self.last))
+        self._params.put("BPLastLocation", json.dumps(self.last))
       except Exception:
         pass
 

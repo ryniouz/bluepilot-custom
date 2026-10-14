@@ -23,6 +23,7 @@ import json
 from cereal import car, custom
 from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_CTRL
+from openpilot.common.swaglog import cloudlog
 
 ButtonType = car.CarState.ButtonEvent.Type
 SendButtonState = custom.IntelligentCruiseButtonManagement.SendButtonState
@@ -79,15 +80,16 @@ class AutoSetSpeed:
       self.enabled = bool(self.params.get_bool("BPAutoSetSpeed"))
       self.table = parse_table(self.params.get("BPAutoSetTable", return_default=True))
     except Exception:  # keys missing in this build: stay off
+      cloudlog.exception("auto set: could not read its params, staying off")
       self.enabled = False
 
   def _publish(self):
     value = self.target_kph if self.state in (ADJUSTING, HOLDING) else 0
     if value != self._published and self.params is not None:
       try:
-        self.params.put_nonblocking("BPAutoSetActive", value)
+        self.params.put("BPAutoSetActive", value)  # non-blocking by default on 7.0
       except Exception:
-        pass
+        cloudlog.exception("auto set: could not write BPAutoSetActive")
     self._published = value
 
   def _stop(self):

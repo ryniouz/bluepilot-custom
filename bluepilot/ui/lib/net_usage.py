@@ -40,7 +40,7 @@ class LteUsage:
 
   def _save(self):
     try:
-      self._params.put_nonblocking(PARAM, json.dumps({"month": self.month, "bytes": self.month_bytes,
+      self._params.put(PARAM, json.dumps({"month": self.month, "bytes": self.month_bytes,
                                                       "last_total": self._last_total}))
     except Exception:
       pass
