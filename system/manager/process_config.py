@@ -101,22 +101,11 @@ def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
 
   return always_run(started, params, CP)
 
-<<<<<<< ours
-=======
-def portal_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
-  """BluePilot Portal - always run when enabled (rate-limited onroad)"""
-  return params.get_bool("EnableWebRoutesServer")
-
-def route_preprocessor_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
-  """Route preprocessor - only run when portal enabled and offroad"""
-  return params.get_bool("EnableWebRoutesServer") and only_offroad(started, params, CP)
-
 # Custom: data export bridge
 def bridge_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("BPBridgeEnabled")
 # End Custom
 
->>>>>>> theirs
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -209,7 +198,6 @@ procs += [
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
 ]
 
-<<<<<<< ours
 # BluePilot: portal and route preprocessor processes
 if is_bluepilot():
   def _bp_portal_enabled(started, params, CP):
@@ -219,18 +207,9 @@ if is_bluepilot():
   procs += [
     PythonProcess("bp_portal", "bluepilot.backend.bp_portal", _bp_portal_enabled),
     PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", _bp_route_preprocessor_enabled),
+    # Custom: data export bridge (drives, live state, keep-until-synced, Citadel uploads)
+    PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
   ]
-=======
-# bluepilot
-procs += [
-  # BluePilot: Portal (routes, video streaming, exports, system metrics)
-  PythonProcess("bp_portal", "bluepilot.backend.bp_portal", portal_enabled),
-  # Route preprocessor (runs in background during idle time)
-  PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", route_preprocessor_enabled),
-  # Custom: data export bridge (drives, live state, keep-until-synced) for the home server
-  PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
-]
->>>>>>> theirs
 
 if os.path.exists("./github_runner.sh"):
   procs += [NativeProcess("github_runner_start", "system/manager", ["./github_runner.sh", "start"], and_(only_offroad, use_github_runner), sigkill=False)]
