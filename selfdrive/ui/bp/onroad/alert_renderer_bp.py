@@ -33,6 +33,8 @@ TITLE_SMALL = 62
 FULL_TILE = 176
 FULL_TITLE = 112
 FULL_SUB = 54
+CARD_MIN_W = 960           # prompt and critical cards: sized to their words, centred over the dock's place
+CARD_SIDE = 40             # never closer to the screen edges than this
 
 STATUS_COLOR = {
   AlertStatus.normal: Console.ACCENT,
@@ -160,7 +162,20 @@ class AlertRendererBP(AlertRenderer):
     if alert.size == AlertSize.full:
       self._draw_full(alert_rect, alert)
     else:
-      self._draw_card(alert_rect, alert)
+      self._draw_card(self._fit_card(rect, alert_rect, alert), alert)
+
+  def _fit_card(self, screen: rl.Rectangle, r: rl.Rectangle, alert: Alert) -> rl.Rectangle:
+    """Custom: a card as wide as its words (at least CARD_MIN_W), centred, instead of edge to edge, so it reads
+    as one notification above the road rather than a band across it."""
+    tile = min(TILE, r.height - 2 * 32)
+    lead = 32 + BAR_W + 28 + tile + 36
+    title, sub = sentence(alert.text1), sentence(alert.text2)
+    small = alert.size == AlertSize.small or not sub
+    words = measure_text_cached(self._font_semi, title, TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID).x
+    if not small:
+      words = max(words, measure_text_cached(self._font_body, sub, SUB_MID).x)
+    w = max(CARD_MIN_W, min(screen.width - 2 * CARD_SIDE, lead + words + ALERT_PADDING))
+    return rl.Rectangle(screen.x + (screen.width - w) / 2, r.y, w, r.height)
 
   # -- notification ------------------------------------------------------------------------
 
