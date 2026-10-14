@@ -37,8 +37,7 @@ from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
 NOTICE_R = 24
 NOTICE_PAD_X = 32
 NOTICE_PAD_Y = 22
-NOTICE_TILE = 96         # tinted icon tile (smaller on a one-line card)
-NOTICE_TILE_R = 18
+NOTICE_ICON = 76         # free-standing icon (smaller on a one-line card)
 NOTICE_TITLE = 46
 NOTICE_SUB = 36
 NOTICE_H1 = 104          # one line
@@ -50,7 +49,7 @@ def _fonts():
   return gui_app.font(FontWeight.SEMI_BOLD), gui_app.font(FontWeight.NORMAL)
 
 
-NOTICE_CHROME = NOTICE_PAD_X * 2 + NOTICE_TILE + 28
+NOTICE_CHROME = NOTICE_PAD_X * 2 + NOTICE_ICON + 28
 
 
 def _notice_sizes(title: str, sub: str, max_w: float) -> tuple[int, int]:
@@ -87,19 +86,16 @@ def notice_size(title: str, sub: str, max_w: float) -> tuple[float, float]:
 
 
 def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None = None, icon: str = "bell"):
-  """Notification card, same family as the prompt card: translucent panel, a tinted icon tile in
+  """Notification card, same family as the prompt card: translucent panel, a free-standing icon in
   the status colour, title (primary) over subtitle (muted)."""
   semi, body = _fonts()
   bar = bar if bar is not None else Console.ACCENT
   r = roundness(rect, NOTICE_R)
   rl.draw_rectangle_rounded(rect, r, 10, Onroad.PANEL)
   rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, Console.BORDER_DEFAULT)
-  tile = min(NOTICE_TILE, rect.height - 2 * NOTICE_PAD_Y)
-  t = rl.Rectangle(rect.x + NOTICE_PAD_X, rect.y + (rect.height - tile) / 2, tile, tile)
-  rl.draw_rectangle_rounded(t, roundness(t, NOTICE_TILE_R), 10, with_alpha(bar, 0x38))
-  isz = tile * 0.6
-  cue_icon(icon, t.x + (tile - isz) / 2, t.y + (tile - isz) / 2, isz, bar)
-  tx = t.x + tile + 28
+  isz = min(NOTICE_ICON, rect.height - 2 * NOTICE_PAD_Y)
+  cue_icon(icon, rect.x + NOTICE_PAD_X, rect.y + (rect.height - isz) / 2, isz, bar)
+  tx = rect.x + NOTICE_PAD_X + isz + 28
   max_w = rect.x + rect.width - NOTICE_PAD_X - tx
   ts, ss, tl, sl, _, _ = _notice_layout(title, sub, rect.width)
   tlh, slh = (ts * 1.15 if len(tl) > 1 else ts), (ss * 1.25 if len(sl) > 1 else ss)

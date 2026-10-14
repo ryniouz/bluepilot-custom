@@ -15,22 +15,21 @@ AlertStatus = log.SelfdriveState.AlertStatus
 
 # Custom: Console alerts. openpilot decides when an alert shows, how long, its size and its
 # sound; this only decides how it looks. Every alert uses the notification card's anatomy:
-# a squared status bar, an icon tile, then title over subtitle in sentence case.
+# a squared status bar, a free-standing icon (no tile, Lucas 22:42), then title over subtitle in sentence case.
 #   informational (normal, not full)  notification card at the top centre (console_cues.notice)
-#   prompt (yellow), small and mid    translucent Console panel over the road, warning bar + tile
-#   critical (red), small and mid     translucent red card, white bar + tile
-#   full screen                       deep status ground, large icon tile, wrapped title + subtitle
+#   prompt (yellow), small and mid    translucent Console panel over the road, amber bar + amber icon
+#   critical (red), small and mid     translucent red card, white bar + white icon
+#   full screen                       deep status ground, large icon, wrapped title + subtitle
 PILL_TOP_Y = 24            # level with the speed card
 PILL_SIDE_MARGIN = 560     # fallback when the road view has not set the band
 
 ALERT_RADIUS = 24          # kit PANEL_R
 BAR_W = 16                 # status bar on the left of a card
-TILE = 128                 # icon tile on bottom cards
-TILE_R = 24
+ICON = 120                 # free-standing icon on bottom cards
 TITLE_MID = 68
 SUB_MID = 46
 TITLE_SMALL = 62
-FULL_TILE = 176
+FULL_ICON = 200
 FULL_TITLE = 112
 FULL_SUB = 54
 CARD_MIN_W = 960           # prompt and critical cards: sized to their words, centred over the dock's place
@@ -41,7 +40,7 @@ STATUS_COLOR = {
   AlertStatus.userPrompt: Console.WARNING,
   AlertStatus.critical: Console.DANGER_FILL,
 }
-# Full screen: a deep status ground so the bright icon tile and white text carry the urgency
+# Full screen: a deep status ground so the bright icon and white text carry the urgency
 FULL_GROUND = {
   AlertStatus.normal: Onroad.ALERT_NORMAL,
   AlertStatus.userPrompt: mix(Console.WARNING, Console.FRAME_INK, 0.6),
@@ -167,8 +166,8 @@ class AlertRendererBP(AlertRenderer):
   def _fit_card(self, screen: rl.Rectangle, r: rl.Rectangle, alert: Alert) -> rl.Rectangle:
     """Custom: a card as wide as its words (at least CARD_MIN_W), centred, instead of edge to edge, so it reads
     as one notification above the road rather than a band across it."""
-    tile = min(TILE, r.height - 2 * 32)
-    lead = 32 + BAR_W + 28 + tile + 36
+    icon = min(ICON, r.height - 2 * 24)
+    lead = 32 + BAR_W + 32 + icon + 32
     title, sub = sentence(alert.text1), sentence(alert.text2)
     small = alert.size == AlertSize.small or not sub
     words = measure_text_cached(self._font_semi, title, TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID).x
@@ -205,17 +204,15 @@ class AlertRendererBP(AlertRenderer):
     rl.draw_rectangle_rounded(rect, r, 10, ground)
     rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, edge)
 
-    # Status bar, then the icon tile: tinted status colour with the mark in full colour
+    # Status bar, then the icon on its own in the status colour (white on the red card)
     bar = Onroad.ALERT_TEXT if critical else accent
     b = rl.Rectangle(rect.x + 32, rect.y + 28, BAR_W, rect.height - 56)
     rl.draw_rectangle_rounded(b, roundness(b, Radius.XS), 4, bar)
-    tile = min(TILE, rect.height - 2 * 32)
-    t = rl.Rectangle(b.x + BAR_W + 28, rect.y + (rect.height - tile) / 2, tile, tile)
-    rl.draw_rectangle_rounded(t, roundness(t, TILE_R), 10, with_alpha(bar, 0x38))
-    isz = tile * 0.6
-    cue_icon(alert_icon(alert), t.x + (tile - isz) / 2, t.y + (tile - isz) / 2, isz, bar)
+    isz = min(ICON, rect.height - 2 * 24)
+    ix = b.x + BAR_W + 32
+    cue_icon(alert_icon(alert), ix, rect.y + (rect.height - isz) / 2, isz, bar)
 
-    tx = t.x + tile + 36
+    tx = ix + isz + 32
     max_w = rect.x + rect.width - ALERT_PADDING - tx
     title, sub = sentence(alert.text1), sentence(alert.text2)
     if alert.size == AlertSize.small or not sub:
@@ -238,16 +235,12 @@ class AlertRendererBP(AlertRenderer):
     title = D.wrap(sentence(alert.text1), FULL_TITLE, max_w, max_lines=2, semi=True)
     sub = D.wrap(sentence(alert.text2), FULL_SUB, max_w, max_lines=2) if alert.text2 else []
     title_lh, sub_lh = FULL_TITLE * 1.1, FULL_SUB * 1.25
-    total = FULL_TILE + 48 + len(title) * title_lh + (24 + len(sub) * sub_lh if sub else 0)
+    total = FULL_ICON + 48 + len(title) * title_lh + (24 + len(sub) * sub_lh if sub else 0)
     y = rect.y + (rect.height - total) / 2
     cx = rect.x + rect.width / 2
 
-    t = rl.Rectangle(cx - FULL_TILE / 2, y, FULL_TILE, FULL_TILE)
-    rl.draw_rectangle_rounded(t, roundness(t, 32), 10, accent)
-    isz = FULL_TILE * 0.6
-    mark = Onroad.ALERT_CRITICAL if status == AlertStatus.critical else Console.FRAME_INK
-    cue_icon(alert_icon(alert), t.x + (FULL_TILE - isz) / 2, t.y + (FULL_TILE - isz) / 2, isz, mark)
-    y += FULL_TILE + 48
+    cue_icon(alert_icon(alert), cx - FULL_ICON / 2, y, FULL_ICON, accent)
+    y += FULL_ICON + 48
     for line in title:
       w = measure_text_cached(self._font_semi, line, FULL_TITLE).x
       rl.draw_text_ex(self._font_semi, line, rl.Vector2(cx - w / 2, y), FULL_TITLE, 0, Onroad.ALERT_TEXT)
