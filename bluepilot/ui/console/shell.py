@@ -22,7 +22,6 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.widgets.scroller_tici import Scroller
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.form import FormPage, advanced_mode, set_advanced
@@ -75,24 +74,6 @@ class Page:
   level: str = "basic"                                  # "advanced": listed only in Advanced mode (search still finds it)
 
 
-class ItemsPage(Widget):
-  """A list page made of existing list items (rows moved off the BluePilot panel)."""
-
-  def __init__(self, items: list, on_show: Callable[[], None] | None = None):
-    super().__init__()
-    self._scroller = Scroller(items, line_separator=True, spacing=0)
-    self._on_show = on_show
-
-  def show_event(self):
-    super().show_event()
-    if self._on_show is not None:  # rows whose param can change elsewhere (quick controls) re-read it
-      self._on_show()
-    self._scroller.show_event()
-
-  def _render(self, rect):
-    self._scroller.render(rect)
-
-
 class ConsoleShell(Widget):
   def __init__(self, settings_layout, home: Widget, alerts: Widget | None = None):
     super().__init__()
@@ -116,23 +97,6 @@ class ConsoleShell(Widget):
     self._search_rect: rl.Rectangle | None = None
     self._mode_rects: list[rl.Rectangle] = []
     self._sub_index: list[int] = []
-
-    bp_items = {}
-    bp = self._panels.get(PT.BLUEPILOT) if hasattr(PT, "BLUEPILOT") else None
-    if bp is not None and hasattr(bp.instance, "console_page_items"):
-      bp_items = bp.instance.console_page_items()
-    refresh = getattr(bp.instance, "console_page_refresh", None) if bp is not None else None
-    items = {k: ItemsPage(v, refresh) for k, v in bp_items.items()}
-
-    def panel(dest, title, icon, name, sub=""):
-      pt = getattr(PT, name, None)
-      info = self._panels.get(pt) if pt is not None else None
-      if info is not None:
-        self.register_page(dest, Page(title, icon, info.instance, key=pt, subtitle=sub))
-
-    def item_page(dest, title, icon, name, sub="", level="basic"):
-      if name in items:
-        self.register_page(dest, Page(title, icon, items[name], key=name, subtitle=sub, level=level))
 
     self.register_page(Dest.HOME, Page(tr("Overview"), "grid", home, key="overview", framed=False))
     if alerts is not None:
