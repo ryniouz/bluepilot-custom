@@ -30,7 +30,7 @@ from bluepilot.ui.lib.theme import Console
 
 LIGHTNING = "FORD_F_150_LIGHTNING_MK1"
 KPA_PER_PSI = 6.89476
-TABS = ["Driving", "Alerts", "Guest Mode", "Power"]
+TABS = ["Driving", "Alerts", "Guest", "Power"]
 
 
 def platform_name(fp: str) -> str:
@@ -59,7 +59,7 @@ class VehiclePage(CardPage):
 
   def _render(self, rect: rl.Rectangle):
     self._hits = []
-    left, right = K.split_cols(rect, [0.85, 1.15])
+    left, right = K.split_cols(rect, [0.85, 1.15] if rect.width >= 1600 else [1.0, 1.0])
     left.width -= GAP / 2
     right.x += GAP / 2
     right.width -= GAP / 2
@@ -78,7 +78,9 @@ class VehiclePage(CardPage):
     y = self._title(r, tr("Your truck"), "car")
     p = D.CARD_PAD
     x = r.x + p
-    D.text(D.fit(tr("Ford F-150 Lightning"), D.H1, r.width - 2 * p, semi=True), x, y, D.H1, semi=True)
+    name = tr("Ford F-150 Lightning")
+    size = D.H1 if D.text_w(name, D.H1, semi=True) <= r.width - 2 * p else D.H2
+    D.text(D.fit(name, size, r.width - 2 * p, semi=True), x, y + (D.H1 - size) / 2, size, semi=True)
     y += 76
 
     locked = str(self._get("BPLockedPlatform", LIGHTNING) or "") if has_param(self._params, "BPLockedPlatform") else None
@@ -110,7 +112,7 @@ class VehiclePage(CardPage):
       y = self._toggle_row(r, y, tr("Only drive the Lightning"),
                            tr("Any other car stays passive") if offroad else tr("Change it while parked"), on,
                            lambda: self._put("BPLockedPlatform", "" if on else LIGHTNING), enabled=offroad)
-    self._button_row(r, y, tr("OBD adapter"), tr("Tire pressure, cell temps, 12 V"), tr("Open"),
+    self._button_row(r, y, tr("OBD adapter"), tr("Tires, cell temps, 12 V"), tr("Open"),
                      lambda: self.on_open_obd and self.on_open_obd())
 
   # -- tabs ---------------------------------------------------------------------------------
