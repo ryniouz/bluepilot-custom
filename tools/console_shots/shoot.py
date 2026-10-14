@@ -53,7 +53,14 @@ SCENES: dict[str, str] = {
   "connectivity": "Connect > Status (Wi-Fi, LTE, server and sync, home location)",
   "updates": "System > Updates with an update available from Lucas's repo",
   "calibration": "System > Calibration with a saved calibration and steering lag half learned",
+  "onboarding_welcome": "Console onboarding, welcome step",
+  "onboarding_safety": "Console onboarding, safety notice",
   "onboarding_terms": "Console onboarding, terms step",
+  "onboarding_sunnylink": "Console onboarding, sunnylink consent",
+  "cellular": "Connect > Cellular on LTE (Rogers, band 4), modem details faked",
+  "bluetooth": "Connect > Bluetooth as the PC really is: no adapter",
+  "bluetooth_obd": "Connect > Bluetooth, OBD wizard with a faked adapter and dongle (design preview)",
+  "bluetooth_phone": "Connect > Bluetooth, phone tab with a faked adapter (design preview)",
   "onboarding_guide": "Console onboarding, driving guide (calibration step)",
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
@@ -526,6 +533,17 @@ class Scene:
     ds.deviceState.memoryUsagePercent = 41
     ds.deviceState.maxTempC = 52.0
     ds.deviceState.thermalStatus = log.DeviceState.ThermalStatus.green
+    if getattr(self, "cell", False):  # Console Cellular scene: on LTE with a Canadian carrier
+      ds.deviceState.networkType = log.DeviceState.NetworkType.cell4G
+      ds.deviceState.networkStrength = log.DeviceState.NetworkStrength.moderate
+      ds.deviceState.networkInfo.technology = "FDD LTE"
+      ds.deviceState.networkInfo.operator = "Rogers"
+      ds.deviceState.networkInfo.band = "LTE BAND 4"
+      ds.deviceState.networkInfo.channel = 2175
+      ds.deviceState.networkInfo.state = "CONNECTED"
+      ds.deviceState.networkStats.wwanTx = 18_000_000
+      ds.deviceState.networkStats.wwanRx = 43_000_000
+      ds.deviceState.modemTempC = [41.0, 39.0]
     self.pm.send("deviceState", ds)
 
     ps = m.new_message("pandaStates", 1, valid=True)
@@ -944,7 +962,8 @@ def run_scene(sc: Scene):
   d = default_drive()
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
-              "calibration", "onboarding_terms", "onboarding_guide"):
+              "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
+              "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone"):
     sc.drive = None
   else:
     sc.drive = d
@@ -995,18 +1014,51 @@ def run_scene(sc: Scene):
     sc.main._shell.open_panel("calibration")
     sc.settle()
     sc.shot()
-  elif name in ("onboarding_terms", "onboarding_guide"):
+  elif name.startswith("onboarding_"):
     from bluepilot.ui.console.onboarding import ConsoleOnboarding, _State
     ob = ConsoleOnboarding()
-    if name == "onboarding_guide":
-      ob._state = _State.GUIDE
-      ob._guide._i = 4
-    else:
-      ob._state = _State.TERMS
+    ob._state = {"onboarding_welcome": _State.WELCOME, "onboarding_safety": _State.SAFETY, "onboarding_terms": _State.TERMS,
+                 "onboarding_sunnylink": _State.SUNNYLINK, "onboarding_guide": _State.GUIDE}[name]
+    ob._guide._i = 4
     sc.main._open_shell()
     sc.settle()
     from openpilot.system.ui.lib.application import gui_app
     gui_app.push_widget(ob)
+    sc.settle()
+    sc.shot()
+  elif name == "cellular":
+    import time as _t
+    from bluepilot.ui.lib import modem_info as mi
+    sc.cell = True
+    _seed_drives(sc)
+    sc.put("GsmApn", "ltemobile.apn")
+    snap = mi.ModemSnapshot(sim_present=True, sim_id="89302720412345678901", mcc_mnc="302720", data_connected=True,
+                            imei="861234056789012", modem_version="EG25GGBR07A08M2G", read_at=_t.monotonic() + 3600)
+    mi.modem_info()._snap = snap
+    mi.modem_info().request = lambda force=False: None
+    from bluepilot.ui.lib.net_usage import usage
+    sc.main._open_shell()
+    sc.main._shell.open_panel("cellular")
+    sc.settle()
+    usage().month_bytes = 2_480_000_000
+    sc.settle()
+    sc.shot()
+  elif name in ("bluetooth", "bluetooth_obd", "bluetooth_phone"):
+    from bluepilot.ui.lib import bluetooth as bt
+    if name != "bluetooth":
+      b = bt.bluetooth()
+      b.refresh = lambda: None
+      devs = [bt.BtDevice("00:1D:A5:68:98:8B", "Vgate iCar Pro", paired=True), bt.BtDevice("66:1E:21:00:4F:10", "OBDII"),
+              bt.BtDevice("A4:C1:38:5D:22:9E", "Pixel 8 Pro"), bt.BtDevice("F0:99:B6:12:33:01", "JBL Flip 6")]
+      b._state = bt.BtState(adapter=True, tool=True, powered=True, devices=devs, checked_at=1.0)
+      if name == "bluetooth_obd":
+        bt.save(sc.params, "BPObdDongle", devs[0])
+    sc.main._open_shell()
+    sc.main._shell.open_panel("bluetooth")
+    page = sc.main._shell.current_page().widget
+    page._tab = 1 if name == "bluetooth_obd" else (2 if name == "bluetooth_phone" else 0)
+    if name == "bluetooth_obd":
+      page._obd_step = 1
     sc.settle()
     sc.shot()
   elif name == "updates":

@@ -329,13 +329,15 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
     {"BPLastEvSnapshot", {PERSISTENT, JSON}},
-    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
     {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
-    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},
+    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},  // pinned update branch; empty = UpdaterTargetBranch / current
     {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
     {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
     {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
-    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home  // pinned update branch; empty = UpdaterTargetBranch / current  // one-time switch of IsMetric to km for this build
+    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home
+    {"BPObdDongle", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the chosen Bluetooth OBD dongle
+    {"BPPhoneLink", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the phone picked for the planned Bluetooth link
     // Custom: end
 
     // WiFi Management

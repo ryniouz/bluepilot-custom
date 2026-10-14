@@ -150,8 +150,14 @@ class ConsoleShell(Widget):
     self.connectivity = ConnectivityPage(getattr(net.instance, "_wifi_manager", None) if net is not None else None)
     self.connectivity.on_open_wifi = lambda: self.open_panel(self._wifi_key)
     self.connectivity.on_open_export = lambda: self.open_panel("export")
+    self.connectivity.on_open_uploads = lambda: self.open_panel("drives_offload")
+    self.connectivity.on_open_cellular = lambda: self.open_panel("cellular")
     self.register_page(Dest.CONNECT, Page(tr("Status"), "pulse", self.connectivity, key="connectivity", framed=False))
+    from bluepilot.ui.console.pages.cellular import CellularPage
+    self.register_page(Dest.CONNECT, Page(tr("Cellular"), "cell", CellularPage(self.connectivity._wifi), key="cellular", framed=False))
     panel(Dest.CONNECT, tr("Wi-Fi"), "wifi", "NETWORK", tr("Connect"))
+    from bluepilot.ui.console.pages.bluetooth import BluetoothPage
+    self.register_page(Dest.CONNECT, Page(tr("Bluetooth"), "bluetooth", BluetoothPage(), key="bluetooth", framed=False))
     panel(Dest.CONNECT, tr("sunnylink"), "cloud", "SUNNYLINK", tr("Connect"))
     panel(Dest.CONNECT, tr("Firehose"), "flame", "FIREHOSE", tr("Connect"))
     panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))

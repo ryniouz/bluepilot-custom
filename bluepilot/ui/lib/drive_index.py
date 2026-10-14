@@ -28,6 +28,10 @@ CAMERA_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc", "qcamera.ts")
 VIDEO_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc")
 LOW_RES_FILES = ("qcamera.ts",)
 LOG_FILES = ("rlog", "rlog.zst", "rlog.bz2", "qlog", "qlog.zst", "qlog.bz2")
+# What comma's uploader sends on its own (qlogs always, the small road video on Wi-Fi); it marks each sent file
+# with the user.upload xattr (system/loggerd/uploader.py). Full video and rlogs only go when requested from connect.
+CONNECT_FILES = ("qlog", "qlog.zst", "qcamera.ts")
+CONNECT_ATTR = "user.upload"
 
 
 @dataclass
@@ -64,6 +68,9 @@ class DriveIndex:
   video_bytes: int = 0          # full-res cameras
   low_res_bytes: int = 0        # qcamera
   log_bytes: int = 0            # rlog / qlog
+  connect_pending: int = 0      # files comma's uploader will still send
+  connect_pending_bytes: int = 0
+  connect_sent: int = 0
   sync_known: bool = False     # the export bridge has written synced.json on this device
   scanned_at: float = 0.0      # monotonic; 0 = never
 
@@ -82,6 +89,13 @@ def _split(name: str) -> tuple[str, int] | None:
 def _has_preserve(path: str) -> bool:
   try:
     return os.getxattr(path, PRESERVE_ATTR) == b"1"
+  except (OSError, AttributeError):
+    return False
+
+
+def _connect_sent(path: str) -> bool:
+  try:
+    return os.getxattr(path, CONNECT_ATTR) == b"1"
   except (OSError, AttributeError):
     return False
 
@@ -127,6 +141,7 @@ def scan(log_root: str | None = None) -> DriveIndex:
     size = cam = 0
     locked = False
     cats = [0, 0, 0]
+    connect: list[tuple[str, int]] = []
     try:
       with os.scandir(path) as it:
         for e in it:
@@ -143,9 +158,18 @@ def scan(log_root: str | None = None) -> DriveIndex:
               cats[1] += sz
             elif e.name in LOG_FILES:
               cats[2] += sz
+            if e.name in CONNECT_FILES:
+              connect.append((e.path, sz))
       mtime = os.path.getmtime(path)
     except OSError:
       continue
+    if not locked:
+      for fp, sz in connect:
+        if _connect_sent(fp):
+          idx.connect_sent += 1
+        else:
+          idx.connect_pending += 1
+          idx.connect_pending_bytes += sz
     idx.video_bytes += cats[0]
     idx.low_res_bytes += cats[1]
     idx.log_bytes += cats[2]

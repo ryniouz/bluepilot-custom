@@ -10,7 +10,6 @@ Console Connectivity page (Connect > Status): one look at every link the comma h
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Callable
 
 import pyray as rl
@@ -22,7 +21,7 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import STRENGTH, _param, has_param
-from bluepilot.ui.console.pages.drives import fmt_bytes, keep_until_synced
+from bluepilot.ui.console.pages.drives import fmt_bytes
 from bluepilot.ui.lib import bridge_status as bridge
 from bluepilot.ui.lib.drive_index import indexer
 from bluepilot.ui.lib.home_location import home_location
@@ -56,6 +55,8 @@ class ConnectivityPage(Widget):
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
     self.on_open_wifi: Callable[[], None] | None = None
     self.on_open_export: Callable[[], None] | None = None
+    self.on_open_uploads: Callable[[], None] | None = None
+    self.on_open_cellular: Callable[[], None] | None = None
 
   def show_event(self):
     super().show_event()
@@ -180,11 +181,7 @@ class ConnectivityPage(Widget):
     else:
       bv, bu = fmt_bytes(usage().boot_bytes)
       y = self._row(r, y, tr("Since start-up"), f"{bv} {bu}")
-    if has_param(self._params, "BPRoadTripMode") and _param(self._params, "BPRoadTripMode", False):
-      self._row(r, y, tr("Road Trip uploads"), self._road_trip_text())
-    else:
-      metered = bool(_param(self._params, "GsmMetered", True)) if has_param(self._params, "GsmMetered") else True
-      self._row(r, y, tr("Uploads on LTE"), tr("Only small logs") if metered else tr("Allowed"))
+    self._button(r, tr("Cellular settings"), lambda: self.on_open_cellular and self.on_open_cellular())
 
   def data_used(self) -> tuple[str, str, rl.Color | None]:
     """'Data this month' row: the bridge's count (with its limit) when it runs, else the UI's own."""
@@ -233,30 +230,16 @@ class ConnectivityPage(Widget):
     return tr("Your own server isn't set up yet"), Console.TEXT_GHOST, ""
 
   def _server_card(self, r: rl.Rectangle, ds):
+    from bluepilot.ui.lib import upload_status as us
     status, color, host = self.server_state()
-    y = self._head(r, tr("Server and sync"), None, status, color)
-    D.text(D.fit(host or tr("Coming with the self-hosted services"), D.LABEL, r.width - 2 * D.CARD_PAD - 36),
+    y = self._head(r, tr("Uploads and sync"), None, status, color)
+    D.text(D.fit(host or tr("Citadel server comes with the self-hosted services"), D.LABEL, r.width - 2 * D.CARD_PAD - 36),
            r.x + D.CARD_PAD + 36, y - 30, D.LABEL, Console.TEXT_MUTED)
     y += 24
-    ping = int(getattr(ds, "lastAthenaPingTime", 0)) if ds is not None else 0
-    if has_param(self._params, "BPCommaConnect") and not _param(self._params, "BPCommaConnect", True):
-      connect, cc = tr("Turned off"), Console.TEXT_MUTED
-    elif ping == 0:
-      connect, cc = tr("Offline"), Console.TEXT_MUTED
-    elif time.monotonic_ns() - ping < 80_000_000_000:
-      connect, cc = tr("Online"), Console.SUCCESS
-    else:
-      connect, cc = tr("Not reachable"), Console.WARNING
-    y = self._row(r, y, tr("comma connect"), connect, cc)
     idx = indexer().index
-    if idx.sync_known or (has_param(self._params, "BPBridgeEnabled") and _param(self._params, "BPBridgeEnabled", False)):
-      waiting = sum(1 for d in idx.drives if not d.synced and not d.recording)
-      y = self._row(r, y, tr("Citadel sync"), tr("Up to date") if waiting == 0 else f"{waiting} " + tr("drives waiting"),
-                    Console.SUCCESS if waiting == 0 else Console.WARNING)
-      self._row(r, y, tr("Keep until synced"), tr("On") if keep_until_synced(self._params) else tr("Off"))
-    else:
-      self._row(r, y, tr("Citadel sync"), tr("Data export is off"), Console.TEXT_MUTED)
-      self._button(r, tr("Data export"), lambda: self.on_open_export and self.on_open_export())
+    for svc in (us.comma_connect(self._params, idx), us.citadel_live(self._params), us.citadel_sync(self._params, idx)):
+      y = self._row(r, y, svc.name, svc.state, svc.color)
+    self._hits.append((r, lambda: self.on_open_uploads and self.on_open_uploads()))
 
   def _home_card(self, r: rl.Rectangle):
     h = home_location()

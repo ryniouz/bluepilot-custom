@@ -247,6 +247,12 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     _arc(12, 24, 9, 200, 340, x, y, s, w, color)
   elif name == "chevron":
     _line([(9, 5), (16, 12), (9, 19)], x, y, s, w, color)
+  elif name == "cell":  # cellular: four rising bars
+    for i, h in enumerate((5, 9, 13, 17)):
+      bx = 4.5 + i * 4.5
+      _line([(bx, 21), (bx, 21 - h)], x, y, s, w, color)
+  elif name == "bluetooth":
+    _line([(6.5, 7.5), (17, 16.5), (12, 21), (12, 3), (17, 7.5), (6.5, 16.5)], x, y, s, w, color)
   elif name == "check":
     _line([(4.5, 12.5), (9.5, 17.5), (19.5, 6.5)], x, y, s, w, color)
   elif name == "close":

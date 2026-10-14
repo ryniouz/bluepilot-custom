@@ -12,20 +12,20 @@ All three read bluepilot.ui.lib.drive_index, which scans the disk on a backgroun
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pyray as rl
 
-import cereal.messaging as messaging
 from openpilot.common.params import Params
 from openpilot.system.ui.lib.application import MouseEvent
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
-from bluepilot.ui.console.home import _param, has_param, network_status
+from bluepilot.ui.console.home import _param, has_param
 from bluepilot.ui.lib import bridge_status
-from bluepilot.ui.lib.drive_index import Drive, DriveIndex, indexer
+from bluepilot.ui.lib.drive_index import Drive, indexer
 from bluepilot.ui.lib.theme import Console, roundness
 
 GAP = 32
@@ -219,114 +219,70 @@ class DrivesPage(Widget):
 
 
 class OffloadPage(Widget):
-  """comma connect uploads on the left, the Citadel sync on the right."""
+  """comma connect on the left; Citadel's live upload and home sync on the right. Each has its own status."""
 
   def __init__(self):
     super().__init__()
     self._params = Params()
-    self._sm: messaging.SubMaster | None = None
+    self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
 
   def show_event(self):
     super().show_event()
     indexer().request(force=True)
 
-  def _uploader(self):
-    if self._sm is None:
-      try:
-        self._sm = messaging.SubMaster(["uploaderState"])
-      except Exception:
-        return None
-    try:
-      self._sm.update(0)
-      return self._sm["uploaderState"] if self._sm.seen["uploaderState"] else None
-    except Exception:
-      return None
-
   def _render(self, rect: rl.Rectangle):
+    from bluepilot.ui.lib import upload_status as us
+    self._hits = []
     indexer().request()
     idx = indexer().index
     left, right = K.split_cols(rect, [1, 1])
     left.width -= GAP / 2
     right.x += GAP / 2
     right.width -= GAP / 2
-    self._connect_card(left)
-    self._citadel_card(right, idx)
+    rt, rb = K.split_rows(right, [1, 1])
+    rt.height -= GAP / 2
+    rb.y += GAP / 2
+    rb.height -= GAP / 2
+    service_card(left, "cloud", us.comma_connect(self._params, idx), row_h=92)
+    live = us.citadel_live(self._params)
+    service_card(rt, "pulse", live)
+    if has_param(self._params, "BPRoadTripMode") and us.citadel_configured(self._params):
+      on = bool(_param(self._params, "BPRoadTripMode", False))
+      tg = D.toggle(rt.x + rt.width - D.CARD_PAD - 104, rt.y + D.CARD_PAD - 8, on)
+      self._hits.append((tg, lambda: self._params.put_bool("BPRoadTripMode", not on)))
+    service_card(rb, "export", us.citadel_sync(self._params, idx))
 
-  def _card_head(self, r: rl.Rectangle, ic: str, title: str, status: str, color: rl.Color) -> float:
-    D.card(r)
-    p = D.CARD_PAD
-    D.icon(ic, r.x + p, r.y + p - 2, 44, Console.TEXT_SECONDARY)
-    D.text(title, r.x + p + 64, r.y + p, D.H2, semi=True)
-    y = r.y + p + 84
-    D.dot(r.x + p + 10, y + D.BODY / 2 + 2, 10, color)
-    D.text(D.fit(status, D.BODY, r.width - 2 * p - 36, semi=True), r.x + p + 36, y, D.BODY, semi=True)
-    return y + 72
+  def _handle_mouse_release(self, pos) -> bool:
+    for r, fn in self._hits:
+      if D.hit(r, pos):
+        fn()
+        return True
+    return False
 
-  def _rows(self, r: rl.Rectangle, y: float, rows: list[tuple[str, str]]):
-    p = D.CARD_PAD
-    for label, value in rows:
-      if y + D.BODY > r.y + r.height - p:
-        break
-      K.hline(r.x + p, r.x + r.width - p, y)
-      D.text(label, r.x + p, y + 26, D.BODY, Console.TEXT_MUTED)
-      D.text_right(D.fit(value, D.BODY, r.width * 0.5, semi=True), r.x + r.width - p, y + 26, D.BODY, semi=True)
-      y += 92
 
-  def _connect_card(self, r: rl.Rectangle):
-    up = self._uploader()
-    net = network_status()
-    online = net is not None and net[0] != tr("Offline")
-    if up is None:
-      status, color = tr("Uploader not running"), Console.TEXT_GHOST
-      rows = []
-    else:
-      count = int(up.immediateQueueCount) + int(up.rawQueueCount)
-      size = float(up.immediateQueueSize) + float(up.rawQueueSize)
-      if count == 0:
-        status, color = tr("Everything is uploaded"), Console.SUCCESS
-      elif online:
-        status, color = tr("Uploading"), Console.ACCENT
-      else:
-        status, color = tr("Waiting for a connection"), Console.WARNING
-      v, u = fmt_bytes(size)
-      rows = [(tr("Waiting to upload"), f"{count} " + (tr("file") if count == 1 else tr("files")) + f" · {v} {u}")]
-      if up.lastFilename:
-        rows.append((tr("Last upload"), f"{float(up.lastSpeed):.1f} MB/s"))
-    rows.append((tr("Connection"), net[0] if net is not None else "–"))
-    y = self._card_head(r, "cloud", tr("comma connect"), status, color)
-    self._rows(r, y, rows)
-    p = D.CARD_PAD
-    for i, ln in enumerate(D.wrap(tr("Driving logs and the small road video upload on Wi-Fi while parked."), D.LABEL,
-                                  r.width - 2 * p, 2)):
-      D.text(ln, r.x + p, r.y + r.height - p - 80 + i * 40, D.LABEL, Console.TEXT_MUTED)
-
-  def _citadel_card(self, r: rl.Rectangle, idx: DriveIndex):
-    p = D.CARD_PAD
-    enabled = bool(_param(self._params, "BPBridgeEnabled", False)) if has_param(self._params, "BPBridgeEnabled") else False
-    if not enabled and not idx.sync_known:
-      self._card_head(r, "export", tr("Citadel sync"), tr("Data export is off"), Console.TEXT_GHOST)
-      y = r.y + p + 180
-      for ln in D.wrap(tr("Turn on Data export in Connect to let Citadel pull every drive. Until then, drives only go to comma connect."),
-                       D.BODY, r.width - 2 * p, 4):
-        D.text(ln, r.x + p, y, D.BODY, Console.TEXT_SECONDARY)
-        y += 50
-      return
-    done = [d for d in idx.drives if not d.recording]
-    synced = sum(1 for d in done if d.synced)
-    waiting = len(done) - synced
-    if waiting == 0:
-      status, color = tr("Citadel has every drive"), Console.SUCCESS
-    else:
-      status, color = (tr("1 drive waiting") if waiting == 1 else f"{waiting} " + tr("drives waiting")), Console.WARNING
-    y = self._card_head(r, "export", tr("Citadel sync"), status, color)
-    frac = 1.0 - (idx.unsynced_bytes / idx.drive_bytes) if idx.drive_bytes else 1.0
-    K.bar(rl.Rectangle(r.x + p, y, r.width - 2 * p, K.BAR_H), frac, Console.SUCCESS)
-    y += K.BAR_H + 40
-    v, u = fmt_bytes(idx.unsynced_bytes)
-    keep = keep_until_synced(self._params)
-    self._rows(r, y, [(tr("Synced drives"), f"{synced} / {len(done)}"),
-                      (tr("Not synced"), f"{v} {u}"),
-                      (tr("Keep until synced"), tr("On") if keep else tr("Off"))])
+def service_card(r: rl.Rectangle, ic: str, svc, row_h: float = 72):
+  """One upload service: icon and name, a status line, its rows, and a note at the bottom when there is room."""
+  D.card(r)
+  p = D.CARD_PAD
+  D.icon(ic, r.x + p, r.y + p - 2, 44, Console.TEXT_SECONDARY)
+  D.text(svc.name, r.x + p + 64, r.y + p, D.H2, semi=True)
+  y = r.y + p + 76
+  D.dot(r.x + p + 10, y + D.BODY / 2 + 2, 10, svc.color)
+  D.text(D.fit(svc.state, D.BODY, r.width - 2 * p - 36, semi=True), r.x + p + 36, y, D.BODY, semi=True)
+  y += 64
+  note_lines = D.wrap(svc.note, D.LABEL, r.width - 2 * p, 2) if svc.note else []
+  bottom = r.y + r.height - p - len(note_lines) * 40 - (16 if note_lines else 0)
+  for label, value in svc.rows:
+    if y + row_h > bottom + 8:
+      break
+    K.hline(r.x + p, r.x + r.width - p, y)
+    ty = y + (row_h - D.BODY) / 2 - 2
+    D.text(label, r.x + p, ty, D.BODY, Console.TEXT_MUTED)
+    D.text_right(D.fit(value, D.BODY, r.width * 0.55, semi=True), r.x + r.width - p, ty, D.BODY, semi=True)
+    y += row_h
+  for i, ln in enumerate(note_lines):
+    if y + 16 + i * 40 + D.LABEL <= r.y + r.height - p:
+      D.text(ln, r.x + p, r.y + r.height - p - (len(note_lines) - i) * 40 + 6, D.LABEL, Console.TEXT_MUTED)
 
 
 @dataclass
