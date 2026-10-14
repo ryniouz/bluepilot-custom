@@ -124,6 +124,7 @@ SCENES.update({
   "drive_lead_floor": "Lead speed beside the car, floor-pad marker candidate",
   "drive_lead_corners": "Lead speed beside the car, corner-frame marker candidate",
   "drive_lead_chevron": "Lead speed beside the car, roof-chevron marker candidate",
+  "drive_plugged": "Ignition on while DC charging, charging screen minimized: power tile reads Charging",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
@@ -131,7 +132,7 @@ SCENES.update({
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                     "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                    "drive_lead_corners", "drive_lead_chevron", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -912,7 +913,7 @@ def scene_params(name: str) -> dict:
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                 "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                "drive_lead_corners", "drive_lead_chevron")
+                "drive_lead_corners", "drive_lead_chevron", "drive_plugged")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -956,6 +957,9 @@ def setup_drive_scene(name: str, d: dict):
     _inject_popup()
   elif name == "drive_lead":
     d.update(lead_d=24.0, lead_v_rel=-4.2)
+  elif name == "drive_plugged":
+    d.update(battery=dict(soc=62.0, volts=388.0, amps=-746.0), v_ego=0.0, enabled=False, state="disabled", lead=False)
+    _inject_charge("charging_dc")
   elif name.startswith("drive_lead_"):
     d.update(lead_d=24.0, lead_v_rel=-4.2)
   elif name == "drive_steer_only":
@@ -1283,6 +1287,9 @@ def run_scene(sc: Scene):
     if name == "drive_road_settings":  # stream B
       sc.main._quick.open()
       sc.main._quick._page = "road"
+      sc.step(max(20, sc.frames // 4))
+    if name == "drive_plugged":  # stream B: minimize the charging screen back to the drive view
+      sc.main._on_charging_clicked()
       sc.step(max(20, sc.frames // 4))
     if name == "drive_qc_drag":  # stream B: hold the sheet where a finger would leave it
       q = sc.main._quick
