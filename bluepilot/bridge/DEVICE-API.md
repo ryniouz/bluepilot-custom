@@ -60,7 +60,7 @@ Body `{ "segments": ["00000123--a1b2c3d4e5--0", ...], "level": "logs|full" }`. M
 Latest `thumbnail` JPEG from the road camera (onroad only, ~1/min upstream rate). 404 when none. (Full-res stills come from video files.)
 
 ### `GET /v1/params?keys=a,b` and `PUT /v1/params/<key>`
-Read any key in the allowlist; write `{ "value": ... }` only when **offroad** (`IsOnroad` false), else 409 `{error:"onroad"}`. Allowlist = BluePilot/sunnypilot display and tuning keys (see `bluepilot/bridge/params_allowlist.py`). Never writes safety or calibration keys.
+Read any key in the allowlist, returned as `{ "params": { key: value }, "writable": [keys] }`; write `{ "value": ... }` only when **offroad** (`IsOnroad` false), else 409 `{error:"onroad"}`. Allowlist = BluePilot/sunnypilot display and tuning keys (see `bluepilot/bridge/params_allowlist.py`). Never writes safety or calibration keys.
 
 ### `GET /v1/settings` and `PUT /v1/settings` (remote settings, like sunnypilot connect)
 `GET` returns `{ onroad, editable, groups: [{ id, title, settings: [{ key, type: "bool|choice|int|float", title, description, options?: [{value,label}], min?, max?, step?, unit?, value }] }] }`. Groups: driving, speed_limit, lateral, longitudinal, display, device (metadata in `bluepilot/bridge/settings_schema.py`).
