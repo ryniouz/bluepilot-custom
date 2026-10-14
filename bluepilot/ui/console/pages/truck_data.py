@@ -28,7 +28,7 @@ BATTERY = [("HvbSoh", "Health"), ("HvbCapAh", "Capacity"), ("HvbSocD", "Charge")
            ("HvbT", "Temperature"), ("HvbCit", "Coolant in"), ("HvbCHP", "Coolant heater"), ("HvbAvgModV", "Modules avg"),
            ("HvbMinModV", "Modules low"), ("HvbAge", "Age"), ("HvbSoc", "Charge (cells)")]
 CHARGER = [("HvbV", "Pack"), ("HvbA", "Current"), ("ChgOV", "Output"), ("ChgInPwr", "Input power"), ("ChgMaxP", "Max power"),
-           ("ChgACT", "Port temperature"), ("ACInV", "AC voltage"), ("ACInA", "AC current"), ("ACInF", "AC frequency"),
+           ("ChgACT", "Port temp"), ("ACInV", "AC voltage"), ("ACInA", "AC current"), ("ACInF", "AC frequency"),
            ("PilotDC", "Pilot duty")]
 LOW_VOLT = [("LvV", "Voltage"), ("LvSoc", "Charge")]
 TIRES = [("TireLF", "Front left"), ("TireRF", "Front right"), ("TireLR", "Rear left"), ("TireRR", "Rear right")]
