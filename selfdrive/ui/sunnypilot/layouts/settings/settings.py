@@ -20,13 +20,12 @@ from openpilot.selfdrive.ui.sunnypilot.layouts.settings.network import NetworkUI
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.osm import OSMLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.software import SoftwareLayoutSP
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.steering import SteeringLayout
-from openpilot.selfdrive.ui.sunnypilot.layouts.settings.sunnylink import SunnylinkLayout
+# Custom: sunnylink and BP web portal panels are not built (see the panel list below)
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.trips import TripsLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.vehicle import VehicleLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.visuals import VisualsLayout
 # BluePilot: START - BP settings tab imports
 from openpilot.selfdrive.ui.bp.layouts.settings.bluepilot import BluePilotLayout
-from openpilot.selfdrive.ui.bp.layouts.settings.bp_web_panel import BPWebPanel
 # BluePilot: END - BP settings tab imports
 from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.system.ui.lib.multilang import tr_noop
@@ -119,7 +118,7 @@ class SettingsLayoutSP(OP.SettingsLayout):
     self._panels = {
       OP.PanelType.DEVICE: PanelInfo(tr_noop("Device"), DeviceLayoutSP(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_home.png"),
       OP.PanelType.NETWORK: PanelInfo(tr_noop("Network"), NetworkUISP(wifi_manager), icon="icons/network.png"),
-      OP.PanelType.SUNNYLINK: PanelInfo(tr_noop("sunnylink"), SunnylinkLayout(), icon="icons/wifi_strength_full.png"),
+      # Custom: no sunnylink panel; Citadel Auto OS links through its own services (sunnylinkd is off too)
       OP.PanelType.TOGGLES: PanelInfo(tr_noop("Toggles"), TogglesLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_toggle.png"),
       OP.PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayoutSP(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_software.png"),
       OP.PanelType.MODELS: PanelInfo(tr_noop("Models"), ModelsLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_models.png"),
@@ -134,7 +133,7 @@ class SettingsLayoutSP(OP.SettingsLayout):
       OP.PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_firehose.png"),
       OP.PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayoutSP(), icon="icons/shell.png"),
       OP.PanelType.BLUEPILOT: PanelInfo(tr_noop("BluePilot"), BluePilotLayout(), icon="icons/chffr_wheel.png"),  # BluePilot: START/END - BP settings panel entry
-      OP.PanelType.BP_PORTAL: PanelInfo(tr_noop("BP Portal"), BPWebPanel(), icon="icons/network.png"),  # BluePilot: BP Web Portal panel
+      # Custom: no web portal panel; the portal is a section of Console Connect > Data export
     }
 
   def _draw_sidebar(self, rect: rl.Rectangle):

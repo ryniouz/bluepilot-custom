@@ -191,10 +191,13 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.bluetooth import BluetoothPage
     self.bluetooth = BluetoothPage()
     self.register_page(Dest.CONNECT, Page(tr("Bluetooth"), "bluetooth", self.bluetooth, key="bluetooth", framed=False))
-    panel(Dest.CONNECT, tr("sunnylink"), "cloud", "SUNNYLINK", tr("Connect"))
-    panel(Dest.CONNECT, tr("Firehose"), "flame", "FIREHOSE", tr("Connect"))
-    panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))
-    item_page(Dest.CONNECT, tr("Data export"), "export", "export", tr("Connect"))
+    # sunnylink is gone (Citadel has its own link); the web portal is a section of Data export
+    from bluepilot.ui.console.pages.export import ExportPage
+    self.register_page(Dest.CONNECT, Page(tr("Data export"), "export", ExportPage(), key="export", framed=False))
+    from bluepilot.ui.console.pages.firehose import FirehosePage
+    fh = self._panels.get(getattr(PT, "FIREHOSE", None))
+    self.register_page(Dest.CONNECT, Page(tr("Firehose"), "flame", FirehosePage(getattr(fh, "instance", None)),
+                                          key=getattr(PT, "FIREHOSE", "firehose"), framed=False))
 
     # System: Updates (the old Software page merged in), Truck, Device, Calibration, Storage, Maps, Developer, About
     from bluepilot.ui.console.pages.updates import UpdatesPage

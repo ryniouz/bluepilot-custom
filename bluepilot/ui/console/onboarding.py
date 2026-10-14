@@ -1,5 +1,5 @@
 """
-Console first-run setup: welcome, safety notice, terms, sunnylink consent and a short driving guide,
+Console first-run setup: welcome, safety notice, terms and a short driving guide,
 drawn in the Console theme instead of the stock pages and full-screen training images.
 
 Writes the same params as the stock OnboardingWindow and sunnypilot's consent page (HasAcceptedTerms,
@@ -161,8 +161,9 @@ class _State(IntEnum):
   DECLINE = 6
 
 
-FLOW = [(_State.WELCOME, "Welcome"), (_State.SAFETY, "Safety"), (_State.TERMS, "Terms"), (_State.SUNNYLINK, "sunnylink"),
-        (_State.GUIDE, "Guide")]
+# Custom: no sunnylink step. Citadel Auto OS links through its own services and sunnylinkd doesn't run
+# (system/manager/process_config.py); the consent params are left as they are.
+FLOW = [(_State.WELCOME, "Welcome"), (_State.SAFETY, "Safety"), (_State.TERMS, "Terms"), (_State.GUIDE, "Guide")]
 
 SAFETY_LINES = [
   "You are always the driver. Keep your eyes on the road and your hands ready to steer.",
@@ -173,7 +174,7 @@ SAFETY_LINES = [
 
 
 def _flow_bar(rect: rl.Rectangle, state: _State):
-  """Where the person is in the whole setup: five labelled squared segments across the top."""
+  """Where the person is in the whole setup: labelled squared segments across the top."""
   idx = {s: i for i, (s, _) in enumerate(FLOW)}
   cur = idx.get(_State.SUNNYLINK if state == _State.SUNNYLINK_OFF else state, 0)
   n, gap = len(FLOW), 12
@@ -186,7 +187,7 @@ def _flow_bar(rect: rl.Rectangle, state: _State):
 
 
 class ConsoleOnboarding(Widget):
-  """First-run setup after install: welcome, safety notice, terms, sunnylink consent, driving guide.
+  """First-run setup after install: welcome, safety notice, terms, driving guide.
 
   The OS's own setup (Wi-Fi, software URL, download) runs before this and belongs to AGNOS, not the fork."""
 
@@ -195,7 +196,7 @@ class ConsoleOnboarding(Widget):
     p = ui_state.params
     self._accepted = p.get("HasAcceptedTerms") == terms_version and p.get("HasAcceptedTermsSP") == terms_version_sp
     self._trained = p.get("CompletedTrainingVersion") == training_version
-    self._sunnylink_done = p.get("CompletedSunnylinkConsentVersion") in {sunnylink_consent_version, sunnylink_consent_declined}
+    self._sunnylink_done = True  # Custom: the sunnylink step is gone (see FLOW)
     self._guide = ConsoleTraining(on_done=self._on_guide_done)
     self._hits: list[tuple[rl.Rectangle | None, Callable[[], None]]] = []
     if not self._accepted:

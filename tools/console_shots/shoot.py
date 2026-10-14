@@ -59,8 +59,15 @@ SCENES: dict[str, str] = {
   "onboarding_welcome": "Console onboarding, welcome step",
   "onboarding_safety": "Console onboarding, safety notice",
   "onboarding_terms": "Console onboarding, terms step",
-  "onboarding_sunnylink": "Console onboarding, sunnylink consent",
-  "cellular": "Connect > Cellular on LTE (Rogers, band 4), modem details faked",
+  "cellular": "Connect > Cellular on LTE (Rogers, band 4): 2.48 of 5 GB, breakdown from a faked bridge status",
+  "cellular_limit": "Connect > Cellular near the monthly limit (4.62 of 5 GB)",
+  "cellular_over": "Connect > Cellular over the monthly limit (5.4 of 5 GB)",
+  "cellular_empty": "Connect > Cellular with nothing used yet this month (bridge running)",
+  "cellular_wifi": "Connect > Cellular on Wi-Fi: LTE on standby, breakdown still shown",
+  "cellular_basic": "Connect > Cellular without the data export bridge: month total only, no breakdown",
+  "firehose": "Connect > Firehose on home Wi-Fi with 1284 segments in training",
+  "firehose_lte": "Connect > Firehose on metered LTE (waiting for Wi-Fi)",
+  "export": "Connect > Data export with the web portal on (address and QR code)",
   "bluetooth": "Connect > Bluetooth as the PC really is: no adapter",
   "bluetooth_obd": "Connect > Bluetooth, OBD wizard connect step (Wi-Fi adapter), no Bluetooth as on a real comma",
   "bluetooth_obd_bt": "Connect > Bluetooth, OBD wizard with Bluetooth chosen on a comma without Bluetooth",
@@ -600,6 +607,7 @@ class Scene:
     ds.deviceState.memoryUsagePercent = 41
     ds.deviceState.maxTempC = 52.0
     ds.deviceState.thermalStatus = log.DeviceState.ThermalStatus.green
+    ds.deviceState.networkMetered = bool(getattr(self, "metered", False))
     if getattr(self, "cell", False):  # Console Cellular scene: on LTE with a Canadian carrier
       ds.deviceState.networkType = log.DeviceState.NetworkType.cell4G
       ds.deviceState.networkStrength = log.DeviceState.NetworkStrength.moderate
@@ -1124,7 +1132,8 @@ def run_scene(sc: Scene):
               "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "calibration_setup", "calibration_invalid", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
-              "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
+              "onboarding_safety", "cellular", "cellular_limit", "cellular_over", "cellular_empty", "cellular_wifi",
+              "cellular_basic", "firehose", "firehose_lte", "export", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
               "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
@@ -1184,7 +1193,7 @@ def run_scene(sc: Scene):
     from bluepilot.ui.console.onboarding import ConsoleOnboarding, _State
     ob = ConsoleOnboarding()
     ob._state = {"onboarding_welcome": _State.WELCOME, "onboarding_safety": _State.SAFETY, "onboarding_terms": _State.TERMS,
-                 "onboarding_sunnylink": _State.SUNNYLINK, "onboarding_guide": _State.GUIDE}[name]
+                 "onboarding_guide": _State.GUIDE}[name]
     ob._guide._i = 4
     sc.main._open_shell()
     sc.settle()
@@ -1192,10 +1201,11 @@ def run_scene(sc: Scene):
     gui_app.push_widget(ob)
     sc.settle()
     sc.shot()
-  elif name == "cellular":
+  elif name.startswith("cellular"):
     import time as _t
     from bluepilot.ui.lib import modem_info as mi
-    sc.cell = True
+    sc.cell = name != "cellular_wifi"
+    sc.metered = sc.cell
     _seed_drives(sc)
     sc.put("GsmApn", "ltemobile.apn")
     snap = mi.ModemSnapshot(sim_present=True, sim_id="89302720412345678901", mcc_mnc="302720", data_connected=True,
@@ -1203,10 +1213,37 @@ def run_scene(sc: Scene):
     mi.modem_info()._snap = snap
     mi.modem_info().request = lambda force=False: None
     from bluepilot.ui.lib.net_usage import usage
+    GB = 1_000_000_000
+    cats = {"cellular": (2.48 * GB, 5 * GB, (1.21, 0.04, 0.31, 0.06)),
+            "cellular_limit": (4.62 * GB, 5 * GB, (2.9, 0.11, 0.84, 0.12)),
+            "cellular_over": (5.4 * GB, 5 * GB, (3.3, 0.12, 0.95, 0.14)),
+            "cellular_empty": (0, 0, (0, 0, 0, 0)),
+            "cellular_wifi": (1.07 * GB, 0, (0.52, 0.0, 0.21, 0.03))}.get(name)
+    if cats is not None:
+      month, limit, (cit, com, live, link) = cats
+      _fake_bridge({"cell": {"monthBytes": int(month), "todayBytes": 0, "monthStart": "2026-10-01"},
+                    "categories": {"citadel": int(cit * GB), "commaConnect": int(com * GB), "live": int(live * GB),
+                                   "link": int(link * GB)},
+                    "limitBytes": int(limit), "overLimit": bool(limit) and month >= limit})
     sc.main._open_shell()
     sc.main._shell.open_panel("cellular")
     sc.settle()
     usage().month_bytes = 2_480_000_000
+    sc.settle()
+    sc.shot()
+  elif name in ("firehose", "firehose_lte", "export"):
+    if name == "firehose_lte":
+      sc.cell = sc.metered = True
+    if name == "export":
+      sc.put("EnableWebRoutesServer", True)
+    sc.main._open_shell()
+    sc.main._shell.open_panel("export" if name == "export" else
+                              next(p.key for p in sc.main._shell.pages(4) if p.title == "Firehose"))
+    page = sc.main._shell.current_page().widget
+    if name.startswith("firehose") and getattr(page, "_src", None) is not None:
+      page._src._segment_count = 1284
+    if name == "export":
+      page._local_ip = lambda: "192.168.1.42"
     sc.settle()
     sc.shot()
   elif name == "bluetooth_obd_live":
@@ -1591,6 +1628,15 @@ def _fake_guest_mode():
   has, get = home.has_param, home._param
   home.has_param = lambda params, key: key in fake or has(params, key)
   home._param = lambda params, key, default=None: fake[key] if key in fake else get(params, key, default)
+
+
+def _fake_bridge(usage: dict):
+  """The data export bridge's status file, as if bp_bridge were running (only `usage` filled in)."""
+  import datetime as _dt
+  import time as _t
+  from bluepilot.ui.lib import bridge_status as bs
+  bs._cache = {"t": (_dt.datetime.now(_dt.UTC) + _dt.timedelta(hours=1)).isoformat(), "usage": usage}
+  bs._read_at = _t.monotonic() + 1e9
 
 
 def _seed_drives(sc):
