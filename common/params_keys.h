@@ -345,7 +345,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPThemeAutoSeasonal", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPRainbowLines", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
-    {"BPRoadView", {PERSISTENT | BACKUP, INT, "375"}},
+    {"BPRoadView", {PERSISTENT | BACKUP, INT, "8567"}},  // Custom: road view preset Standard (bits 13-15) + the old default switches
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     // BluePilot: No static defaults; the first active UI persists its matching device styles (C4=0, C3X=1).
     {"BPSteeringWheelIconStyle", {PERSISTENT | BACKUP, INT}},

@@ -176,7 +176,7 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
         x, y = details.x - 24 - LEAD_CARD_W, details.y
       else:
         x, y = self._hud_renderer.lead_card_pos(ui_rect, LEAD_CARD_W)
-      draw_lead_card(x, y, lead, road_prefs.value, ui_state.is_metric, self.model_renderer.lead_alpha)
+      draw_lead_card(x, y, lead, road_prefs.shown, ui_state.is_metric, self.model_renderer.lead_alpha)
 
     bp_ui_log.scissor("AugRoadView", "reset (defensive)")
     # Defensive: re-establish scissor before drawing driver state. Some HUD widgets (e.g. speed

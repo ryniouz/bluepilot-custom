@@ -7,10 +7,11 @@ Same params as before; rows whose param this build lacks are left out.
 from __future__ import annotations
 
 from openpilot.selfdrive.ui.bp.onroad.road_view import (LC_STYLE_LABELS, LC_STYLES, LEAD_STYLE_LABELS, LEAD_STYLES, LC_MASK,
-                                                        LC_SHIFT, MARKER_MASK, MARKER_SHIFT, OPTIONS, road_prefs)
+                                                        LC_SHIFT, MARKER_MASK, MARKER_SHIFT, OPTIONS, PRESET_ORDER,
+                                                        PRESETS, road_prefs)
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
-from bluepilot.ui.console.form import Choice, Section, Toggle
+from bluepilot.ui.console.form import Choice, Note, Section, Toggle
 from bluepilot.ui.console.pages.drive import DrivePage
 
 ROAD_SUBS = {
@@ -23,6 +24,7 @@ ROAD_SUBS = {
   "Lane lines": "Your lane",
   "Next lanes": "The lanes beside you",
   "Road edges": "Curbs and road edges",
+  "Large speed": "A much bigger speed on the speed card",
 }
 
 
@@ -52,8 +54,16 @@ class DrivingScreenPage(DrivePage):
 
   def sections(self):
     v = road_prefs.value
+    order = list(PRESET_ORDER)
+    preset = road_prefs.preset
     road_rows: list = [
-      Toggle(tr(label), tr(ROAD_SUBS.get(label, "")), bool(v & bit), lambda b=bit: road_prefs.toggle(b))
+      Choice(tr("Style"), [tr(PRESETS[i][1]) for i in order], order.index(preset),
+             lambda k: road_prefs.set_preset(order[k])),
+    ]
+    if preset:
+      road_rows.append(Note(tr(PRESETS[preset][2]) + ". " + tr("Change any switch to make it your own.")))
+    road_rows += [
+      Toggle(tr(label), tr(ROAD_SUBS.get(label, "")), road_prefs.on(bit), lambda b=bit: road_prefs.toggle(b))
       for bit, label in OPTIONS
     ]
     marker = (v & MARKER_MASK) >> MARKER_SHIFT

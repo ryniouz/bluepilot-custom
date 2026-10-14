@@ -10,8 +10,9 @@ Console road view: what the driving screen draws over the camera, and the lead v
   lead card    a fixed card under the experimental-mode button: distance, lead speed, time gap,
                relative speed and a time-gap bar
 
-What shows is chosen in the quick-controls sheet ("Road view") and stored as a bitmask in the
-BPRoadView param.
+What shows is picked as a preset (Standard, Large speed, Clean, Detailed) or Custom, in the quick-controls
+sheet ("Road view") or Screen > Road view, and stored as a bitmask in the BPRoadView param: the preset in
+bits 13-15, the Custom switches in the low bits (kept while a preset is on, so Custom comes back as it was).
 """
 
 from __future__ import annotations
@@ -42,9 +43,30 @@ MARKER_SHIFT = 9          # bits 9-10: lead marker style, an index into LEAD_STY
 MARKER_MASK = 0b11 << MARKER_SHIFT
 LC_SHIFT = 11             # bits 11-12: lane change cue, an index into LC_STYLES
 LC_MASK = 0b11 << LC_SHIFT
+PRESET_SHIFT = 13         # bits 13-15: an index into PRESETS (0 = Custom, the low bits as set)
+PRESET_MASK = 0b111 << PRESET_SHIFT
+SHOW_BIG_SPEED = 1 << 16  # a much larger own speed on the speed card
+SHOW_BITS = (1 << 9) - 1 | SHOW_BIG_SPEED
 
-DEFAULT_SHOW = (SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_EDGES | SHOW_NEIGHBOURS |
-                SHOW_LEAD_CARD)
+CUSTOM_DEFAULT = (SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_EDGES | SHOW_NEIGHBOURS |
+                  SHOW_LEAD_CARD)
+
+# (key, label, what it shows, bits). Marker and lane change styles stay the driver's own in every preset.
+PRESETS = (
+  ("custom", "Custom", "Your own switches", 0),
+  ("standard", "Standard", "Lead card with distance, speed and gap; all lane lines",
+   SHOW_LEAD_CARD | SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_NEIGHBOURS | SHOW_EDGES),
+  ("large", "Large speed", "Big speed; the lead shows only its speed and radar or camera",
+   SHOW_BIG_SPEED | SHOW_LEAD_CARD | SHOW_LEAD_SPEED | SHOW_LANES | SHOW_EDGES),
+  ("clean", "Clean", "Your lane only, no lead card",
+   SHOW_LANES),
+  ("detailed", "Detailed", "Everything, with closing speed and a tag on the lead",
+   SHOW_LEAD_CARD | SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_RELATIVE | SHOW_SPEED_TAG | SHOW_LANES |
+   SHOW_NEIGHBOURS | SHOW_EDGES),
+)
+PRESET_ORDER = (1, 2, 3, 4, 0)  # how pickers list them: Standard first, Custom last
+
+DEFAULT_SHOW = CUSTOM_DEFAULT | (1 << PRESET_SHIFT)  # new installs start on Standard
 PARAM = "BPRoadView"
 
 LEAD_STYLES = ("floor", "bracket", "corners", "chevron")
@@ -62,6 +84,7 @@ OPTIONS = (
   (SHOW_LANES, "Lane lines"),
   (SHOW_NEIGHBOURS, "Next lanes"),
   (SHOW_EDGES, "Road edges"),
+  (SHOW_BIG_SPEED, "Large speed"),
 )
 
 
@@ -85,10 +108,35 @@ class RoadViewPrefs:
         self._value = DEFAULT_SHOW
     return self._value
 
+  @property
+  def preset(self) -> int:
+    i = (self.value & PRESET_MASK) >> PRESET_SHIFT
+    return i if i < len(PRESETS) else 0
+
+  def set_preset(self, i: int):
+    self._write((self.value & ~PRESET_MASK) | (int(i) << PRESET_SHIFT))
+
+  @property
+  def shown(self) -> int:
+    """The switches in effect: the preset's, or the Custom ones."""
+    p = self.preset
+    return PRESETS[p][3] if p else self.value & SHOW_BITS
+
   def on(self, bit: int) -> bool:
-    return bool(self.value & bit)
+    return bool(self.shown & bit)
+
+  @property
+  def big_speed(self) -> bool:
+    return self.on(SHOW_BIG_SPEED)
+
+  def customise(self):
+    """Switch to Custom, starting from the current preset's switches."""
+    if self.preset:
+      self._write((self.value & ~(SHOW_BITS | PRESET_MASK)) | PRESETS[self.preset][3])
 
   def toggle(self, bit: int):
+    """Flipping a switch while a preset is on starts Custom from that preset."""
+    self.customise()
     self._write(self.value ^ bit)
 
   @property
@@ -266,6 +314,13 @@ ROW_H = 60
 ROW_LABEL = 28
 ROW_VALUE = 40
 BAR_H = 20
+COMPACT_VALUE = 60    # the lead's speed when it is all the card shows
+ROW_BITS = SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_RELATIVE
+
+
+def _compact(show: int) -> bool:
+  """Speed only (Large speed preset): the card is just the lead's speed and where it comes from."""
+  return show & ROW_BITS == SHOW_LEAD_SPEED
 
 
 def _fmt_dist(d: float, metric: bool) -> tuple[str, str]:
@@ -283,6 +338,8 @@ def _fmt_speed(v: float, metric: bool, signed: bool = False) -> tuple[str, str]:
 
 
 def lead_card_height(show: int) -> float:
+  if _compact(show):
+    return CARD_PAD * 2 + HEAD + 10 + COMPACT_VALUE
   rows = sum(1 for b in (SHOW_DISTANCE, SHOW_LEAD_SPEED, SHOW_GAP, SHOW_RELATIVE) if show & b)
   h = CARD_PAD * 2 + HEAD + 12 + rows * ROW_H
   if show & SHOW_GAP:
@@ -315,7 +372,14 @@ def draw_lead_card(x: float, y: float, lead: LeadInfo, show: int, metric: bool, 
   hy = r.y + CARD_PAD
   D.dot(lx + 9, hy + HEAD / 2, 9, lead_level(lead))
   D.text("Lead", lx + 30, hy, HEAD, Console.TEXT_PRIMARY, semi=True)
-  D.text_right("Radar" if lead.radar else "Camera", rx, hy + 2, ROW_LABEL, Console.TEXT_MUTED)
+  D.text_right("Radar" if lead.radar else "Vision", rx, hy + 2, ROW_LABEL, Console.TEXT_MUTED)
+  if _compact(show):
+    value, unit = _fmt_speed(lead.v_lead, metric)
+    vy = hy + HEAD + 10
+    uw = D.text_w(unit, ROW_LABEL + 2)
+    D.text(unit, rx - uw, vy + COMPACT_VALUE * 0.78 - ROW_LABEL, ROW_LABEL + 2, Console.TEXT_MUTED)
+    D.text_right(value, rx - uw - 12, vy, COMPACT_VALUE, Console.TEXT_PRIMARY, semi=True)
+    return
 
   cy = hy + HEAD + 12
   for label, value, unit, color in rows:

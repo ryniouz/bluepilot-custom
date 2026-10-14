@@ -5,11 +5,12 @@ from openpilot.selfdrive.ui.onroad.hud_renderer import UI_CONFIG, CRUISE_DISABLE
 from openpilot.selfdrive.ui.onroad.exp_button import FACE_SIZE
 from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.bp.onroad.exp_button_bp import ExpButtonBP
+from openpilot.selfdrive.ui.bp.onroad.road_view import road_prefs
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness, with_alpha
+from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -30,6 +31,9 @@ CLUSTER_RADIUS = 24         # kit PANEL_R
 CLUSTER_GAP = 16             # between top-row items
 CLUSTER_LABEL = 30           # state word, MAX caption (kit CAP)
 CLUSTER_SPEED = 140          # current speed numeral
+CLUSTER_SPEED_BIG = 230      # ... with Road view's Large speed
+CLUSTER_UNIT_BIG = 44
+CLUSTER_H_BIG = 352
 CLUSTER_UNIT = 36
 CLUSTER_SET = 72             # set speed numeral
 STATE_BAND_H = 58         # engagement band across the top of the speed card
@@ -260,11 +264,15 @@ class HudRendererBP(HudRendererSP):
     self._get_icbm_status()
 
     hide_speed = self._hide_v_ego_ui
+    # Road view "Large speed": a much bigger own speed (the card grows with it)
+    big = road_prefs.big_speed and not hide_speed
+    sp_size, unit_size = (CLUSTER_SPEED_BIG, CLUSTER_UNIT_BIG) if big else (CLUSTER_SPEED, CLUSTER_UNIT)
+    card_h = CLUSTER_H_BIG if big else CLUSTER_H
     speed_text = str(round(self.speed))
     unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
-    speed_w = 0.0 if hide_speed else max(measure_text_cached(self._font_bold, "88", CLUSTER_SPEED).x,
-                                         measure_text_cached(self._font_bold, speed_text, CLUSTER_SPEED).x)
-    unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, CLUSTER_UNIT).x
+    speed_w = 0.0 if hide_speed else max(measure_text_cached(self._font_bold, "88", sp_size).x,
+                                         measure_text_cached(self._font_bold, speed_text, sp_size).x)
+    unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, unit_size).x
     speed_col = 0.0 if hide_speed else speed_w + 14 + unit_w
 
     show_set = self.is_cruise_available and not self.guest
@@ -272,7 +280,7 @@ class HudRendererBP(HudRendererSP):
     inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
     w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
     x, y = rect.x + CLUSTER_MARGIN, rect.y + CLUSTER_MARGIN
-    card = rl.Rectangle(x, y, w, CLUSTER_H)
+    card = rl.Rectangle(x, y, w, card_h)
     draw_panel(card, Onroad.PANEL, CLUSTER_RADIUS)
 
     # State band: the top of the card fills with the engagement colour and names the state, so
@@ -297,14 +305,14 @@ class HudRendererBP(HudRendererSP):
     if not hide_speed:
       # BluePilot: speed turns red while the brake lights are on (ShowBrakeStatus)
       speed_color = Console.DANGER if self._brakes_on else Console.TEXT_PRIMARY
-      sw = measure_text_cached(self._font_bold, speed_text, CLUSTER_SPEED).x
-      rl.draw_text_ex(self._font_bold, speed_text, rl.Vector2(cx + speed_w - sw, body_y), CLUSTER_SPEED, 0, speed_color)
-      rl.draw_text_ex(self._font_medium, unit_text, rl.Vector2(cx + speed_w + 14, body_y + CLUSTER_SPEED * 0.80 - CLUSTER_UNIT * 0.80),
-                      CLUSTER_UNIT, 0, Console.TEXT_MUTED)
+      sw = measure_text_cached(self._font_bold, speed_text, sp_size).x
+      rl.draw_text_ex(self._font_bold, speed_text, rl.Vector2(cx + speed_w - sw, body_y), sp_size, 0, speed_color)
+      rl.draw_text_ex(self._font_medium, unit_text, rl.Vector2(cx + speed_w + 14, body_y + sp_size * 0.80 - unit_size * 0.80),
+                      unit_size, 0, Console.TEXT_MUTED)
       self.speed_right = cx + speed_col
       cx += speed_col + CLUSTER_PAD
       if show_set:
-        rl.draw_rectangle(int(cx), int(body_y + 18), 2, int(CLUSTER_H - (body_y - y) - CLUSTER_PAD - 18), Console.BORDER_DEFAULT)
+        rl.draw_rectangle(int(cx), int(body_y + 18), 2, int(card_h - (body_y - y) - CLUSTER_PAD - 18), Console.BORDER_DEFAULT)
         cx += 2 + CLUSTER_PAD
     else:
       self.speed_right = 0
@@ -314,12 +322,13 @@ class HudRendererBP(HudRendererSP):
         label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
       else:
         label, label_color = tr("MAX"), Console.TEXT_MUTED
-      rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(cx, body_y + 14), CLUSTER_LABEL, 0, label_color)
+      sy = body_y + (card_h - CLUSTER_H) / 2  # the set speed sits mid-card next to a large speed
+      rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(cx, sy + 14), CLUSTER_LABEL, 0, label_color)
       set_text = CRUISE_DISABLED_CHAR if not self.is_cruise_set else str(round(self.set_speed))
       set_color = Console.TEXT_PRIMARY if self.is_cruise_set else Console.TEXT_GHOST
-      rl.draw_text_ex(self._font_bold, set_text, rl.Vector2(cx, body_y + 14 + CLUSTER_LABEL + 4), CLUSTER_SET, 0, set_color)
+      rl.draw_text_ex(self._font_bold, set_text, rl.Vector2(cx, sy + 14 + CLUSTER_LABEL + 4), CLUSTER_SET, 0, set_color)
       # Squared state bar under the set speed, in the engagement colour
-      bar = rl.Rectangle(cx, y + CLUSTER_H - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, CLUSTER_SET_W, SET_SPEED_STATE_BAR_H)
+      bar = rl.Rectangle(cx, y + card_h - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, CLUSTER_SET_W, SET_SPEED_STATE_BAR_H)
       rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, self._set_speed_state_color(long_override, sla_active))
     return card
 

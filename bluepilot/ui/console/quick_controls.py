@@ -27,14 +27,16 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console.home import PERSONALITY_LABELS, PERSONALITY_VALUES
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS
 from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
-from openpilot.selfdrive.ui.bp.onroad.road_view import LC_STYLE_LABELS, LEAD_STYLE_LABELS, OPTIONS as ROAD_OPTIONS, road_prefs
+from openpilot.selfdrive.ui.bp.onroad.road_view import (LC_STYLE_LABELS, LEAD_STYLE_LABELS, OPTIONS as ROAD_OPTIONS, PRESET_ORDER,
+                                                        PRESETS, road_prefs)
 
 AUTO_CLOSE_S = 8.0
 
 SHEET_MARGIN = 40        # from the screen edges
 SHEET_H = 400
-ROAD_ROWS = 3             # the Road view page is one card row taller
-ROAD_EXTRA_H = 128
+ROAD_ROWS = 3             # Custom's switch grid
+ROAD_EXTRA_H = 128        # the Road view page is one card row taller ...
+PRESET_ROW_H = 96         # ... plus the preset picker on top
 SHEET_RADIUS = 32
 SHEET_PAD = 36
 HEADER_H = 88            # title row; the action buttons are this tall
@@ -120,7 +122,9 @@ class QuickControls:
   # -- collapsed bar and drag ------------------------------------------------------------
 
   def _sheet_h(self) -> float:
-    return SHEET_H + (ROAD_EXTRA_H if self._page == "road" else 0)
+    if self._page != "road":
+      return SHEET_H
+    return SHEET_H + PRESET_ROW_H + (ROAD_EXTRA_H if road_prefs.preset == 0 else -ROAD_EXTRA_H // 2)
 
   def _travel(self) -> float:
     return self._sheet_h() + SHEET_MARGIN
@@ -316,15 +320,25 @@ class QuickControls:
     # Road view: opens the second page
     c = cards[3]
     D.text(tr("Road view"), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY, semi=True)
-    n_on = sum(1 for bit, _ in ROAD_OPTIONS if road_prefs.on(bit))
-    D.text(tr(f"{n_on} of {len(ROAD_OPTIONS)} shown"), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 14, D.LABEL, Console.TEXT_MUTED)
+    D.text(tr(PRESETS[road_prefs.preset][1]), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 14, D.LABEL, Console.ACCENT_TEXT,
+           semi=True)
     D.icon("sliders", c.x + c.width - CARD_PAD - 52, c.y + c.height - CARD_PAD - 60, 52, Console.ACCENT_TEXT)
     if self._pressed(c):
       rl.draw_rectangle_rounded_lines_ex(c, roundness(c, CARD_RADIUS), 8, 2, Console.BORDER_STRONG)
     self._hits.append((c, lambda: setattr(self, "_page", "road")))
 
   def _render_road_page(self, body: rl.Rectangle):
-    """What the road view shows: a grid of switches, then the marker and lane change style cells."""
+    """What the road view shows: a preset picker, then for Custom a grid of switches; the marker and lane change
+    style cells always (they are the driver's own in every preset)."""
+    order = list(PRESET_ORDER)
+    seg = rl.Rectangle(body.x, body.y, body.width, D.CONTROL_H)
+    picks = D.segmented(seg, [tr(PRESETS[i][1]) for i in order], order.index(road_prefs.preset), size=D.BODY, track=_card_fill())
+    for sr, i in zip(picks, order, strict=False):
+      self._hits.append((sr, lambda v=i: road_prefs.set_preset(v)))
+    body = rl.Rectangle(body.x, body.y + PRESET_ROW_H, body.width, body.height - PRESET_ROW_H)
+    if road_prefs.preset != 0:
+      self._render_preset_summary(body)
+      return
     rows = ROAD_ROWS
     cols = (len(ROAD_OPTIONS) + 2 + rows - 1) // rows  # + the marker and lane change cells
     w = (body.width - CARD_GAP * (cols - 1)) / cols
@@ -338,18 +352,34 @@ class QuickControls:
       D.toggle(c.x + w - CARD_PAD - 104, c.y + (h - 60) / 2, on)
       self._hits.append((c, lambda b=bit: road_prefs.toggle(b)))
 
-    # Style cells: tap to step through the choices
     steps = (("Marker", LEAD_STYLE_LABELS[road_prefs.marker], road_prefs.next_marker),
              ("Lane change", LC_STYLE_LABELS[road_prefs.lane_change], road_prefs.next_lane_change))
     for k, (label, value, step) in enumerate(steps):
       i = len(ROAD_OPTIONS) + k
-      c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
-      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else Console.BG_RAISED)
-      ty = c.y + (h - D.BODY) / 2 - 2
-      D.text(tr(label), c.x + CARD_PAD, ty, D.BODY, semi=True)
-      D.icon("chevron", c.x + w - CARD_PAD - 32, c.y + (h - 32) / 2, 32, Console.TEXT_MUTED)
-      D.text_right(tr(value), c.x + w - CARD_PAD - 44, ty, D.BODY, Console.ACCENT_TEXT, semi=True)
-      self._hits.append((c, step))
+      self._style_cell(rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h),
+                       label, value, step)
+
+  def _render_preset_summary(self, body: rl.Rectangle):
+    """A preset: what it shows (tap to start Custom from it), then the two style cells."""
+    w = (body.width - CARD_GAP * 3) / 4
+    c = rl.Rectangle(body.x, body.y, 2 * w + CARD_GAP, body.height)
+    rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else _card_fill())
+    D.text(D.fit(tr(PRESETS[road_prefs.preset][2]), D.BODY, c.width - 2 * CARD_PAD), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY)
+    D.text(tr("Tap to adjust it in Custom"), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 4, D.LABEL, Console.TEXT_MUTED)
+    self._hits.append((c, road_prefs.customise))
+    steps = (("Marker", LEAD_STYLE_LABELS[road_prefs.marker], road_prefs.next_marker),
+             ("Lane change", LC_STYLE_LABELS[road_prefs.lane_change], road_prefs.next_lane_change))
+    for k, (label, value, step) in enumerate(steps):
+      self._style_cell(rl.Rectangle(c.x + c.width + CARD_GAP + k * (w + CARD_GAP), body.y, w, body.height), label, value, step)
+
+  def _style_cell(self, c: rl.Rectangle, label: str, value: str, step):
+    """Tap to step through the choices."""
+    rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else _card_fill())
+    ty = c.y + (c.height - D.BODY) / 2 - 2
+    D.text(tr(label), c.x + CARD_PAD, ty, D.BODY, semi=True)
+    D.icon("chevron", c.x + c.width - CARD_PAD - 32, c.y + (c.height - 32) / 2, 32, Console.TEXT_MUTED)
+    D.text_right(tr(value), c.x + c.width - CARD_PAD - 44, ty, D.BODY, Console.ACCENT_TEXT, semi=True)
+    self._hits.append((c, step))
 
   def _set_preset(self, v: int):
     try:
