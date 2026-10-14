@@ -336,6 +336,9 @@ class CanadianSpeedLimit(SpeedLimitRenderer):
     self._render_canada(rect, val, sub, color, has_limit, alpha)
 
   def _render_canada(self, rect, val, sub, color, has_limit, alpha=1.0):
+    # No known limit: no sign (an empty "MAXIMUM ---" sign reads as a broken one)
+    if not has_limit:
+      return
     # Canadian regulatory signs are portrait: draw a narrower sign centred in SP's rect
     rect = rl.Rectangle(rect.x + (rect.width - SIGN_W) / 2, rect.y, SIGN_W, rect.height)
     white = rl.color_alpha(rl.WHITE, alpha)
