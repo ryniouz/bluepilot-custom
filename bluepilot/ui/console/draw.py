@@ -247,6 +247,8 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     _arc(12, 24, 9, 200, 340, x, y, s, w, color)
   elif name == "chevron":
     _line([(9, 5), (16, 12), (9, 19)], x, y, s, w, color)
+  elif name == "back":
+    _line([(15, 5), (8, 12), (15, 19)], x, y, s, w, color)
   elif name == "cell":  # cellular: four rising bars
     for i, h in enumerate((5, 9, 13, 17)):
       bx = 4.5 + i * 4.5
@@ -356,6 +358,15 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3 * s, y + 3 * s, 18 * s, 18 * s), 0.12, 6, w, color)
     _line([(3, 9), (21, 9)], x, y, s, w, color)
     _line([(9, 9), (9, 21)], x, y, s, w, color)
+  elif name == "storage":  # a drive: two stacked trays with a light each
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3 * s, y + 4 * s, 18 * s, 7 * s), 0.3, 6, w, color)
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3 * s, y + 13 * s, 18 * s, 7 * s), 0.3, 6, w, color)
+    rl.draw_circle_v(rl.Vector2(x + 17 * s, y + 7.5 * s), w * 0.9, color)
+    rl.draw_circle_v(rl.Vector2(x + 17 * s, y + 16.5 * s), w * 0.9, color)
+  elif name == "info":
+    _ring(12, 12, 9, x, y, s, w, color)
+    _line([(12, 11), (12, 16.5)], x, y, s, w, color)
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 7.5 * s), w * 0.9, color)
   elif name == "battery":
     rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 2 * s, y + 7 * s, 17 * s, 10 * s), 0.25, 6, w, color)
     _line([(21.5, 10.5), (21.5, 13.5)], x, y, s, w, color)

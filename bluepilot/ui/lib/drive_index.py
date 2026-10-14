@@ -32,6 +32,9 @@ LOG_FILES = ("rlog", "rlog.zst", "rlog.bz2", "qlog", "qlog.zst", "qlog.bz2")
 # with the user.upload xattr (system/loggerd/uploader.py). Full video and rlogs only go when requested from connect.
 CONNECT_FILES = ("qlog", "qlog.zst", "qcamera.ts")
 CONNECT_ATTR = "user.upload"
+SUMMARY_FILE = "console_storage.json"   # next to the log root: the last scan's sizes, so Storage opens at once
+SUMMARY_KEYS = ("drive_bytes", "unsynced_bytes", "bookmarked_bytes", "video_bytes", "low_res_bytes", "log_bytes",
+                "sync_known")
 
 
 @dataclass
@@ -199,6 +202,42 @@ def scan(log_root: str | None = None) -> DriveIndex:
 
   idx.drives.sort(key=lambda d: (d.start_wall, d.route), reverse=True)
   idx.scanned_at = time.monotonic()
+  save_summary(idx, root)
+  return idx
+
+
+def _summary_path(root: str) -> str:
+  return os.path.join(os.path.dirname(root.rstrip("/")), SUMMARY_FILE)
+
+
+def save_summary(idx: DriveIndex, root: str) -> None:
+  try:
+    tmp = _summary_path(root) + ".tmp"
+    with open(tmp, "w") as f:
+      json.dump({k: getattr(idx, k) for k in SUMMARY_KEYS}, f)
+    os.replace(tmp, _summary_path(root))
+  except OSError:
+    pass
+
+
+def cached_index(log_root: str | None = None) -> DriveIndex:
+  """Sizes from the last finished scan (any boot) with free space read now; no drive list (scanned_at stays 0).
+  Disk total and free are always there, so Storage never waits on a full scan to show something."""
+  root = log_root or Paths.log_root()
+  idx = DriveIndex()
+  try:
+    usage = shutil.disk_usage(root)
+    idx.disk_total, idx.disk_free = usage.total, usage.free
+  except OSError:
+    pass
+  try:
+    with open(_summary_path(root)) as f:
+      saved = json.load(f)
+    for k in SUMMARY_KEYS:
+      if k in saved:
+        setattr(idx, k, type(getattr(idx, k))(saved[k]))
+  except (OSError, ValueError, TypeError):
+    pass
   return idx
 
 
@@ -208,7 +247,7 @@ class DriveIndexer:
   def __init__(self, log_root: str | None = None):
     self._root = log_root
     self._lock = threading.Lock()
-    self._index = DriveIndex()
+    self._index = cached_index(log_root)
     self._busy = False
     self._wanted_at = 0.0
 
@@ -216,6 +255,10 @@ class DriveIndexer:
   def index(self) -> DriveIndex:
     with self._lock:
       return self._index
+
+  @property
+  def busy(self) -> bool:
+    return self._busy
 
   def request(self, force: bool = False):
     now = time.monotonic()
