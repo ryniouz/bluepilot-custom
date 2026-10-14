@@ -52,6 +52,9 @@ SCENES: dict[str, str] = {
   "drives_storage": "Drives > Storage",
   "connectivity": "Connect > Status (Wi-Fi, LTE, server and sync, home location)",
   "updates": "System > Updates with an update available from Lucas's repo",
+  "calibration": "System > Calibration with a saved calibration and steering lag half learned",
+  "onboarding_terms": "Console onboarding, terms step",
+  "onboarding_guide": "Console onboarding, driving guide (calibration step)",
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
@@ -940,7 +943,8 @@ def run_scene(sc: Scene):
   name = sc.name
   d = default_drive()
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
-              "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest"):
+              "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
+              "calibration", "onboarding_terms", "onboarding_guide"):
     sc.drive = None
   else:
     sc.drive = d
@@ -974,6 +978,35 @@ def run_scene(sc: Scene):
     usage().month_bytes, usage().boot_bytes = 2_480_000_000, 61_000_000
     sc.main._open_shell()
     sc.main._shell.open_panel("connectivity")
+    sc.settle()
+    sc.shot()
+  elif name == "calibration":
+    import math
+    from cereal import messaging as cmsg
+    ev = cmsg.new_message("liveCalibration")
+    ev.liveCalibration.calStatus = 1
+    ev.liveCalibration.calPerc = 100
+    ev.liveCalibration.rpyCalib = [0.0, math.radians(2.3), math.radians(-0.8)]
+    sc.put("CalibrationParams", ev.to_bytes())
+    lag = cmsg.new_message("liveDelay")
+    lag.liveDelay.calPerc = 55
+    sc.put("LiveDelay", lag.to_bytes())
+    sc.main._open_shell()
+    sc.main._shell.open_panel("calibration")
+    sc.settle()
+    sc.shot()
+  elif name in ("onboarding_terms", "onboarding_guide"):
+    from bluepilot.ui.console.onboarding import ConsoleOnboarding, _State
+    ob = ConsoleOnboarding()
+    if name == "onboarding_guide":
+      ob._state = _State.GUIDE
+      ob._guide._i = 4
+    else:
+      ob._state = _State.TERMS
+    sc.main._open_shell()
+    sc.settle()
+    from openpilot.system.ui.lib.application import gui_app
+    gui_app.push_widget(ob)
     sc.settle()
     sc.shot()
   elif name == "updates":

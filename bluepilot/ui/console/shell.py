@@ -160,7 +160,9 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.updates import UpdatesPage
     self.register_page(Dest.SYSTEM, Page(tr("Updates"), "download", UpdatesPage(), key="updates", framed=False))
     panel(Dest.SYSTEM, tr("Device"), "cpu", "DEVICE", tr("System"))
-    panel(Dest.SYSTEM, tr("Software"), "tune", "SOFTWARE", tr("System"))
+    from bluepilot.ui.console.pages.calibration import CalibrationPage
+    self.register_page(Dest.SYSTEM, Page(tr("Calibration"), "calibrate", CalibrationPage(), key="calibration", framed=False))
+    panel(Dest.SYSTEM, tr("Software"), "list", "SOFTWARE", tr("System"))
     panel(Dest.SYSTEM, tr("Vehicle"), "car", "VEHICLE", tr("System"))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))

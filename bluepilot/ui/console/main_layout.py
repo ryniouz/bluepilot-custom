@@ -17,7 +17,6 @@ from enum import IntEnum
 import pyray as rl
 
 import cereal.messaging as messaging
-from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr
@@ -25,6 +24,7 @@ from openpilot.system.ui.widgets import Widget
 
 from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP
 from bluepilot.ui.widgets.debug import ControlsDebugPanel
+from bluepilot.ui.console.onboarding import ConsoleOnboarding
 from bluepilot.ui.console.home import AlertsPage, ConsoleHome, active_alerts
 from bluepilot.ui.console.pages.charging import ChargingPage, ChargingScreen
 from bluepilot.ui.console.pages.stats import StatsPage
@@ -119,7 +119,7 @@ class ConsoleMainLayout(Widget):
 
     gui_app.push_widget(self)
 
-    self._onboarding_window = OnboardingWindow()
+    self._onboarding_window = ConsoleOnboarding()
     if not self._onboarding_window.completed:
       gui_app.push_widget(self._onboarding_window)
 

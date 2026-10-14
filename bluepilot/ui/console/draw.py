@@ -209,6 +209,15 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     _line([(3.5, 10), (9.5, 10)], x, y, s, w, color)
     _line([(14.5, 10), (20.5, 10)], x, y, s, w, color)
     _line([(12, 14.5), (12, 21)], x, y, s, w, color)
+  elif name == "calibrate":  # mount and camera calibration: a target with crosshair ticks
+    _ring(12, 12, 7, x, y, s, w, color)
+    _ring(12, 12, 1.5, x, y, s, w, color)
+    for a, b in (((12, 1.5), (12, 5)), ((12, 19), (12, 22.5)), ((1.5, 12), (5, 12)), ((19, 12), (22.5, 12))):
+      _line([a, b], x, y, s, w, color)
+  elif name == "flask":  # Experimental Mode
+    _line([(9, 3), (15, 3)], x, y, s, w, color)
+    _line([(10, 3), (10, 9.5), (4.5, 19), (5.5, 21), (18.5, 21), (19.5, 19), (14, 9.5), (14, 3)], x, y, s, w, color)
+    _line([(7, 15), (17, 15)], x, y, s, w, color)
   elif name == "bolt":
     _line([(13, 2), (4, 14), (11, 14), (10, 22), (19, 10), (12, 10), (13, 2)], x, y, s, w, color)
   elif name == "screen":
@@ -238,6 +247,8 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     _arc(12, 24, 9, 200, 340, x, y, s, w, color)
   elif name == "chevron":
     _line([(9, 5), (16, 12), (9, 19)], x, y, s, w, color)
+  elif name == "check":
+    _line([(4.5, 12.5), (9.5, 17.5), (19.5, 6.5)], x, y, s, w, color)
   elif name == "close":
     _line([(6, 6), (18, 18)], x, y, s, w, color)
     _line([(18, 6), (6, 18)], x, y, s, w, color)
