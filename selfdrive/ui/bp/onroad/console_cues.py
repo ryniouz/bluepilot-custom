@@ -23,7 +23,8 @@ import pyray as rl
 from cereal import log
 
 from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceBallTiciBP
-from openpilot.selfdrive.ui.sunnypilot.onroad.speed_limit import SpeedLimitRenderer
+from openpilot.selfdrive.ui.sunnypilot.onroad.speed_limit import SpeedLimitRenderer, SpeedLimitSource
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
@@ -397,8 +398,32 @@ class ConsoleConfidence(ConfidenceBallTiciBP):
 SIGN_W = 168               # portrait Canadian sign inside SP's 200 px sign rect
 
 
+SIGN_H = 216               # its height there (set_speed_height + 2 x 6)
+SIGN_IN_W = 124            # the sign inside the speed card, beside the set speed
+
+
 class CanadianSpeedLimit(SpeedLimitRenderer):
-  """SP speed-limit logic with the Canadian regulatory sign: MAXIMUM, the value, km/h."""
+  """SP speed-limit logic with the Canadian regulatory sign: MAXIMUM, the value, km/h.
+  Custom: when the speed card sets `target`, the sign draws inside the card at that rect (scaled), and the
+  limit-ahead info becomes a Console chip under the card."""
+
+  def __init__(self):
+    super().__init__()
+    self.target: rl.Rectangle | None = None   # set by the speed card each frame
+    self.chip_y: float = 0.0                   # under the speed card
+
+  @property
+  def has_limit(self) -> bool:
+    return bool(self.speed_limit_valid or self.speed_limit_last_valid)
+
+  def _render(self, rect: rl.Rectangle):
+    if self.target is None:
+      super()._render(rect)
+      return
+    if ui_state.speed_limit_mode == SpeedLimitMode.off:
+      return
+    self._draw_sign_main(self.target, self._pre_active_fade.alpha)
+    self._draw_ahead_info(self.target)
 
   def _render_vienna(self, rect, val, sub, color, has_limit, alpha=1.0):
     self._render_canada(rect, val, sub, color, has_limit, alpha)
@@ -410,25 +435,46 @@ class CanadianSpeedLimit(SpeedLimitRenderer):
     # No known limit: no sign (an empty "MAXIMUM ---" sign reads as a broken one)
     if not has_limit:
       return
-    # Canadian regulatory signs are portrait: draw a narrower sign centred in SP's rect
-    rect = rl.Rectangle(rect.x + (rect.width - SIGN_W) / 2, rect.y, SIGN_W, rect.height)
+    if self.target is None:
+      # Canadian regulatory signs are portrait: draw a narrower sign centred in SP's rect
+      rect = rl.Rectangle(rect.x + (rect.width - SIGN_W) / 2, rect.y, SIGN_W, rect.height)
+    k = rect.height / SIGN_H
     white = rl.color_alpha(rl.WHITE, alpha)
     black = rl.color_alpha(rl.BLACK, alpha)
     text_color = rl.color_alpha(color, alpha)
-    rl.draw_rectangle_rounded(rect, roundness(rect, 18), 10, white)
-    inner = rl.Rectangle(rect.x + 9, rect.y + 9, rect.width - 18, rect.height - 18)
-    rl.draw_rectangle_rounded_lines_ex(inner, roundness(inner, 12), 10, 5, black)
+    rl.draw_rectangle_rounded(rect, roundness(rect, 18 * k), 10, white)
+    inner = rl.Rectangle(rect.x + 9 * k, rect.y + 9 * k, rect.width - 18 * k, rect.height - 18 * k)
+    rl.draw_rectangle_rounded_lines_ex(inner, roundness(inner, 12 * k), 10, max(3.0, 5 * k), black)
     cx = rect.x + rect.width / 2
-    self._draw_text_centered(self.font_demi, "MAXIMUM", 22, rl.Vector2(cx, rect.y + 42), black)
-    self._draw_text_centered(self.font_bold, val, 88 if len(val) < 3 else 72, rl.Vector2(cx, rect.y + rect.height / 2 + 10), text_color)
-    self._draw_text_centered(self.font_demi, "km/h" if ui_state.is_metric else "mph", 30,
-                             rl.Vector2(cx, rect.y + rect.height - 44), black)
+    self._draw_text_centered(self.font_demi, "MAXIMUM", 22 * k, rl.Vector2(cx, rect.y + 42 * k), black)
+    self._draw_text_centered(self.font_bold, val, (88 if len(val) < 3 else 66) * k, rl.Vector2(cx, rect.y + rect.height / 2 + 10 * k),
+                             text_color)
+    self._draw_text_centered(self.font_demi, "km/h" if ui_state.is_metric else "mph", 30 * k,
+                             rl.Vector2(cx, rect.y + rect.height - 44 * k), black)
     if sub and has_limit:
-      box = 64
+      box = 64 * k
       s_rect = rl.Rectangle(rect.x + rect.width - box * 0.6, rect.y - box * 0.4, box, box)
-      rl.draw_rectangle_rounded(s_rect, roundness(s_rect, 14), 10, Console.BG_PANEL)
-      rl.draw_rectangle_rounded_lines_ex(s_rect, roundness(s_rect, 14), 10, 2, Console.BORDER_DEFAULT)
-      self._draw_text_centered(self.font_bold, sub, 30, rl.Vector2(s_rect.x + box / 2, s_rect.y + box / 2), Console.TEXT_PRIMARY)
+      rl.draw_rectangle_rounded(s_rect, roundness(s_rect, 14 * k), 10, Console.BG_PANEL)
+      rl.draw_rectangle_rounded_lines_ex(s_rect, roundness(s_rect, 14 * k), 10, 2, Console.BORDER_DEFAULT)
+      self._draw_text_centered(self.font_bold, sub, 30 * k, rl.Vector2(s_rect.x + box / 2, s_rect.y + box / 2), Console.TEXT_PRIMARY)
+
+  def _draw_ahead_info(self, sign_rect):
+    if self.target is None:
+      super()._draw_ahead_info(sign_rect)
+      return
+    if self.speed_limit_source != SpeedLimitSource.map:
+      return
+    if not (self.speed_limit_ahead_valid and self.speed_limit_ahead > 0 and self.speed_limit_ahead != self.speed_limit):
+      return
+    # A chip under the speed card, right edge under the sign: "80 ahead · 400 m"
+    text = f"{round(self.speed_limit_ahead)} {tr('ahead')}"
+    dist = self._format_dist(self.speed_limit_ahead_dist)
+    tw, dw = D.text_w(text, D.LABEL, semi=True), D.text_w(dist, D.LABEL)
+    w = 24 + tw + 16 + dw + 24
+    r = rl.Rectangle(sign_rect.x + sign_rect.width - w, self.chip_y, w, 52)
+    rl.draw_rectangle_rounded(r, 1.0, 12, Onroad.PANEL)
+    D.text(text, r.x + 24, r.y + (52 - D.LABEL) / 2 - 2, D.LABEL, Console.TEXT_PRIMARY, semi=True)
+    D.text(dist, r.x + 24 + tw + 16, r.y + (52 - D.LABEL) / 2 - 2, D.LABEL, Console.TEXT_MUTED)
 
 
 # -- smart cruise chips -------------------------------------------------------------------

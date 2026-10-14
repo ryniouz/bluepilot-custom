@@ -1,3 +1,4 @@
+import time
 import pyray as rl
 from opendbc.car.structs import ControllerStateBP
 from openpilot.common.params import Params
@@ -14,7 +15,7 @@ from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, 
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
-from openpilot.selfdrive.ui.bp.onroad.console_cues import (SIGN_W, CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
+from openpilot.selfdrive.ui.bp.onroad.console_cues import (SIGN_H, SIGN_W, CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
                                                           notice, notice_size)
 
 # BluePilot: Y center for speed display (matching upstream hardcoded values)
@@ -34,6 +35,7 @@ CLUSTER_SPEED = 140          # current speed numeral
 CLUSTER_SPEED_BIG = 230      # ... with Road view's Large speed
 CLUSTER_UNIT_BIG = 44
 CLUSTER_H_BIG = 352
+SIGN_IN_MAX_H = 200          # the speed limit sign inside the card
 CLUSTER_UNIT = 36
 CLUSTER_SET = 72             # set speed numeral
 STATE_BAND_H = 58         # engagement band across the top of the speed card
@@ -154,7 +156,7 @@ class HudRendererBP(HudRendererSP):
     if preset != LayoutPreset.MINIMAL:
       scc = self.smart_cruise_control_renderer
       if scc.vision_enabled or scc.map_enabled:
-        chips_x = self.cluster_rect.x + (SIGN_W + CLUSTER_GAP if ui_state.speed_limit_mode != SpeedLimitMode.off else 0)
+        chips_x = self.cluster_rect.x
         cruise_chips(scc, chips_x, self.cluster_rect.y + self.cluster_rect.height + 16)
       # SP green light / lead departing / stopped timer, as a notification card
       pop = e2e_notice(self.circular_alerts_renderer)
@@ -278,6 +280,14 @@ class HudRendererBP(HudRendererSP):
     show_set = self.is_cruise_available and not self.guest
     set_col = CLUSTER_SET_W if show_set else 0.0
     inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
+    # Custom: the speed limit sign sits in the same card, after the set speed (Lucas 22:42)
+    sl = self.speed_limit_renderer
+    show_sign = ui_state.speed_limit_mode != SpeedLimitMode.off and sl.has_limit
+    sign_h = min(SIGN_IN_MAX_H, card_h - STATE_BAND_H - 6 - CLUSTER_PAD - 16)
+    sign_w = sign_h * SIGN_W / SIGN_H
+    base_w = inner_w
+    if show_sign:
+      inner_w += (CLUSTER_PAD + 2 + CLUSTER_PAD if inner_w else 0) + sign_w
     w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
     x, y = rect.x + CLUSTER_MARGIN, rect.y + CLUSTER_MARGIN
     card = rl.Rectangle(x, y, w, card_h)
@@ -320,6 +330,8 @@ class HudRendererBP(HudRendererSP):
     if show_set:
       if self.show_icbm_status:
         label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
+      elif self._auto_set_on():
+        label, label_color = tr("AUTO"), Console.ACCENT_TEXT  # Resume/Set uses the driver's speed for the limit
       else:
         label, label_color = tr("MAX"), Console.TEXT_MUTED
       sy = body_y + (card_h - CLUSTER_H) / 2  # the set speed sits mid-card next to a large speed
@@ -330,7 +342,29 @@ class HudRendererBP(HudRendererSP):
       # Squared state bar under the set speed, in the engagement colour
       bar = rl.Rectangle(cx, y + card_h - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, CLUSTER_SET_W, SET_SPEED_STATE_BAR_H)
       rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, self._set_speed_state_color(long_override, sla_active))
+
+    sign_y = body_y + 4 + (card_h - STATE_BAND_H - 6 - CLUSTER_PAD - 4 - sign_h) / 2
+    if show_sign:
+      sx = x + w - CLUSTER_PAD - sign_w
+      if base_w:
+        rl.draw_rectangle(int(sx - CLUSTER_PAD - 2), int(body_y + 18), 2, int(card_h - (body_y - y) - CLUSTER_PAD - 18),
+                          Console.BORDER_DEFAULT)
+      sl.target = rl.Rectangle(sx, sign_y, sign_w, sign_h)
+    else:
+      sl.target = rl.Rectangle(x + w - CLUSTER_PAD, sign_y, 0, sign_h)  # nothing drawn; the ahead chip still aligns
+    sl.chip_y = y + card_h + 16
     return card
+
+  def _auto_set_on(self) -> bool:
+    """BPAutoSetSpeed, read about once a second."""
+    now = time.monotonic()
+    if now - getattr(self, "_auto_set_t", 0.0) > 1.0:
+      self._auto_set_t = now
+      try:
+        self._auto_set = bool(ui_state.params.get_bool("BPAutoSetSpeed"))
+      except Exception:
+        self._auto_set = False
+    return getattr(self, "_auto_set", False)
 
   def _set_speed_state_color(self, long_override: bool, sla_active: bool) -> rl.Color:
     if not self.is_cruise_set:

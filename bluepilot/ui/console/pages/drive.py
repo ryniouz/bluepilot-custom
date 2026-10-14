@@ -13,6 +13,7 @@ and rows whose key exists in neither form are left out.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 from openpilot.common.params import Params
@@ -272,7 +273,44 @@ class SpeedPage(DrivePage):
       self.toggle("disable_ford_radar_UI", tr("Use the truck's radar"), tr("Off follows the camera only; after a reboot"),
                   invert=True),
     ], note=tr("Turning smooth speed control off uses the stock openpilot longitudinal logic."))
-    return [following, limits, cruise, source, tuning]
+    return [following, limits, self._auto_set(mode), cruise, source, tuning]
+
+  # Auto set (Lucas 22:42): your own set speed for each detected limit, used when you press Resume/Set. The cruise
+  # logic and its safeguards belong to the Lightning control thread; this page only edits the switch and the table.
+  def _auto_set(self, limit_mode: int) -> Section | None:
+    if not self.has("BPAutoSetSpeed"):
+      return None
+    on = self.p.bool("BPAutoSetSpeed")
+    rows: list = [
+      self.toggle("BPAutoSetSpeed", tr("Use on Resume/Set"), tr("Sets your speed for the limit"),
+                  enabled=limit_mode != 0),
+    ]
+    if on and self.has("BPAutoSetTable"):
+      table = auto_set_table(self.p.get("BPAutoSetTable", ""))
+      for limit in sorted(table):
+        rows.append(Stepper(tr("Limit") + f" {limit} km/h", f"{table[limit]} km/h",
+                            lambda lim=limit: self._auto_set_step(lim, -5), lambda lim=limit: self._auto_set_step(lim, 5)))
+    note = tr("Needs speed limits on. You still press Resume/Set; the truck never picks a speed on its own. "
+              + "Change it with the buttons any time. You are responsible for the speed you drive.")
+    return Section(tr("Auto set speed"), "gauge", rows, note=note)
+
+  def _auto_set_step(self, limit: int, d: int):
+    table = auto_set_table(self.p.get("BPAutoSetTable", ""))
+    table[limit] = max(limit - 20, min(limit + 40, table.get(limit, limit) + d))
+    self.p.put("BPAutoSetTable", json.dumps({str(k): v for k, v in sorted(table.items())}))
+
+
+AUTO_SET_DEFAULT = {50: 65, 60: 75, 80: 90, 90: 110, 100: 120}  # Lucas's proposed values, his to change
+
+
+def auto_set_table(raw) -> dict[int, int]:
+  """BPAutoSetTable: JSON of detected limit km/h -> preferred set km/h. Bad or empty values give the defaults."""
+  try:
+    data = json.loads(raw) if isinstance(raw, str) and raw.strip() else raw
+    table = {int(k): int(v) for k, v in dict(data).items()}
+    return table or dict(AUTO_SET_DEFAULT)
+  except (TypeError, ValueError, AttributeError):
+    return dict(AUTO_SET_DEFAULT)
 
 
 # -- Steering -------------------------------------------------------------------------------------
