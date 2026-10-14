@@ -180,8 +180,10 @@ class DriveTracker:
 class LiveMonitor(threading.Thread):
   """Polls cereal at ~5 Hz; keeps the latest snapshot and thumbnail."""
 
-  def __init__(self, events: EventLog, log_root: str, allowed_files, gps_service: str):
+  def __init__(self, events: EventLog, log_root: str, allowed_files, gps_service: str, on_modem_bytes=None):
     super().__init__(daemon=True, name="bp_bridge_live")
+    self.on_modem_bytes = on_modem_bytes  # called with (wwanTx, wwanRx) on each deviceState
+    self.network: dict = {}
     self.tracker = DriveTracker(events)
     self.log_root = log_root
     self.allowed_files = allowed_files
@@ -194,6 +196,11 @@ class LiveMonitor(threading.Thread):
   def latest(self) -> dict:
     with self.lock:
       return self.snapshot
+
+  def latest_network(self) -> dict:
+    """deviceState network fields as enum names: {type, metered, strength}; {} until deviceState arrives."""
+    with self.lock:
+      return self.network
 
   def latest_thumbnail(self) -> bytes | None:
     with self.lock:
@@ -216,6 +223,13 @@ class LiveMonitor(threading.Thread):
           last_update[name] = now
       seen = {name for name, t in last_update.items() if now - t < 5.0}
       onroad = bool(sm["deviceState"].started) if "deviceState" in seen else False
+      network = {}
+      if "deviceState" in seen:
+        ds = sm["deviceState"]
+        network = {"type": _enum_name(ds.networkType), "metered": bool(ds.networkMetered),
+                   "strength": _enum_name(ds.networkStrength)}
+        if sm.updated["deviceState"] and self.on_modem_bytes is not None:
+          self.on_modem_bytes(int(ds.networkStats.wwanTx), int(ds.networkStats.wwanRx))
 
       if now - last_scan > 5.0:
         last_scan = now
@@ -230,6 +244,7 @@ class LiveMonitor(threading.Thread):
         thumb = bytes(sm["thumbnail"].thumbnail)
       with self.lock:
         self.snapshot = snap
+        self.network = network
         if thumb:
           self.thumbnail = thumb
         if not onroad:

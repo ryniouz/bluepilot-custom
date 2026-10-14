@@ -47,6 +47,8 @@ class BridgeContext:
   free_space_pct: Callable[[], float | None] = lambda: None
   keep_until_synced: Callable[[], bool] = lambda: False
   on_notify_needed: Callable[[], None] = lambda: None
+  connectivity: Callable[[], dict] | None = None
+  storage: Callable[[], dict] | None = None
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -126,6 +128,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
           return self._params_get(query)
         if path == "/v1/settings":
           return self._settings_get()
+        if path == "/v1/connectivity" and self.ctx.connectivity is not None:
+          return self._send_json(200, self.ctx.connectivity())
+        if path == "/v1/storage" and self.ctx.storage is not None:
+          return self._send_json(200, self.ctx.storage())
       elif method == "POST" and path == "/v1/synced":
         return self._synced()
       elif method == "PUT" and path == "/v1/settings":

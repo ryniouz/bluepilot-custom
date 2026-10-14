@@ -328,5 +328,12 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPBridgeToken", {PERSISTENT, STRING}},
     {"BPBridgeNotifyUrl", {PERSISTENT | BACKUP, STRING}},
     {"BPKeepUntilSynced", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadTripMode", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPRoadTripVideo", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPServerUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPCellLimitMB", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellLimitAction", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellResetDay", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPCommaConnect", {PERSISTENT | BACKUP, BOOL, "1"}},
     // End Custom
 };

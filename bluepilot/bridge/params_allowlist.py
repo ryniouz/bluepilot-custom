@@ -25,7 +25,8 @@ WRITABLE = frozenset({
   "SpeedLimitPolicy", "SpeedLimitOffsetType", "SpeedLimitValueOffset", "LongitudinalPersonality", "ExperimentalMode",
   "OnroadScreenOffBrightness", "IsMetric",
   # bridge
-  "BPKeepUntilSynced", "BPBridgeNotifyUrl",
+  "BPKeepUntilSynced", "BPBridgeNotifyUrl", "BPServerUrl",
+  "BPRoadTripMode", "BPRoadTripVideo", "BPCellLimitMB", "BPCellLimitAction", "BPCellResetDay", "BPCommaConnect",
 })
 
 READABLE = READ_ONLY | WRITABLE

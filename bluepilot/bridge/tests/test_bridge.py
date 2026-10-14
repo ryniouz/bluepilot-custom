@@ -348,7 +348,7 @@ def test_schema_matches_allowlist():
   from bluepilot.bridge.params_allowlist import WRITABLE
   from bluepilot.bridge.settings_schema import BY_KEY
   assert set(BY_KEY) <= WRITABLE
-  assert WRITABLE - set(BY_KEY) == {"BPBridgeNotifyUrl"}
+  assert WRITABLE - set(BY_KEY) == {"BPBridgeNotifyUrl", "BPServerUrl"}
 
 
 def test_settings_get_and_batch_put(env):

@@ -66,6 +66,27 @@ Read any key in the allowlist, returned as `{ "params": { key: value }, "writabl
 `GET` returns `{ onroad, editable, groups: [{ id, title, settings: [{ key, type: "bool|choice|int|float", title, description, options?: [{value,label}], min?, max?, step?, unit?, value }] }] }`. Groups: driving, speed_limit, lateral, longitudinal, display, device (metadata in `bluepilot/bridge/settings_schema.py`).
 `PUT` body `{ "values": { key: value, ... } }` validates every value against its metadata first, then writes them all; returns `{ applied: { key: value } }`. 409 `onroad` while driving, 403 for keys outside the schema, 400 for out-of-range or invalid choices (nothing is written). The device's own settings screens read the same params, so both stay in sync.
 
+### `GET /v1/connectivity`
+Network, server, Road Trip Mode, LTE usage and home-sync status. The same document (plus `storage`) is written every 2 s to `/dev/shm/bp_bridge_status.json` for the on-device UI. Shape: `/mnt/project-files/comma/ROAD-TRIP-PLAN.md` "Status fields".
+
+### `GET /v1/storage`
+`{ totalBytes, freeBytes, categories: { video, videoLowRes, logs, unsynced, system } }` (bytes; `unsynced` overlaps the first three). Refreshed every 30 s.
+
+## Road Trip Mode (device → server push)
+With `BPRoadTripMode` on and `BPServerUrl` set (e.g. `https://<host>/device/v1`), the bridge pushes to the server, with `Authorization: Bearer <BPBridgeToken>`:
+- `PUT <base>/upload/<segmentDir>/<file>`: each closed segment not yet pulled home. First `qlog.zst` (or `qlog`) for every segment, then `qcamera.ts` when `BPRoadTripVideo` = 1. Newest drive first. A file counts once the server returns 2xx; this is tracked in `/data/bluepilot/bridge/uploaded.json`.
+- `POST <base>/live`: the `/v1/live` JSON, every 10 s while driving.
+- `GET <base>/ping`: every 60 s when idle, as a reachability check.
+
+On failure it backs off for 5 s, 10 s, 30 s, 1 min, 2 min, then 5 min.
+
+Cellular, or a metered Wi-Fi network, counts against `BPCellLimitMB` per billing month, which starts on day `BPCellResetDay`. Over the limit, `BPCellLimitAction` 0 sends telemetry only and 1 stops all uploads. LTE use is measured from the modem counters (`deviceState.networkStats`) and stored in `/data/bluepilot/bridge/usage.json`.
+
+Uploads do not mark segments synced: keep-until-synced still waits for the home pull (rlog and cameras).
+
+## comma connect switch
+`BPCommaConnect` (default 1). When 0, comma's `uploader` stops at once, and `manage_athenad` (comma connect) is not started from the next boot.
+
 ## Keep-until-synced
 With `BPKeepUntilSynced` = 1 (default 1 when bridge enabled), `system/loggerd/deleter.py` deletes synced segments first (oldest first). It only deletes unsynced segments when free space falls below the hard floor (5% or 2 GB), so the comma never fills up.
 

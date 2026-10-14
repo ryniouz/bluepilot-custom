@@ -9,10 +9,18 @@ PARAM_PORT = "BPBridgePort"
 PARAM_TOKEN = "BPBridgeToken"
 PARAM_NOTIFY_URL = "BPBridgeNotifyUrl"
 PARAM_KEEP_UNTIL_SYNCED = "BPKeepUntilSynced"
+PARAM_ROADTRIP = "BPRoadTripMode"
+PARAM_ROADTRIP_VIDEO = "BPRoadTripVideo"
+PARAM_SERVER_URL = "BPServerUrl"
+PARAM_CELL_LIMIT_MB = "BPCellLimitMB"
+PARAM_CELL_LIMIT_ACTION = "BPCellLimitAction"
+PARAM_CELL_RESET_DAY = "BPCellResetDay"
+PARAM_COMMA_CONNECT = "BPCommaConnect"
 
 STATE_DIR = os.environ.get("BP_BRIDGE_STATE_DIR", "/data/bluepilot/bridge")
 EVENTS_FILE = "events.jsonl"
 SYNCED_FILE = "synced.json"
+USAGE_FILE = "usage.json"
 MAX_EVENTS = 2000
 
 # Files a client may download from a segment directory.
