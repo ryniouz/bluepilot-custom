@@ -185,26 +185,26 @@ class CellularPage(FormPage):
     rows: list = [Custom(116, hero)]
     rows.append(Info(tr("Signal"), tr(STRENGTH_NAMES.get(level, "None")) if on_cell else tr("Not in use"), tone))
     if band and on_cell:
-      rows.append(Info(tr("Band"), band.upper().replace("LTE BAND", "").strip() or band))
+      rows.append(Info(tr("Band"), band.upper().replace("LTE BAND", "").strip() or band, adv=True))
     metered = bool(getattr(ds, "networkMetered", False)) if ds is not None else False
     if on_cell:
-      rows.append(Info(tr("Metered"), tr("Yes, large uploads wait for Wi-Fi") if metered else tr("No")))
+      rows.append(Info(tr("Metered"), tr("Yes, video waits for Wi-Fi") if metered else tr("No")))
     temps = list(ds.modemTempC) if ds is not None else []
     if temps:
-      rows.append(Info(tr("Modem temperature"), f"{max(temps):.0f} °C"))
+      rows.append(Info(tr("Modem temperature"), f"{max(temps):.0f} °C", adv=True))
     if snap.read_at:
       rows.append(Info(tr("SIM"), tr("Ready") if snap.sim_present else tr("Not inserted"),
-                       None if snap.sim_present else Console.WARNING))
+                       None if snap.sim_present else Console.WARNING, adv=True))
       if snap.mcc_mnc:
-        rows.append(Info(tr("Carrier code"), f"{snap.mcc_mnc[:3]}-{snap.mcc_mnc[3:]}"))
+        rows.append(Info(tr("Carrier code"), f"{snap.mcc_mnc[:3]}-{snap.mcc_mnc[3:]}", adv=True))
       if snap.sim_id:
-        rows.append(Info(tr("SIM number"), mask(snap.sim_id)))
+        rows.append(Info(tr("SIM number"), mask(snap.sim_id), adv=True))
       if snap.imei:
-        rows.append(Info(tr("IMEI"), mask(snap.imei)))
+        rows.append(Info(tr("IMEI"), mask(snap.imei), adv=True))
       if snap.modem_version:
-        rows.append(Info(tr("Modem firmware"), snap.modem_version))
+        rows.append(Info(tr("Modem firmware"), snap.modem_version, adv=True))
     else:
-      rows.append(Info(tr("SIM"), tr("Reading…")))
+      rows.append(Info(tr("SIM"), tr("Reading…"), adv=True))
     return Section(tr("Network"), "cell", rows)
 
   def _settings_section(self) -> Section:
@@ -218,7 +218,7 @@ class CellularPage(FormPage):
       rows.append(Toggle(tr("Personal hotspot"), tr("Share LTE over Wi-Fi"), hot,
                          lambda: self._wifi.set_tethering_active(not hot)))
     apn = _text(self.p.get("GsmApn", ""))
-    rows.append(Nav(tr("APN"), tr("Your carrier's access point"), self._edit_apn, value=apn or tr("Automatic")))
+    rows.append(Nav(tr("APN"), tr("Your carrier's access point"), self._edit_apn, value=apn or tr("Automatic"), adv=True))
     if self.p.has("BPCellLimitMB"):
       mb = max(0, self.p.int("BPCellLimitMB"))
       act = self.p.int("BPCellLimitAction") if self.p.has("BPCellLimitAction") else 0
@@ -226,7 +226,7 @@ class CellularPage(FormPage):
       rows.append(Nav(tr("Monthly data limit"), sub, self._open_uploads, value=f"{mb / 1000:g} GB" if mb else tr("Off")))
     rows.append(Nav(tr("Uploads over LTE"), self._uploads_summary(), self._open_uploads))
     rows.append(Action(tr("Restart modem"), tr("Reconnects LTE, takes about a minute") if TICI else tr("Only on the comma"),
-                       tr("Restart"), self._restart, enabled=TICI))
+                       tr("Restart"), self._restart, enabled=TICI, adv=True))
     return Section(tr("Settings"), "sliders", rows)
 
   def _uploads_summary(self) -> str:

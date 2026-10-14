@@ -200,7 +200,14 @@ class ConsoleShell(Widget):
     cellular = CellularPage(self.connectivity._wifi)
     cellular.on_open_uploads = lambda: self.open_panel("uploads")
     self.register_page(Dest.CONNECT, Page(tr("Cellular"), "cell", cellular, key="cellular", framed=False))
-    panel(Dest.CONNECT, tr("Wi-Fi"), "wifi", "NETWORK", tr("Connect"))
+    # Wi-Fi: a Console page on the stock panel's WifiManager; keeps the NETWORK key, and System > More settings'
+    # old key (its preferred network moved here)
+    from bluepilot.ui.console.pages.wifi import WifiPage
+    self.wifi = WifiPage(self.connectivity._wifi)
+    self.wifi.on_open_cellular = lambda: self.open_panel("cellular")
+    self._wifi_key = self._wifi_key if self._wifi_key is not None else "wifi"
+    self.register_page(Dest.CONNECT, Page(tr("Wi-Fi"), "wifi", self.wifi, key=self._wifi_key, framed=False,
+                                          aliases=("wifi", "bp_misc")))
     from bluepilot.ui.console.pages.automations import AutomationsPage
     autos = AutomationsPage()
     autos.on_open_wifi = lambda: self.open_panel(self._wifi_key)
@@ -217,8 +224,9 @@ class ConsoleShell(Widget):
     self.register_page(Dest.CONNECT, Page(tr("Firehose"), "flame", FirehosePage(getattr(fh, "instance", None)),
                                           key=getattr(PT, "FIREHOSE", "firehose"), framed=False, level="advanced"))
     # Custom: 7.0 Connect Backend selector (comma connect / Konik / Offline) and dongle ID recovery
-    item_page(Dest.CONNECT, tr("Connect backend"), "cloud", "backend", tr("Connect") + " | " + tr("Reboot to apply"),
-              level="advanced")
+    from bluepilot.ui.console.pages.backend import ConnectBackendPage
+    self.register_page(Dest.CONNECT, Page(tr("Connect backend"), "cloud", ConnectBackendPage(), key="backend", framed=False,
+                                          level="advanced"))
 
     # System: Updates (the old Software page merged in), Truck, Device, Calibration, Storage, Maps, Developer, About
     from bluepilot.ui.console.pages.updates import UpdatesPage
@@ -240,9 +248,6 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.developer import DeveloperPage
     self.register_page(Dest.SYSTEM, Page(tr("Developer"), "code", DeveloperPage(), key=getattr(PT, "DEVELOPER", "developer"),
                                          framed=False, level="advanced"))
-    from bluepilot.ui.console.pages.more import MorePage
-    self.register_page(Dest.SYSTEM, Page(tr("More settings"), "sliders", MorePage(getattr(bp, "instance", None)), key="bp_misc",
-                                         subtitle=tr("System"), framed=False, level="advanced"))
     from bluepilot.ui.console.pages.about import AboutPage
     self.register_page(Dest.SYSTEM, Page(tr("About"), "info", AboutPage(), key="about", subtitle=tr("System"), framed=False))
 

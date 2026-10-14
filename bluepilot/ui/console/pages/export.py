@@ -84,24 +84,26 @@ class ExportPage(FormPage):
                          p.flip("BPBridgeEnabled"))]
     if p.has("BPKeepUntilSynced"):
       rows.append(Toggle(tr("Keep drives until synced"), tr("Cleanup waits for Citadel"),
-                         p.bool("BPKeepUntilSynced", True), p.flip("BPKeepUntilSynced", True)))
+                         p.bool("BPKeepUntilSynced", True), p.flip("BPKeepUntilSynced", True), adv=True))
     if on:
       running = bridge.status() is not None
       rows.append(Info(tr("Status"), tr("Running") if running else tr("Starting"), Console.SUCCESS if running else Console.TEXT_GHOST))
       ip, port = self._local_ip(), p.get("BPBridgePort", None) if p.has("BPBridgePort") else None
-      rows.append(Info(tr("Address"), f"{ip}:{port}" if ip and port else (tr("No Wi-Fi") if port else tr("Not available"))))
+      rows.append(Info(tr("Address"), f"{ip}:{port}" if ip and port else (tr("No Wi-Fi") if port else tr("Not available")),
+                       adv=True))
       token = str(p.get("BPBridgeToken", "") or "") if p.has("BPBridgeToken") else ""
       if token:
         shown = (token if len(token) <= 16 else f"{token[:8]}…{token[-6:]}") if self._show_token else "•" * 12
         rows.append(Action(tr("Access token"), shown, tr("Hide") if self._show_token else tr("Show"),
-                           lambda: setattr(self, "_show_token", not self._show_token)))
-      rows.append(Note(tr("Enter the address and token in Citadel's comma app. Read-only, and only on your Wi-Fi.")))
+                           lambda: setattr(self, "_show_token", not self._show_token), adv=True))
+      rows.append(Note(tr("Enter the address and token in Citadel's comma app. Read-only, and only on your Wi-Fi."),
+                       adv=True))
     return Section(tr("Home server"), "export", rows)
 
   def _portal_section(self) -> Section:
     p = self.p
     if not p.has("EnableWebRoutesServer"):
-      return Section(tr("Web portal"), "screen", [])
+      return Section(tr("Web portal"), "screen", [], adv=True)
     on = p.bool("EnableWebRoutesServer")
     rows: list = [Toggle(tr("Web portal"), tr("Drives and video in a browser"), on, p.flip("EnableWebRoutesServer"))]
     if on:
@@ -113,7 +115,7 @@ class ExportPage(FormPage):
         rows.append(Custom(QR_PX + 40, lambda r, u=url: self._draw_qr(r, u)))
     rows.append(Note(tr("On a phone or laptop on the same Wi-Fi: play drives with every camera, export video clips, " +
                         "read logs and back up or restore settings.")))
-    return Section(tr("Web portal"), "screen", rows)
+    return Section(tr("Web portal"), "screen", rows, adv=True)
 
   def _draw_qr(self, r: rl.Rectangle, url: str):
     if url != self._qr_text:

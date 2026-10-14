@@ -262,6 +262,10 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
     rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 17.3 * s), w * 0.75, color)
   elif name == "check":
     _line([(4.5, 12.5), (9.5, 17.5), (19.5, 6.5)], x, y, s, w, color)
+  elif name == "lock":  # a secured Wi-Fi network, a password
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 5 * s, y + 10.5 * s, 14 * s, 10.5 * s), 0.25, 6, w, color)
+    _arc(12, 10.5, 4.5, 180, 360, x, y, s, w, color)
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 15.75 * s), w * 0.8, color)
   elif name == "close":
     _line([(6, 6), (18, 18)], x, y, s, w, color)
     _line([(18, 6), (6, 18)], x, y, s, w, color)
