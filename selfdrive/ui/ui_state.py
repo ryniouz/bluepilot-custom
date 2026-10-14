@@ -391,7 +391,7 @@ class Device(DeviceSP):
     session = getattr(ui_state, "charge_session", None)
     if getattr(ui_state, "charging_screen", False) and session is not None and session.active:
       policy = getattr(ui_state, "charge_policy", None) or ChargePolicy()
-      since = max(time.monotonic() - session.elapsed_s(), getattr(self, "_last_touch_t", 0.0))
+      since = max(getattr(session, "window_t", 0.0), getattr(self, "_last_touch_t", 0.0))
       mode = policy.mode(ui_state.ignition, getattr(ui_state.ev, "charge_type", 0) == 2, time.monotonic() - since)
       if mode != ON and touched:
         gui_app.mouse_events.clear()  # the tap that wakes the screen does not also minimize it
