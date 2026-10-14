@@ -441,7 +441,8 @@ class ChargingScreen(Widget):
 
   def minimal(self) -> bool:
     policy = getattr(ui_state, "charge_policy", None)
-    return (not ui_state.ignition and policy is not None and policy.minimal
+    inside = getattr(ui_state, "charge_occupied", ui_state.ignition)  # someone inside: truck on or accessory
+    return (not inside and policy is not None and policy.minimal
             and time.monotonic() >= self._full_until)
 
   def show_event(self):

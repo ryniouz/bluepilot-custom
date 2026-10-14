@@ -1,12 +1,15 @@
 """
 How the charging screen behaves once it is up: how long it stays fully on, what it does after that, and whether
-the truck-off view is the minimal dark one. Depends on whether the truck is on and on AC versus DC.
+it is the minimal dark view. Depends on whether someone is inside and on AC versus DC.
 
-  truck on,  AC   BPChargeOnAcMin   (default 15 min), then BPChargeOnThen   (default dim)
-  truck on,  DC   BPChargeOnDcMin   (default always on)
-  truck off, AC   BPChargeSleepMin  (default 30 min), then BPChargeOffThen  (default off)
-  truck off, DC   BPChargeOffDcMin  (default 60 min)
-  BPChargeMinimal (default on): with the truck off, a dark, sparse screen that moves a little every minute
+Someone is inside when the truck is on or in accessory mode; with the truck off, nobody is (Lucas, 2026-10-14:
+no door, belt or seat mapping).
+
+  someone inside, AC   BPChargeOnAcMin   (default always on), then BPChargeOnThen   (default dim)
+  someone inside, DC   BPChargeOnDcMin   (default always on)
+  nobody inside,  AC   BPChargeSleepMin  (default 30 min), then BPChargeOffThen  (default off)
+  nobody inside,  DC   BPChargeOffDcMin  (default 60 min)
+  BPChargeMinimal (default on): with nobody inside, a dark, sparse screen that moves a little every minute
 
 Minutes count from the later of plug-in and the last tap, so a tap gives the full window again. 0 = always on.
 """
@@ -19,11 +22,17 @@ ON, DIM, OFF = "on", "dim", "off"
 THEN = (DIM, OFF)                       # BPCharge*Then: 0 dim, 1 off
 MINUTE_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 0]  # 0 = always on
 DIM_BRIGHTNESS = 8                      # %, the display's dimmed backlight
+OCCUPIED_IGNITION = ("accessory", "run", "start")  # chargingStateBP.wake.ignition values that mean someone is inside
+
+
+def occupied(ignition: bool, truck_ignition: str = "") -> bool:
+  """Someone is inside: the comma is onroad (ignition on), or the truck reports accessory, run or start."""
+  return bool(ignition) or truck_ignition in OCCUPIED_IGNITION
 
 
 @dataclass
 class ChargePolicy:
-  on_ac_min: int = 15
+  on_ac_min: int = 0
   on_dc_min: int = 0
   off_ac_min: int = 30
   off_dc_min: int = 60
@@ -32,7 +41,7 @@ class ChargePolicy:
   minimal: bool = True
 
   KEYS = {  # param -> (attribute, default)
-    "BPChargeOnAcMin": ("on_ac_min", 15),
+    "BPChargeOnAcMin": ("on_ac_min", 0),
     "BPChargeOnDcMin": ("on_dc_min", 0),
     "BPChargeSleepMin": ("off_ac_min", 30),
     "BPChargeOffDcMin": ("off_dc_min", 60),
@@ -65,20 +74,20 @@ class ChargePolicy:
           pass
     return p
 
-  def minutes(self, ignition: bool, dc: bool) -> int:
-    if ignition:
+  def minutes(self, inside: bool, dc: bool) -> int:
+    if inside:
       return self.on_dc_min if dc else self.on_ac_min
     return self.off_dc_min if dc else self.off_ac_min
 
-  def then(self, ignition: bool) -> str:
-    return self.on_then if ignition else self.off_then
+  def then(self, inside: bool) -> str:
+    return self.on_then if inside else self.off_then
 
-  def mode(self, ignition: bool, dc: bool, idle_s: float) -> str:
-    """ON while inside the window (or always-on), then DIM or OFF."""
-    m = self.minutes(ignition, dc)
+  def mode(self, inside: bool, dc: bool, idle_s: float) -> str:
+    """ON while inside the window (or always-on), then DIM or OFF. `inside`: see occupied()."""
+    m = self.minutes(inside, dc)
     if m <= 0 or idle_s < m * 60:
       return ON
-    return self.then(ignition)
+    return self.then(inside)
 
 
 def fmt_minutes(m: int) -> str:
