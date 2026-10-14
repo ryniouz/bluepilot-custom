@@ -5,9 +5,9 @@ it is the minimal dark view. Depends on whether someone is inside and on AC vers
 Someone is inside when the truck is on or in accessory mode; with the truck off, nobody is (Lucas, 2026-10-14:
 no door, belt or seat mapping).
 
-  someone inside, AC   BPChargeOnAcMin   (default always on), then BPChargeOnThen   (default dim)
-  someone inside, DC   BPChargeOnDcMin   (default always on)
-  nobody inside,  AC   BPChargeSleepMin  (default 30 min), then BPChargeOffThen  (default off)
+  someone inside       always full brightness, never dims (Lucas, 22:46: "when it's on don't dim it, only dim when off").
+                       BPChargeOn* are no longer used.
+  nobody inside,  AC   BPChargeSleepMin  (default 30 min), then BPChargeOffThen  (default dim)
   nobody inside,  DC   BPChargeOffDcMin  (default 60 min)
   BPChargeMinimal (default on): with nobody inside, a dark, sparse screen that moves a little every minute
 
@@ -37,7 +37,7 @@ class ChargePolicy:
   off_ac_min: int = 30
   off_dc_min: int = 60
   on_then: str = DIM
-  off_then: str = OFF
+  off_then: str = DIM
   minimal: bool = True
 
   KEYS = {  # param -> (attribute, default)
@@ -46,7 +46,7 @@ class ChargePolicy:
     "BPChargeSleepMin": ("off_ac_min", 30),
     "BPChargeOffDcMin": ("off_dc_min", 60),
     "BPChargeOnThen": ("on_then", 0),
-    "BPChargeOffThen": ("off_then", 1),
+    "BPChargeOffThen": ("off_then", 0),
     "BPChargeMinimal": ("minimal", True),
   }
 
@@ -83,7 +83,9 @@ class ChargePolicy:
     return self.on_then if inside else self.off_then
 
   def mode(self, inside: bool, dc: bool, idle_s: float) -> str:
-    """ON while inside the window (or always-on), then DIM or OFF. `inside`: see occupied()."""
+    """Someone inside (see occupied()): always ON. Nobody inside: ON for the window (or always), then DIM or OFF."""
+    if inside:
+      return ON
     m = self.minutes(inside, dc)
     if m <= 0 or idle_s < m * 60:
       return ON
