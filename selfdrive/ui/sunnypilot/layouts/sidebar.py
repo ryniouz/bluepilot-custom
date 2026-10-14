@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
 from openpilot.system.ui.lib.multilang import tr_noop
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 PING_TIMEOUT_NS = 80_000_000_000  # 80 seconds in nanoseconds
@@ -21,21 +22,21 @@ HOME_BTN = rl.Rectangle(60, 860, 180, 180)
 
 # Color scheme
 class Colors:
-  WHITE = rl.WHITE
-  WHITE_DIM = rl.Color(255, 255, 255, 85)
-  GRAY = rl.Color(84, 84, 84, 255)
+  WHITE = Console.TEXT_PRIMARY
+  WHITE_DIM = with_alpha(Console.TEXT_PRIMARY, 85)
+  GRAY = Console.TEXT_GHOST
 
   # Status colors
-  GOOD = rl.WHITE
-  WARNING = rl.Color(218, 202, 37, 255)
-  DANGER = rl.Color(201, 34, 49, 255)
-  PROGRESS = rl.Color(0, 134, 233, 255)
-  DISABLED = rl.Color(128, 128, 128, 255)
+  GOOD = Console.TEXT_PRIMARY
+  WARNING = Console.WARNING
+  DANGER = Console.DANGER
+  PROGRESS = Console.INFO
+  DISABLED = Console.TEXT_MUTED
 
   # UI elements
-  METRIC_BORDER = rl.Color(255, 255, 255, 85)
-  BUTTON_NORMAL = rl.WHITE
-  BUTTON_PRESSED = rl.Color(255, 255, 255, 166)
+  METRIC_BORDER = with_alpha(Console.TEXT_PRIMARY, 85)
+  BUTTON_NORMAL = Console.TEXT_PRIMARY
+  BUTTON_PRESSED = with_alpha(Console.TEXT_PRIMARY, 166)
 
 
 @dataclass(slots=True)

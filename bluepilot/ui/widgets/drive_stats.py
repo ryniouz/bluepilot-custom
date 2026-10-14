@@ -20,14 +20,15 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.lib.colors import BPColors
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 # Card styling colors (matching Qt gradient: #2c2c2c -> #1a1a1a)
-CARD_BG = rl.Color(38, 38, 38, 255)
-CARD_BORDER = rl.Color(255, 255, 255, 26)
-STATS_CONTAINER_BG = rl.Color(255, 255, 255, 13)
-STATS_CONTAINER_BORDER = rl.Color(255, 255, 255, 26)
-UNIT_COLOR = rl.Color(176, 176, 176, 255)
+CARD_BG = Console.BG_RAISED
+CARD_BORDER = with_alpha(Console.TEXT_PRIMARY, 26)
+STATS_CONTAINER_BG = with_alpha(Console.TEXT_PRIMARY, 13)
+STATS_CONTAINER_BORDER = with_alpha(Console.TEXT_PRIMARY, 26)
+UNIT_COLOR = Console.TEXT_MUTED
 NUMBER_COLOR = BPColors.ACCENT  # #18b4ff - matching Qt
 
 
@@ -118,7 +119,7 @@ class DriveStatsWidget(Widget):
     # Title
     title_font = gui_app.font(FontWeight.BOLD)
     title_pos = rl.Vector2(rect.x + padding_x, rect.y + padding_top)
-    rl.draw_text_ex(title_font, title, title_pos, title_size, 0, rl.WHITE)
+    rl.draw_text_ex(title_font, title, title_pos, title_size, 0, Console.TEXT_PRIMARY)
 
     # Stats container
     container_margin = int(10 * scale)

@@ -13,6 +13,7 @@ from openpilot.selfdrive.ui.mici.onroad.alert_renderer import IconSide, TURN_SIG
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import FirstOrderFilter
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ class TurnSignalWidget(Widget):
     if self._texture:
       pos_x = int(self._rect.x + (self._rect.width - self._texture.width) / 2)
       pos_y = int(self._rect.y + (self._rect.height - self._texture.height) / 2)
-      color = rl.Color(255, 255, 255, icon_alpha)
+      color = with_alpha(Console.TEXT_PRIMARY, icon_alpha)
       rl.draw_texture(self._texture, pos_x, pos_y, color)
 
   def activate(self, _type: str = 'signal'):

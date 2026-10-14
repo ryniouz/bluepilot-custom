@@ -7,6 +7,7 @@ from openpilot.common.params_pyx import UnknownKeyName
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class BlindspotRendererMixin:
@@ -69,8 +70,8 @@ class BlindspotRendererMixin:
       filter_alpha = self._blindspot_left_alpha_filter.x
       edge_alpha = int(255 * EDGE_ALPHA_START * filter_alpha * brightness_pulse)
       inside_alpha = int(255 * EDGE_ALPHA_END * filter_alpha * brightness_pulse)
-      edge_color = rl.Color(255, 0, 0, edge_alpha)
-      inside_color = rl.Color(255, 0, 0, inside_alpha)
+      edge_color = with_alpha(Console.DANGER_FILL, edge_alpha)
+      inside_color = with_alpha(Console.DANGER_FILL, inside_alpha)
       rl.draw_rectangle_gradient_h(x, y, blind_spot_width, h, edge_color, inside_color)
 
     # Draw right edge red gradient indicator with brightness pulse
@@ -78,8 +79,8 @@ class BlindspotRendererMixin:
       filter_alpha = self._blindspot_right_alpha_filter.x
       edge_alpha = int(255 * EDGE_ALPHA_START * filter_alpha * brightness_pulse)
       inside_alpha = int(255 * EDGE_ALPHA_END * filter_alpha * brightness_pulse)
-      edge_color = rl.Color(255, 0, 0, edge_alpha)
-      inside_color = rl.Color(255, 0, 0, inside_alpha)
+      edge_color = with_alpha(Console.DANGER_FILL, edge_alpha)
+      inside_color = with_alpha(Console.DANGER_FILL, inside_alpha)
       rl.draw_rectangle_gradient_h(
         x + int(rect.width) - blind_spot_width, y,
         blind_spot_width, h,

@@ -20,6 +20,7 @@ from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
 from openpilot.system.ui.sunnypilot.lib.styles import style
 from openpilot.system.ui.sunnypilot.widgets.tree_dialog import TreeOptionDialog, TreeNode, TreeFolder
 from openpilot.selfdrive.ui.ui_state import ui_state
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 CAR_LIST_JSON_OUT = os.path.join(BASEDIR, "sunnypilot", "selfdrive", "car", "car_list.json")
 
@@ -50,7 +51,7 @@ class LegendWidget(Widget):
       is_active = p_color.r == color.r and p_color.g == color.g and p_color.b == color.b and p_color.a == color.a
       rl.draw_rectangle(int(x), int(y + 5), 30, 30, color)
       font = self._bold_font if is_active else self._font
-      text_color = rl.WHITE if is_active else style.ITEM_DESC_TEXT_COLOR
+      text_color = Console.TEXT_PRIMARY if is_active else style.ITEM_DESC_TEXT_COLOR
       rl.draw_text_ex(font, f"- {text}", rl.Vector2(x + 50, y - 7), 40, 0, text_color)
       y += 50
 

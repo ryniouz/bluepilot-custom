@@ -11,6 +11,7 @@ from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.button import ButtonStyle, Button
 from openpilot.system.ui.widgets.inputbox import InputBox
 from openpilot.system.ui.widgets.label import Label
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 KEY_FONT_SIZE = 96
 DOUBLE_CLICK_THRESHOLD = 0.5  # seconds
@@ -220,7 +221,7 @@ class Keyboard(Widget):
       eye_x = eye_rect.x + (eye_rect.width - eye_texture.width) / 2
       eye_y = eye_rect.y + (eye_rect.height - eye_texture.height) / 2
 
-      rl.draw_texture_v(eye_texture, rl.Vector2(eye_x, eye_y), rl.WHITE)
+      rl.draw_texture_v(eye_texture, rl.Vector2(eye_x, eye_y), Console.TEXT_PRIMARY)
     else:
       self._input_box.render(input_rect)
 
@@ -228,7 +229,7 @@ class Keyboard(Widget):
       rl.Vector2(input_rect.x, input_rect.y + input_rect.height - 2),
       rl.Vector2(input_rect.x + input_rect.width, input_rect.y + input_rect.height - 2),
       3.0,  # 3 pixel thickness
-      rl.Color(189, 189, 189, 255),
+      Console.TEXT_SECONDARY,
     )
 
   def handle_key_press(self, key):

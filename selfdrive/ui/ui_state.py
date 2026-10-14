@@ -13,6 +13,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
 
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
+from bluepilot.ui.lib.theme import set_accent as set_console_accent  # Custom: Console theme
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
 
@@ -61,6 +62,7 @@ class UIState(UIStateSP):
         "liveParameters",
         "rawAudioData",
         "carStateBP",  # BluePilot: Hybrid battery and drive data
+        "peripheralState",  # Custom: 12 V reading for the Console EV HUD
       ] + self.sm_services_ext
     )
 
@@ -190,6 +192,17 @@ class UIState(UIStateSP):
       else:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
     UIStateSP.update_params(self)
+    # Custom: Console theme params (accent, layout preset, EV HUD)
+    self.console_accent = (self.params.get("BPConsoleAccent", return_default=True) or "blue")
+    if isinstance(self.console_accent, bytes):
+      self.console_accent = self.console_accent.decode("utf-8", errors="ignore")
+    set_console_accent(str(self.console_accent))
+    try:
+      self.layout_preset = int(self.params.get("BPLayoutPreset", return_default=True) or 1)
+    except (TypeError, ValueError):
+      self.layout_preset = 1
+    self.ev_hud = bool(self.params.get("BPEvHud", return_default=True))
+    # Custom: end
     self._param_update_time = time.monotonic()
 
 

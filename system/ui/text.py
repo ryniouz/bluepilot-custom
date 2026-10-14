@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 if BIG_UI:
   MARGIN = 50
@@ -79,7 +80,7 @@ class TextWindow(Widget):
       position = rl.Vector2(self._textarea_rect.x, self._textarea_rect.y + scroll + i * LINE_HEIGHT)
       if position.y + LINE_HEIGHT < self._textarea_rect.y or position.y > self._textarea_rect.y + self._textarea_rect.height:
         continue
-      rl.draw_text_ex(gui_app.font(), line, position, FONT_SIZE, 0, rl.WHITE)
+      rl.draw_text_ex(gui_app.font(), line, position, FONT_SIZE, 0, Console.TEXT_PRIMARY)
     rl.end_scissor_mode()
 
     button_bounds = rl.Rectangle(rect.width - MARGIN - BUTTON_SIZE.x - SPACING, rect.height - MARGIN - BUTTON_SIZE.y, BUTTON_SIZE.x, BUTTON_SIZE.y)

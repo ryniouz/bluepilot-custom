@@ -2,7 +2,8 @@ from typing import Optional
 import pyray as rl
 from cereal import log
 
-from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_PADDING
+from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_PADDING, Alert
+from bluepilot.ui.lib.theme import Console, Onroad, Radius, OnroadType, roundness
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -16,14 +17,28 @@ PILL_TOP_Y = 340
 PILL_SIDE_MARGIN = 60
 PILL_PADDING_H = 30
 PILL_PADDING_V = 15
-PILL_LINE1_FONT_SIZE = 48
-PILL_LINE2_FONT_SIZE = 40  # Slightly smaller for subtitle (matches upstream mid alert)
+PILL_LINE1_FONT_SIZE = OnroadType.PILL
+PILL_LINE2_FONT_SIZE = OnroadType.PILL_SUB
 PILL_LINE_SPACING = 8
 PILL_HEIGHT_SINGLE = 78
 PILL_HEIGHT_DOUBLE = 130
 
-# Pill notification colors
-PILL_BACKGROUND_COLOR = rl.Color(45, 45, 45, 255)
+# Console: pill is a raised panel with a hairline; full alerts are flat status grounds
+PILL_BACKGROUND_COLOR = Console.BG_PANEL
+PILL_OUTLINE_COLOR = Console.BORDER_DEFAULT
+ALERT_RADIUS = Radius.MD * 3  # 24 px on the 3X: Console md radius at device scale
+ALERT_STATUS_BAR_W = 12  # squared status bar on the leading edge (Console bar height)
+
+CONSOLE_ALERT_COLORS = {
+  AlertStatus.normal: Onroad.ALERT_NORMAL,
+  AlertStatus.userPrompt: Onroad.ALERT_PROMPT,
+  AlertStatus.critical: Onroad.ALERT_CRITICAL,
+}
+CONSOLE_ALERT_BAR = {
+  AlertStatus.normal: Console.ACCENT,
+  AlertStatus.userPrompt: Console.WARNING,
+  AlertStatus.critical: Console.DANGER,
+}
 
 
 class AlertRendererBP(AlertRenderer):
@@ -99,7 +114,22 @@ class AlertRendererBP(AlertRenderer):
     return rl.Rectangle(pill_x, pill_y, pill_width, pill_height)
 
   def _draw_pill_background(self, rect: rl.Rectangle) -> None:
-    rl.draw_rectangle_rounded(rect, 0.75, 10, PILL_BACKGROUND_COLOR)
+    r = roundness(rect, Radius.MD * 2)
+    rl.draw_rectangle_rounded(rect, r, 10, PILL_BACKGROUND_COLOR)
+    rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, PILL_OUTLINE_COLOR)
+
+  def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
+    """Console alert ground: flat status colour, 24 px corners, squared status bar on the left
+    edge for normal alerts so they still read as state over a dark panel."""
+    color = CONSOLE_ALERT_COLORS.get(alert.status, CONSOLE_ALERT_COLORS[AlertStatus.normal])
+    if alert.size == AlertSize.full:
+      rl.draw_rectangle_rec(rect, color)
+      return
+    rl.draw_rectangle_rounded(rect, roundness(rect, ALERT_RADIUS), 10, color)
+    if alert.status == AlertStatus.normal:
+      rl.draw_rectangle_rounded_lines_ex(rect, roundness(rect, ALERT_RADIUS), 10, 2, Console.BORDER_DEFAULT)
+      bar = rl.Rectangle(rect.x + 28, rect.y + 28, ALERT_STATUS_BAR_W, rect.height - 56)
+      rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, CONSOLE_ALERT_BAR[AlertStatus.normal])
 
   def _draw_pill_text(self, rect: rl.Rectangle, alert) -> None:
     """Draw text1 and text2 in pill (no wrapping). Line 1 primary font, line 2 slightly smaller."""
@@ -116,13 +146,13 @@ class AlertRendererBP(AlertRenderer):
       start_y = rect.y + (rect.height - total_height) / 2
 
       line1_x = rect.x + (rect.width - line1_size.x) / 2
-      rl.draw_text_ex(self.font_bold, line1, rl.Vector2(line1_x, start_y), PILL_LINE1_FONT_SIZE, 0, rl.WHITE)
+      rl.draw_text_ex(self.font_bold, line1, rl.Vector2(line1_x, start_y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)
       line2_x = rect.x + (rect.width - line2_size.x) / 2
       line2_y = start_y + line1_size.y + PILL_LINE_SPACING
-      rl.draw_text_ex(self.font_bold, line2, rl.Vector2(line2_x, line2_y), PILL_LINE2_FONT_SIZE, 0, rl.WHITE)
+      rl.draw_text_ex(self.font_bold, line2, rl.Vector2(line2_x, line2_y), PILL_LINE2_FONT_SIZE, 0, Console.TEXT_MUTED)
     else:
       text = line1 or line2
       text_size = measure_text_cached(self.font_bold, text, PILL_LINE1_FONT_SIZE)
       x = rect.x + (rect.width - text_size.x) / 2
       y = rect.y + (rect.height - text_size.y) / 2
-      rl.draw_text_ex(self.font_bold, text, rl.Vector2(x, y), PILL_LINE1_FONT_SIZE, 0, rl.WHITE)
+      rl.draw_text_ex(self.font_bold, text, rl.Vector2(x, y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)

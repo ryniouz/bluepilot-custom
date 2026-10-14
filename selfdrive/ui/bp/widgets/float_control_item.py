@@ -9,10 +9,11 @@ from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 ITEM_TEXT_FONT_SIZE = 50
-ITEM_TEXT_COLOR = rl.WHITE
-ITEM_TEXT_VALUE_COLOR = rl.Color(170, 170, 170, 255)
+ITEM_TEXT_COLOR = Console.TEXT_PRIMARY
+ITEM_TEXT_VALUE_COLOR = Console.TEXT_MUTED
 BUTTON_SIZE = 80
 BUTTON_SPACING = 7  # Reduced from 20 to ~1/3 (33/3 ≈ 11, but we need some space, so 7)
 

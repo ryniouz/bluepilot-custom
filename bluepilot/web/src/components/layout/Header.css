@@ -70,7 +70,7 @@
 .icon-btn:hover {
   background: var(--bp-bg-tertiary);
   border-color: var(--bp-text-secondary);
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .icon-btn:hover > * {
@@ -127,13 +127,13 @@
 .websocket-icon {
   flex-shrink: 0;
   color: var(--bp-success);
-  filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.5));
+  filter: drop-shadow(0 0 2px rgba(var(--success-rgb), 0.5));
   animation: pulse-ws 1.5s ease-in-out infinite;
 }
 
 .device-status.websocket-active {
-  background: rgba(76, 175, 80, 0.15);
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: rgba(var(--success-rgb), 0.15);
+  border: 1px solid rgba(var(--success-rgb), 0.3);
 }
 
 @keyframes pulse-ws {
@@ -196,8 +196,8 @@
 
 /* Normal state (default - green) */
 .metric-pill.normal {
-  background: rgba(76, 175, 80, 0.1);
-  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(var(--success-rgb), 0.1);
+  border-color: rgba(var(--success-rgb), 0.3);
 }
 
 .metric-pill.normal .metric-icon {
@@ -210,22 +210,22 @@
 
 /* Warning state (yellow/orange) */
 .metric-pill.warning {
-  background: rgba(255, 152, 0, 0.15);
-  border-color: rgba(255, 152, 0, 0.4);
+  background: rgba(var(--warning-rgb), 0.15);
+  border-color: rgba(var(--warning-rgb), 0.4);
 }
 
 .metric-pill.warning .metric-icon {
-  color: #ff9800;
+  color: var(--warning);
 }
 
 .metric-pill.warning .metric-value {
-  color: #ff9800;
+  color: var(--warning);
 }
 
 /* Critical state (red) */
 .metric-pill.critical {
-  background: rgba(244, 67, 54, 0.15);
-  border-color: rgba(244, 67, 54, 0.4);
+  background: rgba(var(--danger-rgb), 0.15);
+  border-color: rgba(var(--danger-rgb), 0.4);
   animation: pulse-critical 2s ease-in-out infinite;
 }
 
@@ -240,12 +240,12 @@
 @keyframes pulse-critical {
   0%,
   100% {
-    border-color: rgba(244, 67, 54, 0.4);
-    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4);
+    border-color: rgba(var(--danger-rgb), 0.4);
+    box-shadow: 0 0 0 0 rgba(var(--danger-rgb), 0.4);
   }
   50% {
-    border-color: rgba(244, 67, 54, 0.6);
-    box-shadow: 0 0 0 4px rgba(244, 67, 54, 0.1);
+    border-color: rgba(var(--danger-rgb), 0.6);
+    box-shadow: 0 0 0 4px rgba(var(--danger-rgb), 0.1);
   }
 }
 
@@ -256,15 +256,15 @@
 }
 
 .metric-pill.normal:hover {
-  background: rgba(76, 175, 80, 0.15);
+  background: rgba(var(--success-rgb), 0.15);
 }
 
 .metric-pill.warning:hover {
-  background: rgba(255, 152, 0, 0.2);
+  background: rgba(var(--warning-rgb), 0.2);
 }
 
 .metric-pill.critical:hover {
-  background: rgba(244, 67, 54, 0.2);
+  background: rgba(var(--danger-rgb), 0.2);
 }
 
 /* Responsive adjustments */

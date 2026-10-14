@@ -19,6 +19,7 @@ from openpilot.system.ui.widgets.list_view import ListItem, ToggleAction, ItemAc
 from openpilot.system.ui.widgets.scroller_tici import LineSeparator, LINE_COLOR, LINE_PADDING
 from openpilot.system.ui.sunnypilot.lib.styles import style
 from openpilot.system.ui.sunnypilot.widgets.option_control import OptionControlSP, LABEL_WIDTH
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class Spacer(Widget):
@@ -31,7 +32,7 @@ class Spacer(Widget):
     self._rect.width = parent_rect.width
 
   def _render(self, _):
-    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.x + self._rect.width), int(self._rect.y), rl.Color(0,0,0,0))
+    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.x + self._rect.width), int(self._rect.y), with_alpha(Console.BG_PAGE, 0))
 
 
 class ToggleActionSP(ToggleAction):

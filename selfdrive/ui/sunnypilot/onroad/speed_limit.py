@@ -20,6 +20,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.sunnypilot.lib.utils import AlertFadeAnimator
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 METER_TO_FOOT = 3.28084
 METER_TO_MILE = 0.000621371
@@ -36,9 +37,9 @@ class Colors:
   WHITE = rl.WHITE
   BLACK = rl.BLACK
   RED = rl.Color(235, 32, 32, 255)
-  GREY = rl.Color(145, 155, 149, 255)
-  DARK_GREY = rl.Color(77, 77, 77, 255)
-  SUB_BG = rl.Color(0, 0, 0, 180)
+  GREY = Console.TEXT_MUTED  # Custom: Console
+  DARK_GREY = Console.BG_HIGH  # Custom: Console
+  SUB_BG = with_alpha(Console.BG_PAGE, 180)  # Custom: Console
   MUTCD_LINES = rl.Color(255, 255, 255, 100)
 
 

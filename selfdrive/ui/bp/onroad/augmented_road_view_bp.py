@@ -14,19 +14,25 @@ from openpilot.selfdrive.ui.bp.onroad.hybrid_battery_gauge_arched import HybridB
 from openpilot.selfdrive.ui.bp.onroad.power_flow_gauge import PowerFlowGauge
 from openpilot.selfdrive.ui.bp.onroad.powerflow_gauge_arched import PowerflowGaugeArched, POWERFLOW_ANGLE_SPAN
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
+from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
 from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceBallTiciBP
 from openpilot.selfdrive.ui.onroad.driver_state import BTN_SIZE
 from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState, get_bottom_dev_ui_offset
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
+from openpilot.selfdrive.ui.ui_state import UIStatus
+from bluepilot.ui.lib.theme import Console, Onroad
+from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
 # BluePilot: Margin to keep confidence ball inside the colored border
 BALL_BORDER_MARGIN = UI_BORDER_SIZE // 2  # 15px
 
 # Shared container styling (matches battery/power flow gauge backgrounds)
-SHARED_BG_COLOR = rl.Color(20, 20, 20, 100)
+# Custom: Console flat panel, no glow
+SHARED_BG_COLOR = Onroad.PANEL
 SHARED_BG_ROUNDNESS = 0.3
-SHARED_BG_GLOW_EXPANSION = 4
+SHARED_BG_GLOW_EXPANSION = 0
 SHARED_INNER_GAP = 10  # Pixels between battery and power flow gauges inside shared container
 SHARED_PADDING = 8     # Padding around inner content in shared container
 SHARED_BORDER_THICKNESS = 2.0  # Power flow mode-colored border thickness
@@ -60,6 +66,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     # BluePilot: Torque bar renderer (renders as crown strip inside gauge container)
     self._torque_bar = TorqueBarRendererBP(scale=3.0)
     self._power_flow_gauge_arched.set_torque_bar(self._torque_bar)
+
+    # Custom: Console EV HUD (battery, power, range, temps, tires, 12 V)
+    self._ev_hud = EvHudRenderer()
 
     # BluePilot: Add confidence ball on left side (MADS beam + enhanced coloring)
     self._confidence_ball = ConfidenceBallTiciBP()
@@ -96,6 +105,10 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._switch_stream_if_needed(ui_state.sm)
     self._update_calibration()
 
+    # Custom: Console layout preset filters optional overlays for this frame
+    preset = current_preset()
+    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL
+
     # Create inner content area with border padding
     self._content_rect = rl.Rectangle(
       rect.x + UI_BORDER_SIZE,
@@ -105,7 +118,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     )
 
     # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
-    ball_offset = (ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN) if self._show_confidence_ball else 0
+    ball_offset = (ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
     ui_rect = rl.Rectangle(
       self._content_rect.x + ball_offset,
       self._content_rect.y,
@@ -133,7 +146,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self.update_fade_out_bottom_overlay(self._content_rect)
 
     # BluePilot: Render confidence ball on left side (narrow rect = ball strip only, not full width)
-    if self._show_confidence_ball:
+    if show_ball:
       ball_strip_width = ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN
       # Semi-transparent dark backdrop so ball is visible against bright camera feed
       rl.draw_rectangle_gradient_h(
@@ -141,8 +154,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
         int(self._content_rect.y),
         int(ball_strip_width),
         int(self._content_rect.height),
-        rl.Color(20, 20, 20, 120),  # darker at left edge
-        rl.Color(20, 20, 20, 0),    # fade to transparent at right edge
+        Onroad.BAND,                # Console bg-page at the left edge
+        Console.TRANSPARENT,        # fades out so the camera stays readable
       )
       ball_rect = rl.Rectangle(
         self._content_rect.x + BALL_BORDER_MARGIN,
@@ -151,6 +164,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
         self._content_rect.height,
       )
       self._confidence_ball.render(ball_rect)
+
+    # Custom: EV HUD card, drawn under the blindspot edges so the red warning is never covered
+    self._ev_hud.render(self._content_rect, preset)
 
     # BluePilot: Draw blindspot screen edge indicators ON TOP of confidence ball backdrop
     # so the red safety warning is never obscured
@@ -178,7 +194,11 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._torque_bar.update()
 
     # BluePilot: Render gauges + torque crown strip inside shared container
-    gauge_height_offset, hybrid_active = self._render_gauges(self._content_rect, ball_offset)
+    # Custom: the Minimal preset hides the legacy gauges and the steering arc
+    if preset == LayoutPreset.MINIMAL:
+      gauge_height_offset, hybrid_active = 0.0, True
+    else:
+      gauge_height_offset, hybrid_active = self._render_gauges(self._content_rect, ball_offset)
     bp_ui_log.state("AugRoadView", "hybrid_active", hybrid_active)
     bp_ui_log.state("AugRoadView", "gauge_height_offset", round(gauge_height_offset))
 
@@ -195,7 +215,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     alert = self.alert_renderer.get_alert(ui_state.sm)
     alert_rect = (
       self._content_rect
-      if (alert and alert.size == log.SelfdriveState.AlertSize.full and self._show_confidence_ball)
+      if (alert and alert.size == log.SelfdriveState.AlertSize.full and show_ball)
       else ui_rect
     )
     self.alert_renderer.render(alert_rect)
@@ -379,7 +399,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
         self._draw_shared_background(shared_rect)
         rl.draw_rectangle_rounded_lines_ex(
           shared_rect, SHARED_BG_ROUNDNESS, 10, SHARED_BORDER_THICKNESS,
-          rl.Color(120, 120, 120, 100),
+          Console.BORDER_DEFAULT,
         )
 
         strip_rect = rl.Rectangle(battery_rect.x, strip_top, battery_rect.width, TORQUE_STRIP_HEIGHT)
@@ -451,8 +471,14 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       rect.x - glow_exp, rect.y - glow_exp,
       rect.width + glow_exp * 2, rect.height + glow_exp * 2,
     )
-    rl.draw_rectangle_rounded(
-      glow_rect, SHARED_BG_ROUNDNESS, 10,
-      rl.Color(20, 20, 20, int(SHARED_BG_COLOR.a * 0.3)),
-    )
+    if glow_exp > 0:
+      rl.draw_rectangle_rounded(glow_rect, SHARED_BG_ROUNDNESS, 10, Console.TRANSPARENT)
     rl.draw_rectangle_rounded(rect, SHARED_BG_ROUNDNESS, 10, SHARED_BG_COLOR)
+
+  def _draw_border(self, rect: rl.Rectangle):
+    """Console: page-ground outer frame, status-coloured inner frame."""
+    rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, Console.BG_PAGE)
+    border_color = BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                               rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
+    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, UI_BORDER_SIZE, border_color)

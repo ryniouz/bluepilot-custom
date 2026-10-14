@@ -12,6 +12,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState
 from openpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class CircularAlertsRenderer:
@@ -90,12 +91,12 @@ class CircularAlertsRenderer:
 
     # Standstill Timer (STOPPED) should be static white
     if self._e2e_alert_display_timer == 0 and ui_state.standstill_timer and self._is_standstill:
-      frame_color = rl.Color(255, 255, 255, 75)
+      frame_color = with_alpha(Console.TEXT_PRIMARY, 75)
     else:
-      frame_color = rl.Color(255, 255, 255, 75) if is_pulsing else rl.Color(0, 255, 0, 75)
+      frame_color = with_alpha(Console.TEXT_PRIMARY, 75) if is_pulsing else with_alpha(Console.SUCCESS, 75)
 
     # Draw Circle
-    rl.draw_circle_v(center, e2e_alert_size, rl.Color(0, 0, 0, 190))
+    rl.draw_circle_v(center, e2e_alert_size, with_alpha(Console.BG_PAGE, 190))
     # Draw Ring (Border)
     rl.draw_ring(center, e2e_alert_size - 7.5, e2e_alert_size + 7.5, 0, 360, 0, frame_color)
 
@@ -103,10 +104,10 @@ class CircularAlertsRenderer:
     if self._alert_img and self._e2e_alert_display_timer > 0:
       img_x = int(center.x - self._alert_img.width / 2)
       img_y = int(center.y - self._alert_img.height / 2)
-      rl.draw_texture(self._alert_img, img_x, img_y, rl.WHITE)
+      rl.draw_texture(self._alert_img, img_x, img_y, Console.TEXT_PRIMARY)
 
     # Draw Text
-    txt_color = rl.Color(255, 255, 255, 255) if is_pulsing else rl.Color(0, 255, 0, 190)
+    txt_color = with_alpha(Console.TEXT_PRIMARY, 255) if is_pulsing else with_alpha(Console.SUCCESS, 190)
     font = gui_app.font(FontWeight.BOLD)
     text_size = 48
     spacing = 0
@@ -125,13 +126,13 @@ class CircularAlertsRenderer:
       top_text_size = 80
       measure_top = measure_text_cached(font, alert_alt_text, top_text_size, spacing)
       top_y = alert_rect.y + alert_rect.height / 3.5
-      rl.draw_text_ex(font, alert_alt_text, rl.Vector2(center.x - measure_top.x / 2, top_y), top_text_size, spacing, rl.Color(255, 175, 3, 240))
+      rl.draw_text_ex(font, alert_alt_text, rl.Vector2(center.x - measure_top.x / 2, top_y), top_text_size, spacing, with_alpha(Console.WARNING, 240))
 
       # Timer
       timer_text_size = 100
       measure_timer = measure_text_cached(font, self._alert_text, timer_text_size, spacing)
       timer_y = (alert_rect.y + alert_rect.height) - (alert_rect.height / 5) - measure_timer.y
-      rl.draw_text_ex(font, self._alert_text, rl.Vector2(center.x - measure_timer.x / 2, timer_y), timer_text_size, spacing, rl.WHITE)
+      rl.draw_text_ex(font, self._alert_text, rl.Vector2(center.x - measure_timer.x / 2, timer_y), timer_text_size, spacing, Console.TEXT_PRIMARY)
     else:
       for line in lines:
         measure = measure_text_cached(font, line, text_size, spacing)

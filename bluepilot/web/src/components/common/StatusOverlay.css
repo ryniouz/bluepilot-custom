@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.95);
+  background: var(--bg-page);
   backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
@@ -19,9 +19,9 @@
   max-width: 520px;
   padding: 2.5rem 2rem;
   animation: slideUp 0.4s ease;
-  background: rgba(20, 20, 20, 0.9);
+  background: var(--bg-page);
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--ink-rgb), 0.08);
   box-shadow: var(--panel-card-shadow);
   display: flex;
   flex-direction: column;
@@ -45,7 +45,7 @@
 .status-overlay h2 {
   font-size: 1.75rem;
   margin-bottom: 0.625rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .status-overlay p {
@@ -91,8 +91,8 @@
 .spinner-small {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 2px solid rgba(var(--ink-rgb), 0.3);
+  border-top-color: var(--text-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   display: inline-block;

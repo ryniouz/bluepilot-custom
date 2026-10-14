@@ -5,7 +5,7 @@ from openpilot.common.params_pyx import UnknownKeyName
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.ui.widgets import Widget, DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
-from openpilot.system.ui.widgets.list_view import toggle_item, multiple_button_item, button_item, ButtonAction, ListItem
+from openpilot.system.ui.widgets.list_view import toggle_item, multiple_button_item, button_item, text_item, ButtonAction, ListItem
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.system.ui.lib.application import gui_app
@@ -14,6 +14,8 @@ from openpilot.system.ui.lib.wifi_manager import WifiManager, Network
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.widgets.float_control_item import float_control_item
 from openpilot.selfdrive.ui.bp.widgets.section_header import SectionHeader
+from bluepilot.ui.lib.theme import ACCENT_NAMES, ACCENT_LABELS, set_accent  # Custom: Console theme
+from bluepilot.ui.lib.layout_presets import PRESET_LABELS, PRESET_DESCRIPTIONS  # Custom: Console theme
 
 
 class BluePilotLayout(Widget):
@@ -73,6 +75,9 @@ class BluePilotLayout(Widget):
       ("disable_BP_long_UI", self._disable_BP_long),
       ("disable_downhill_comp_UI", self._disable_dowhill_comp),
       ("BPUIDebugLog", self._ui_debug_log),
+      ("BPEvHud", self._ev_hud),
+      ("BPBridgeEnabled", self._bridge_enabled),
+      ("BPKeepUntilSynced", self._keep_until_synced),
     )
 
     ui_state.add_offroad_transition_callback(self._update_toggles)
@@ -397,6 +402,69 @@ class BluePilotLayout(Widget):
       callback=self._clear_model_cache
     )
 
+    # Custom: Console theme settings
+    accent = str(self._safe_get(self._params, "BPConsoleAccent", "blue") or "blue")
+    if isinstance(accent, bytes):
+      accent = accent.decode("utf-8", errors="ignore")
+    accent_idx = ACCENT_NAMES.index(accent) if accent in ACCENT_NAMES else 0
+    self._console_accent_btn = multiple_button_item(
+      lambda: tr("Accent"),
+      lambda: tr("Console accent colour for buttons, selections and the driving path. Status colours never change."),
+      buttons=[lambda n=n: tr(n) for n in ACCENT_LABELS],
+      button_width=200,
+      callback=self._set_console_accent,
+      selected_index=accent_idx,
+      icon="settings.png"
+    )
+    try:
+      preset_idx = int(self._safe_get(self._params, "BPLayoutPreset", 1))
+    except (TypeError, ValueError):
+      preset_idx = 1
+    self._layout_preset_btn = multiple_button_item(
+      lambda: tr("Driving screen layout"),
+      lambda: tr(PRESET_DESCRIPTIONS[self._layout_preset_idx()]),
+      buttons=[lambda n=n: tr(n) for n in PRESET_LABELS],
+      button_width=225,
+      callback=self._set_layout_preset,
+      selected_index=max(0, min(2, preset_idx)),
+      icon="monitoring.png"
+    )
+    self._ev_hud = toggle_item(
+      lambda: tr("EV panel"),
+      lambda: tr("Show battery charge, power, range and efficiency on the driving screen. Dense layout adds temperatures, limits, tires and 12 V."),
+      initial_state=self._safe_get_bool(self._params, "BPEvHud", True),
+      callback=lambda state: self._toggle_callback(state, "BPEvHud"),
+      icon="speed_limit.png"
+    )
+
+    # Custom: Data export (params from the comma-export branch; rows hide their value if the key is absent)
+    self._bridge_enabled = toggle_item(
+      lambda: tr("Data export for home server"),
+      lambda: tr("Serve drives, GPS and a live feed to your home server over Wi-Fi. Read-only, token protected."),
+      initial_state=self._safe_get_bool(self._params, "BPBridgeEnabled"),
+      callback=lambda state: self._toggle_callback(state, "BPBridgeEnabled"),
+      icon="network.png"
+    )
+    self._keep_until_synced = toggle_item(
+      lambda: tr("Keep drives until synced"),
+      lambda: tr("Do not let storage rotation delete drives the home server has not pulled yet."),
+      initial_state=self._safe_get_bool(self._params, "BPKeepUntilSynced", True),
+      callback=lambda state: self._toggle_callback(state, "BPKeepUntilSynced"),
+      icon="network.png"
+    )
+    self._bridge_address = text_item(
+      lambda: tr("Export address"),
+      self._bridge_address_text,
+      lambda: tr("Wi-Fi address and port the home server connects to."),
+    )
+    self._token_revealed = False
+    self._bridge_token = button_item(
+      lambda: tr("Export token"),
+      self._bridge_token_text,
+      lambda: tr("Tap to show or hide. Enter this token in the comma app on your home server."),
+      callback=self._toggle_token,
+    )
+
     # Build menu with sections per TICI_MENU.csv
     return [
       SectionHeader(tr("System")),
@@ -406,6 +474,15 @@ class BluePilotLayout(Widget):
       SectionHeader(tr("Vehicle")),
       self._show_hands_free_ui,
       self._vbatt_pause_charging,
+      SectionHeader(tr("Console theme")),
+      self._console_accent_btn,
+      self._layout_preset_btn,
+      self._ev_hud,
+      SectionHeader(tr("Data export")),
+      self._bridge_enabled,
+      self._keep_until_synced,
+      self._bridge_address,
+      self._bridge_token,
       SectionHeader(tr("Visuals")),
       self._hide_onroad_border,
       self._show_blindspot,
@@ -620,6 +697,61 @@ class BluePilotLayout(Widget):
       callback=handle_confirm
     )
     gui_app.push_widget(dialog)
+
+  # Custom: Console theme and data export callbacks
+  def _set_console_accent(self, button_index: int):
+    name = ACCENT_NAMES[max(0, min(len(ACCENT_NAMES) - 1, button_index))]
+    try:
+      self._params.put("BPConsoleAccent", name)
+    except UnknownKeyName:
+      pass
+    set_accent(name)
+
+  def _layout_preset_idx(self) -> int:
+    try:
+      return max(0, min(2, int(self._safe_get(self._params, "BPLayoutPreset", 1))))
+    except (TypeError, ValueError):
+      return 1
+
+  def _set_layout_preset(self, button_index: int):
+    try:
+      self._params.put("BPLayoutPreset", int(button_index))
+    except UnknownKeyName:
+      pass
+    ui_state.layout_preset = int(button_index)
+
+  @staticmethod
+  def _local_ip() -> str:
+    import socket
+    try:
+      with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect(("10.255.255.255", 1))  # no packet is sent; picks the outbound interface
+        return sock.getsockname()[0]
+    except OSError:
+      return ""
+
+  def _bridge_address_text(self) -> str:
+    port = self._safe_get(self._params, "BPBridgePort", None)
+    if port is None:
+      return tr("Not available")
+    if isinstance(port, bytes):
+      port = port.decode("utf-8", errors="ignore")
+    ip = self._local_ip()
+    return f"{ip}:{port}" if ip else tr("No Wi-Fi")
+
+  def _bridge_token_text(self) -> str:
+    token = self._safe_get(self._params, "BPBridgeToken", None)
+    if not token:
+      return tr("NONE")
+    if isinstance(token, bytes):
+      token = token.decode("utf-8", errors="ignore")
+    if self._token_revealed:
+      return token if len(token) <= 16 else f"{token[:8]}…{token[-6:]}"
+    return tr("SHOW")
+
+  def _toggle_token(self):
+    self._token_revealed = not self._token_revealed
+  # Custom: end
 
   def _set_overlay_size(self, button_index: int):
     """Handle overlay size button selection."""

@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 
 from openpilot.selfdrive.ui.sunnypilot.layouts.sidebar import SidebarSP
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 SIDEBAR_WIDTH = 300
 METRIC_HEIGHT = 126
@@ -26,19 +27,19 @@ NetworkType = log.DeviceState.NetworkType
 
 # Color scheme
 class Colors:
-  WHITE = rl.WHITE
-  WHITE_DIM = rl.Color(255, 255, 255, 85)
-  GRAY = rl.Color(84, 84, 84, 255)
+  WHITE = Console.TEXT_PRIMARY
+  WHITE_DIM = with_alpha(Console.TEXT_PRIMARY, 85)
+  GRAY = Console.TEXT_GHOST
 
   # Status colors
-  GOOD = rl.WHITE
-  WARNING = rl.Color(218, 202, 37, 255)
-  DANGER = rl.Color(201, 34, 49, 255)
+  GOOD = Console.TEXT_PRIMARY
+  WARNING = Console.WARNING
+  DANGER = Console.DANGER
 
   # UI elements
-  METRIC_BORDER = rl.Color(255, 255, 255, 85)
-  BUTTON_NORMAL = rl.WHITE
-  BUTTON_PRESSED = rl.Color(255, 255, 255, 166)
+  METRIC_BORDER = with_alpha(Console.TEXT_PRIMARY, 85)
+  BUTTON_NORMAL = Console.TEXT_PRIMARY
+  BUTTON_PRESSED = with_alpha(Console.TEXT_PRIMARY, 166)
 
 
 NETWORK_TYPES = {
@@ -97,7 +98,7 @@ class Sidebar(Widget, SidebarSP):
 
   def _render(self, rect: rl.Rectangle):
     # Background
-    rl.draw_rectangle_rec(rect, rl.BLACK)
+    rl.draw_rectangle_rec(rect, Console.BG_PAGE)
 
     self._draw_buttons(rect)
     self._draw_network_indicator(rect)

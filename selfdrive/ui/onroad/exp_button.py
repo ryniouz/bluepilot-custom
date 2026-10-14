@@ -4,6 +4,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, Onroad, copy as copy_color  # Custom: Console theme
 
 
 class ExpButton(Widget):
@@ -18,8 +19,9 @@ class ExpButton(Widget):
     self._held_mode: bool | None = None
     self._hold_end_time: float | None = None
 
-    self._white_color: rl.Color = rl.Color(255, 255, 255, 255)
-    self._black_bg: rl.Color = rl.Color(0, 0, 0, 166)
+    # Custom: Console panel button with hairline ring
+    self._white_color: rl.Color = copy_color(Console.TEXT_PRIMARY)
+    self._black_bg: rl.Color = Onroad.PANEL
     self._txt_wheel: rl.Texture = gui_app.texture('icons/chffr_wheel.png', icon_size, icon_size)
     self._txt_exp: rl.Texture = gui_app.texture('icons/experimental.png', icon_size, icon_size)
     self._rect = rl.Rectangle(0, 0, button_size, button_size)
@@ -58,6 +60,8 @@ class ExpButton(Widget):
     is_exp = self._held_or_actual_mode()
     texture = self._txt_exp if is_exp else self._txt_wheel
     rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
+    rl.draw_ring(rl.Vector2(center_x, center_y), self._rect.width / 2 - 2, self._rect.width / 2, 0, 360, 64,
+                 Console.ACCENT if is_exp else Console.BORDER_DEFAULT)  # Custom: Console ring, accent in experimental
 
     if is_exp or not self._animate_wheel:
       rl.draw_texture(texture, center_x - texture.width // 2, center_y - texture.height // 2, self._white_color)

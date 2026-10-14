@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.wrap_text import wrap_text
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 LIST_INDENT_PX = 40
 
@@ -58,7 +59,7 @@ class HtmlElement:
 
 class HtmlRenderer(Widget):
   def __init__(self, file_path: str | None = None, text: str | None = None,
-               text_size: dict | None = None, text_color: rl.Color = rl.WHITE, center_text: bool = False):
+               text_size: dict | None = None, text_color: rl.Color = Console.TEXT_PRIMARY, center_text: bool = False):
     super().__init__()
     self._text_color = text_color
     self._center_text = center_text
@@ -85,7 +86,7 @@ class HtmlRenderer(Widget):
       ElementType.H6: {"size": round(base_p_size * 0.67), "weight": FontWeight.BOLD, "margin_top": 10, "margin_bottom": 4},
       ElementType.P: {"size": base_p_size, "weight": FontWeight.NORMAL, "margin_top": 8, "margin_bottom": 12},
       ElementType.B: {"size": base_p_size, "weight": FontWeight.BOLD, "margin_top": 8, "margin_bottom": 12},
-      ElementType.LI: {"size": base_p_size, "weight": FontWeight.NORMAL, "color": rl.Color(40, 40, 40, 255), "margin_top": 6, "margin_bottom": 6},
+      ElementType.LI: {"size": base_p_size, "weight": FontWeight.NORMAL, "color": Console.BG_RAISED, "margin_top": 6, "margin_bottom": 6},
       ElementType.BR: {"size": 0, "weight": FontWeight.NORMAL, "margin_top": 0, "margin_bottom": 12},
     }
 

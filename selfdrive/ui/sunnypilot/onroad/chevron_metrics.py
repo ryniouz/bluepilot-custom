@@ -11,6 +11,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class ChevronOptions:
@@ -103,8 +104,8 @@ class ChevronMetrics:
       text_y = max(margin, text_y)
 
     alpha = int(255 * self._lead_status_alpha)
-    text_color = rl.Color(255, 255, 255, alpha)
-    shadow_color = rl.Color(0, 0, 0, int(200 * self._lead_status_alpha))
+    text_color = with_alpha(Console.TEXT_PRIMARY, alpha)
+    shadow_color = with_alpha(Console.BG_PAGE, int(200 * self._lead_status_alpha))
 
     for i, line in enumerate(text_lines):
       y = int(text_y + (i * line_height))

@@ -8,19 +8,28 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, Onroad, mix
 
 # BluePilot: Lane line colors by status (upstream removed LANE_LINE_COLORS dict)
+# Custom: Console status hues; disengaged lines go ghost grey instead of black
 LANE_LINE_COLORS_BP = {
-  UIStatus.DISENGAGED: rl.Color(0, 0, 0, 255),
-  UIStatus.ENGAGED: rl.Color(0, 255, 80, 255),
-  UIStatus.OVERRIDE: rl.Color(145, 155, 149, 255),
+  UIStatus.DISENGAGED: Console.TEXT_GHOST,
+  UIStatus.ENGAGED: Onroad.ENGAGED,
+  UIStatus.OVERRIDE: Onroad.OVERRIDE,
+  UIStatus.LAT_ONLY: Onroad.LAT_ONLY,
+  UIStatus.LONG_ONLY: Onroad.LONG_ONLY,
 }
 
 # BluePilot: Radar/vision lead indicator colors
-LEAD_RADAR_GLOW = rl.Color(0, 134, 233, 255)
-LEAD_RADAR_CHEVRON_BASE = rl.Color(0, 100, 200, 255)
-LEAD_VISION_GLOW = rl.Color(218, 202, 37, 255)
-LEAD_VISION_CHEVRON_BASE = rl.Color(201, 34, 49, 255)
+# Custom: Console - radar lead is info, vision lead is warning (outer mark full, inner deepened)
+LEAD_RADAR_GLOW = Onroad.LEAD_RADAR
+LEAD_RADAR_CHEVRON_BASE = mix(Onroad.LEAD_RADAR, Console.BG_PAGE, 0.35)
+LEAD_VISION_GLOW = Onroad.LEAD_VISION
+LEAD_VISION_CHEVRON_BASE = mix(Onroad.LEAD_VISION, Console.BG_PAGE, 0.35)
+
+# Custom: Console draws crisp lines; glow halos are off
+CONSOLE_LANE_GLOW = False
+ROAD_EDGE_COLOR = Console.DANGER
 
 # BluePilot: Overlay size scale factors (Small=0, Medium=1, Large=2)
 OVERLAY_SCALE_FACTORS = {0: 0.6, 1: 1.0, 2: 1.5}
@@ -258,10 +267,10 @@ class ModelRendererBP(ModelRenderer):
     Outer lanes use white. All lanes go black when disengaged.
     """
     if ui_state.status == UIStatus.DISENGAGED:
-      return rl.Color(0, 0, 0, 255)
+      return Console.TEXT_GHOST
 
     if not is_current_lane:
-      return rl.Color(255, 255, 255, 255)
+      return Console.TEXT_PRIMARY
 
     base = LANE_LINE_COLORS_BP.get(ui_state.status, LANE_LINE_COLORS_BP[UIStatus.DISENGAGED])
     brightness = np.interp(prob, [0.0, 0.5, 1.0], [0.4, 0.7, 1.0])
@@ -289,13 +298,15 @@ class ModelRendererBP(ModelRenderer):
       if road_edge.projected_points.size == 0:
         continue
       edge_alpha = np.clip(1.0 - self._road_edge_stds[i], 0.0, 1.0) * 0.6
-      color = rl.Color(255, 0, 0, int(edge_alpha * 255))
+      color = rl.Color(ROAD_EDGE_COLOR.r, ROAD_EDGE_COLOR.g, ROAD_EDGE_COLOR.b, int(edge_alpha * 255))
       draw_polygon(self._rect, road_edge.projected_points, color)
 
     self._draw_road_edge_glow_effects()
 
   def _draw_lane_glow_effects(self):
     """Draw glow effects around lane lines with confidence-based brightness."""
+    if not CONSOLE_LANE_GLOW:
+      return
     glow_widths = [20.0, 12.0, 6.0]
     glow_alphas = [0.05, 0.10, 0.20]
 
@@ -316,6 +327,8 @@ class ModelRendererBP(ModelRenderer):
 
   def _draw_road_edge_glow_effects(self):
     """Draw glow effects around road edges."""
+    if not CONSOLE_LANE_GLOW:
+      return
     glow_widths = [28.0, 18.0, 10.0]
     glow_alphas = [0.03, 0.07, 0.15]
 
@@ -329,7 +342,7 @@ class ModelRendererBP(ModelRenderer):
         expanded_points = self._expand_polygon(road_edge.projected_points, glow_width)
         if expanded_points.size > 0:
           alpha = int(edge_alpha * glow_alpha * 255)
-          color = rl.Color(255, 0, 0, alpha)
+          color = rl.Color(ROAD_EDGE_COLOR.r, ROAD_EDGE_COLOR.g, ROAD_EDGE_COLOR.b, alpha)
           draw_polygon(self._rect, expanded_points, color)
 
   def _expand_polygon(self, points: np.ndarray, width: float) -> np.ndarray:

@@ -14,6 +14,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.version import terms_version, training_version, terms_version_sp
 
 from openpilot.selfdrive.ui.sunnypilot.layouts.onboarding import SunnylinkOnboarding
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 DEBUG = False
 
@@ -94,17 +95,17 @@ class TrainingGuide(Widget):
   def _render(self, _):
     # Safeguard against fast tapping
     step = min(self._step, len(self._textures) - 1)
-    rl.draw_texture(self._textures[step], 0, 0, rl.WHITE)
+    rl.draw_texture(self._textures[step], 0, 0, Console.TEXT_PRIMARY)
 
     # progress bar
     if 0 < step < len(STEP_RECTS) - 1:
       h = 20
       w = int((step / (len(STEP_RECTS) - 1)) * self._rect.width)
       rl.draw_rectangle(int(self._rect.x), int(self._rect.y + self._rect.height - h),
-                        w, h, rl.Color(70, 91, 234, 255))
+                        w, h, Console.ACCENT_FILL)
 
     if DEBUG:
-      rl.draw_rectangle_lines_ex(STEP_RECTS[step], 3, rl.RED)
+      rl.draw_rectangle_lines_ex(STEP_RECTS[step], 3, Console.DANGER)
 
     return -1
 
@@ -140,8 +141,8 @@ class TermsPage(Widget):
     self._accept_btn.render(rl.Rectangle(self._rect.x + 45 * 2 + btn_width, btn_y, btn_width, 160))
 
     if DEBUG:
-      rl.draw_rectangle_lines_ex(welcome_rect, 3, rl.RED)
-      rl.draw_rectangle_lines_ex(desc_rect, 3, rl.RED)
+      rl.draw_rectangle_lines_ex(welcome_rect, 3, Console.DANGER)
+      rl.draw_rectangle_lines_ex(desc_rect, 3, Console.DANGER)
 
     return -1
 
@@ -169,7 +170,7 @@ class DeclinePage(Widget):
     text_height = btn_y - (200 + 45)
     text_rect = rl.Rectangle(self._rect.x + 165, self._rect.y + (btn_y - text_height) / 2 + 10, self._rect.width - (165 * 2), text_height)
     if DEBUG:
-      rl.draw_rectangle_lines_ex(text_rect, 3, rl.RED)
+      rl.draw_rectangle_lines_ex(text_rect, 3, Console.DANGER)
     self._text.render(text_rect)
 
 

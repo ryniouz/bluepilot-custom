@@ -6,6 +6,7 @@ from collections.abc import Callable
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import BounceFilter, FirstOrderFilter
 from openpilot.system.ui.lib.application import gui_app, MousePos, MouseEvent
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 SWIPE_AWAY_THRESHOLD = 80  # px to dismiss after releasing
 START_DISMISSING_THRESHOLD = 40  # px to start dismissing while dragging
@@ -45,8 +46,8 @@ class NavBar(Widget):
     alpha = self._alpha_filter.update(self._alpha)
 
     # white bar with black border
-    rl.draw_rectangle_rounded(self._rect, 1.0, 6, rl.Color(255, 255, 255, int(255 * 0.9 * alpha)))
-    rl.draw_rectangle_rounded_lines_ex(self._rect, 1.0, 6, 2, rl.Color(0, 0, 0, int(255 * 0.3 * alpha)))
+    rl.draw_rectangle_rounded(self._rect, 1.0, 6, with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9 * alpha)))
+    rl.draw_rectangle_rounded_lines_ex(self._rect, 1.0, 6, 2, with_alpha(Console.BG_PAGE, int(255 * 0.3 * alpha)))
 
 
 class NavWidget(Widget, abc.ABC):
@@ -166,10 +167,10 @@ class NavWidget(Widget, abc.ABC):
   def _layout(self):
     # Dim whatever is behind this widget, fading with position (runs after _update_state so position is correct)
     overlay_alpha = int(200 * max(0.0, min(1.0, 1.0 - self._rect.y / self._rect.height))) if self._rect.height > 0 else 0
-    rl.draw_rectangle(0, 0, int(self._rect.width), int(self._rect.height), rl.Color(0, 0, 0, overlay_alpha))
+    rl.draw_rectangle(0, 0, int(self._rect.width), int(self._rect.height), with_alpha(Console.BG_PAGE, overlay_alpha))
 
     bounce_height = 20
-    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.width), int(self._rect.height + bounce_height), rl.BLACK)
+    rl.draw_rectangle(int(self._rect.x), int(self._rect.y), int(self._rect.width), int(self._rect.height + bounce_height), Console.BG_PAGE)
 
   def render(self, rect: rl.Rectangle | None = None) -> bool | int | None:
     ret = super().render(rect)

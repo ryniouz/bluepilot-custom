@@ -14,6 +14,7 @@ from openpilot.system.ui.widgets.keyboard import Keyboard
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from openpilot.system.ui.widgets.list_view import ButtonAction, ListItem, MultipleButtonAction, ToggleAction, button_item, text_item
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 if gui_app.sunnypilot_ui():
   from openpilot.system.ui.sunnypilot.widgets.list_view import button_item_sp as button_item
@@ -65,7 +66,7 @@ class NavButton(Widget):
     self.set_rect(rl.Rectangle(0, 0, 400, 100))
 
   def _render(self, _):
-    color = rl.Color(74, 74, 74, 255) if self.is_pressed else rl.Color(57, 57, 57, 255)
+    color = Console.BORDER_DEFAULT if self.is_pressed else Console.BG_HIGH
     rl.draw_rectangle_rounded(self._rect, 0.6, 10, color)
     gui_label(self.rect, self.text, font_size=60, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
 
@@ -366,7 +367,7 @@ class WifiManagerUI(Widget):
       self._draw_network_item(item_rect, network)
       if i < len(self._networks) - 1:
         line_y = int(item_rect.y + item_rect.height - 1)
-        rl.draw_line(int(item_rect.x), int(line_y), int(item_rect.x + item_rect.width), line_y, rl.LIGHTGRAY)
+        rl.draw_line(int(item_rect.x), int(line_y), int(item_rect.x + item_rect.width), line_y, Console.TEXT_MUTED)
 
     rl.end_scissor_mode()
 
@@ -436,12 +437,12 @@ class WifiManagerUI(Widget):
 
     texture = gui_app.texture(icon_file, ICON_SIZE, ICON_SIZE)
     icon_rect = rl.Vector2(rect.x, rect.y + (ICON_SIZE - texture.height) / 2)
-    rl.draw_texture_v(texture, icon_rect, rl.WHITE)
+    rl.draw_texture_v(texture, icon_rect, Console.TEXT_PRIMARY)
 
   def _draw_signal_strength_icon(self, rect: rl.Rectangle, network: Network):
     """Draw the Wi-Fi signal strength icon based on network's signal strength"""
     strength_level = max(0, min(3, round(network.strength / 33.0)))
-    rl.draw_texture_v(gui_app.texture(STRENGTH_ICONS[strength_level], ICON_SIZE, ICON_SIZE), rl.Vector2(rect.x, rect.y), rl.WHITE)
+    rl.draw_texture_v(gui_app.texture(STRENGTH_ICONS[strength_level], ICON_SIZE, ICON_SIZE), rl.Vector2(rect.x, rect.y), Console.TEXT_PRIMARY)
 
   def connect_to_network(self, network: Network, password=''):
     self.state = UIState.CONNECTING

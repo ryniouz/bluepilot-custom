@@ -10,6 +10,7 @@ from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, AlertSiz
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.wrap_text import wrap_text
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 ALERT_LINE_SPACING = 15
 
@@ -48,7 +49,7 @@ class AlertRendererSP(AlertRenderer):
     else:
       super()._draw_text(rect, alert)
 
-  def _draw_multiline_centered(self, text, rect, font, font_size, color=rl.WHITE) -> None:
+  def _draw_multiline_centered(self, text, rect, font, font_size, color=Console.TEXT_PRIMARY) -> None:
     lines = wrap_text(font, text, font_size, rect.width)
     line_height = measure_text_cached(font, text, font_size).y
     total_height = len(lines) * line_height
@@ -57,7 +58,7 @@ class AlertRendererSP(AlertRenderer):
       self._draw_line_centered(line, rl.Rectangle(rect.x, curr_y, rect.width, line_height), font, font_size, color)
       curr_y += line_height
 
-  def _draw_line_centered(self, text, rect, font, font_size, color=rl.WHITE) -> None:
+  def _draw_line_centered(self, text, rect, font, font_size, color=Console.TEXT_PRIMARY) -> None:
     text_size = measure_text_cached(font, text, font_size)
     x = rect.x + (rect.width - text_size.x) / 2
     y = rect.y

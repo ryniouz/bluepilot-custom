@@ -12,6 +12,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.sunnypilot.lib.utils import AlertFadeAnimator
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class SmartCruiseControlRenderer(Widget):
@@ -59,9 +60,9 @@ class SmartCruiseControlRenderer(Widget):
       color = COLORS.OVERRIDE
       box_color = rl.Color(color.r, color.g, color.b, int(alpha * 255))
     else:
-      box_color = rl.Color(0, 255, 0, int(alpha * 255))
+      box_color = with_alpha(Console.SUCCESS, int(alpha * 255))
 
-    text_color = rl.Color(0, 0, 0, int(alpha * 255))
+    text_color = with_alpha(Console.BG_PAGE, int(alpha * 255))
 
     screen_y = rect_height / 4 + y_offset
 

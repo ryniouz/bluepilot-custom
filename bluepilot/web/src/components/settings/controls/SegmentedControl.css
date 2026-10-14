@@ -18,7 +18,7 @@
   font-size: 0.9rem;
   font-weight: 600;
   text-align: center;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -32,9 +32,9 @@
 
 .segmented-control .segmented-button.active {
   background: var(--primary-color);
-  color: #fff;
+  color: var(--text-primary);
   border-color: var(--primary-color);
-  box-shadow: 0 10px 25px rgba(33, 150, 243, 0.35);
+  box-shadow: 0 10px 25px rgba(var(--accent-rgb), 0.35);
 }
 
 .segmented-control .segmented-button:disabled {
@@ -48,7 +48,7 @@
   font-size: 0.9rem;
   line-height: 1.5;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   border-radius: var(--radius-lg);
 }
 

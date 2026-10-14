@@ -7,6 +7,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import Label, UnifiedLabel
 from openpilot.common.filter_simple import FirstOrderFilter
+from bluepilot.ui.lib.theme import with_alpha, Console  # Custom: Console theme
 
 
 class ButtonStyle(IntEnum):
@@ -27,55 +28,58 @@ ICON_PADDING = 15
 DEFAULT_BUTTON_FONT_SIZE = 60
 ACTION_BUTTON_FONT_SIZE = 48
 
+# Custom: Console button palette. Neutral buttons sit on bg-raised, the primary action uses
+# accent-fill under on-accent, destructive uses danger-fill; pressed steps one tone up.
 BUTTON_TEXT_COLOR = {
-  ButtonStyle.NORMAL: rl.Color(228, 228, 228, 255),
-  ButtonStyle.PRIMARY: rl.Color(228, 228, 228, 255),
-  ButtonStyle.DANGER: rl.Color(228, 228, 228, 255),
-  ButtonStyle.TRANSPARENT: rl.BLACK,
-  ButtonStyle.TRANSPARENT_WHITE_TEXT: rl.WHITE,
-  ButtonStyle.TRANSPARENT_WHITE_BORDER: rl.Color(228, 228, 228, 255),
-  ButtonStyle.ACTION: rl.BLACK,
-  ButtonStyle.LIST_ACTION: rl.Color(228, 228, 228, 255),
-  ButtonStyle.NO_EFFECT: rl.Color(228, 228, 228, 255),
-  ButtonStyle.KEYBOARD: rl.Color(221, 221, 221, 255),
-  ButtonStyle.FORGET_WIFI: rl.Color(51, 51, 51, 255),
+  ButtonStyle.NORMAL: Console.TEXT_PRIMARY,
+  ButtonStyle.PRIMARY: Console.ON_ACCENT,
+  ButtonStyle.DANGER: Console.ON_ACCENT,
+  ButtonStyle.TRANSPARENT: Console.BG_PAGE,
+  ButtonStyle.TRANSPARENT_WHITE_TEXT: Console.TEXT_PRIMARY,
+  ButtonStyle.TRANSPARENT_WHITE_BORDER: Console.TEXT_PRIMARY,
+  ButtonStyle.ACTION: Console.TEXT_PRIMARY,
+  ButtonStyle.LIST_ACTION: Console.TEXT_PRIMARY,
+  ButtonStyle.NO_EFFECT: Console.TEXT_PRIMARY,
+  ButtonStyle.KEYBOARD: Console.TEXT_PRIMARY,
+  ButtonStyle.FORGET_WIFI: Console.TEXT_PRIMARY,
 }
 
 BUTTON_DISABLED_TEXT_COLORS = {
-  ButtonStyle.TRANSPARENT_WHITE_TEXT: rl.WHITE,
+  ButtonStyle.TRANSPARENT_WHITE_TEXT: Console.TEXT_GHOST,
 }
 
 BUTTON_BACKGROUND_COLORS = {
-  ButtonStyle.NORMAL: rl.Color(51, 51, 51, 255),
-  ButtonStyle.PRIMARY: rl.Color(70, 91, 234, 255),
-  ButtonStyle.DANGER: rl.Color(226, 44, 44, 255),
-  ButtonStyle.TRANSPARENT: rl.BLACK,
+  ButtonStyle.NORMAL: Console.BG_RAISED,
+  ButtonStyle.PRIMARY: Console.ACCENT_FILL,
+  ButtonStyle.DANGER: Console.DANGER_FILL,
+  ButtonStyle.TRANSPARENT: Console.BG_PAGE,
   ButtonStyle.TRANSPARENT_WHITE_TEXT: rl.BLANK,
-  ButtonStyle.TRANSPARENT_WHITE_BORDER: rl.BLACK,
-  ButtonStyle.ACTION: rl.Color(189, 189, 189, 255),
-  ButtonStyle.LIST_ACTION: rl.Color(57, 57, 57, 255),
-  ButtonStyle.NO_EFFECT: rl.Color(51, 51, 51, 255),
-  ButtonStyle.KEYBOARD: rl.Color(68, 68, 68, 255),
-  ButtonStyle.FORGET_WIFI: rl.Color(189, 189, 189, 255),
+  ButtonStyle.TRANSPARENT_WHITE_BORDER: Console.BG_PAGE,
+  ButtonStyle.ACTION: Console.BG_HIGH,
+  ButtonStyle.LIST_ACTION: Console.BG_RAISED,
+  ButtonStyle.NO_EFFECT: Console.BG_RAISED,
+  ButtonStyle.KEYBOARD: Console.BG_RAISED,
+  ButtonStyle.FORGET_WIFI: Console.BG_HIGH,
 }
 
 BUTTON_PRESSED_BACKGROUND_COLORS = {
-  ButtonStyle.NORMAL: rl.Color(74, 74, 74, 255),
-  ButtonStyle.PRIMARY: rl.Color(48, 73, 244, 255),
-  ButtonStyle.DANGER: rl.Color(255, 36, 36, 255),
-  ButtonStyle.TRANSPARENT: rl.BLACK,
+  ButtonStyle.NORMAL: Console.BG_HIGH,
+  ButtonStyle.PRIMARY: Console.ACCENT_FILL_HOVER,
+  ButtonStyle.DANGER: Console.DANGER,
+  ButtonStyle.TRANSPARENT: Console.BG_PAGE,
   ButtonStyle.TRANSPARENT_WHITE_TEXT: rl.BLANK,
   ButtonStyle.TRANSPARENT_WHITE_BORDER: rl.BLANK,
-  ButtonStyle.ACTION: rl.Color(130, 130, 130, 255),
-  ButtonStyle.LIST_ACTION: rl.Color(74, 74, 74, 74),
-  ButtonStyle.NO_EFFECT: rl.Color(51, 51, 51, 255),
-  ButtonStyle.KEYBOARD: rl.Color(51, 51, 51, 255),
-  ButtonStyle.FORGET_WIFI: rl.Color(130, 130, 130, 255),
+  ButtonStyle.ACTION: Console.BORDER_DEFAULT,
+  ButtonStyle.LIST_ACTION: Console.BG_HIGH,
+  ButtonStyle.NO_EFFECT: Console.BG_RAISED,
+  ButtonStyle.KEYBOARD: Console.BG_HIGH,
+  ButtonStyle.FORGET_WIFI: Console.BORDER_DEFAULT,
 }
 
 BUTTON_DISABLED_BACKGROUND_COLORS = {
   ButtonStyle.TRANSPARENT_WHITE_TEXT: rl.BLANK,
 }
+# Custom: end
 
 
 class Button(Widget):
@@ -120,14 +124,14 @@ class Button(Widget):
       else:
         self._background_color = BUTTON_BACKGROUND_COLORS[self._button_style]
     elif self._button_style != ButtonStyle.NO_EFFECT:
-      self._background_color = BUTTON_DISABLED_BACKGROUND_COLORS.get(self._button_style, rl.Color(51, 51, 51, 255))
-      self._label.set_text_color(BUTTON_DISABLED_TEXT_COLORS.get(self._button_style, rl.Color(228, 228, 228, 51)))
+      self._background_color = BUTTON_DISABLED_BACKGROUND_COLORS.get(self._button_style, Console.BG_PANEL)
+      self._label.set_text_color(BUTTON_DISABLED_TEXT_COLORS.get(self._button_style, Console.TEXT_GHOST))
 
   def _render(self, _):
     roundness = self._border_radius / (min(self._rect.width, self._rect.height) / 2)
     if self._button_style == ButtonStyle.TRANSPARENT_WHITE_BORDER:
-      rl.draw_rectangle_rounded(self._rect, roundness, 10, rl.BLACK)
-      rl.draw_rectangle_rounded_lines_ex(self._rect, roundness, 10, 2, rl.WHITE)
+      rl.draw_rectangle_rounded(self._rect, roundness, 10, Console.BG_PAGE)
+      rl.draw_rectangle_rounded_lines_ex(self._rect, roundness, 10, 2, Console.BORDER_DEFAULT)
     else:
       rl.draw_rectangle_rounded(self._rect, roundness, 10, self._background_color)
     self._label.render(self._rect)
@@ -169,7 +173,7 @@ class ButtonRadio(Button):
     if self._icon and self.selected:
       icon_y = self._rect.y + (self._rect.height - self._icon.height) / 2
       icon_x = self._rect.x + self._rect.width - self._icon.width - self._text_padding - ICON_PADDING
-      rl.draw_texture_v(self._icon, rl.Vector2(icon_x, icon_y), rl.WHITE if self.enabled else rl.Color(255, 255, 255, 100))
+      rl.draw_texture_v(self._icon, rl.Vector2(icon_x, icon_y), Console.TEXT_PRIMARY if self.enabled else with_alpha(Console.TEXT_PRIMARY, 100))
 
 
 class IconButton(Widget):
@@ -186,9 +190,9 @@ class IconButton(Widget):
       self._opacity_filter.x = opacity
 
   def _render(self, rect: rl.Rectangle):
-    color = rl.Color(180, 180, 180, int(150 * self._opacity_filter.x)) if self.is_pressed else rl.WHITE
+    color = with_alpha(Console.TEXT_MUTED, int(150 * self._opacity_filter.x)) if self.is_pressed else Console.TEXT_PRIMARY
     if not self.enabled:
-      color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.35 * self._opacity_filter.x))
+      color = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9 * 0.35 * self._opacity_filter.x))
     draw_x = rect.x + (rect.width - self._texture.width) / 2
     draw_y = rect.y + (rect.height - self._texture.height) / 2
     rl.draw_texture(self._texture, int(draw_x), int(draw_y), color)
@@ -211,10 +215,10 @@ class SmallCircleIconButton(Widget):
       self._opacity_filter.x = opacity
 
   def _render(self, _):
-    white = rl.Color(255, 255, 255, int(255 * self._opacity_filter.x))
+    white = with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x))
     if not self.enabled:
       bg_txt = self._icon_bg_disabled_txt
-      icon_white = rl.Color(255, 255, 255, int(white.a * 0.35))
+      icon_white = with_alpha(Console.TEXT_PRIMARY, int(white.a * 0.35))
     else:
       bg_txt = self._icon_bg_pressed_txt if self.is_pressed else self._icon_bg_txt
       icon_white = white
@@ -233,7 +237,7 @@ class SmallButton(Widget):
     self._load_assets()
 
     self._label = UnifiedLabel(text, 36, font_weight=FontWeight.SEMI_BOLD,
-                               text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
+                               text_color=with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9)),
                                alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
                                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
 
@@ -255,14 +259,14 @@ class SmallButton(Widget):
 
   def _render(self, _):
     if not self.enabled and self._bg_disabled_txt is not None:
-      rl.draw_texture(self._bg_disabled_txt, int(self.rect.x), int(self.rect.y), rl.Color(255, 255, 255, int(255 * self._opacity_filter.x)))
+      rl.draw_texture(self._bg_disabled_txt, int(self.rect.x), int(self.rect.y), with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x)))
     elif self.is_pressed:
-      rl.draw_texture(self._bg_pressed_txt, int(self.rect.x), int(self.rect.y), rl.Color(255, 255, 255, int(255 * self._opacity_filter.x)))
+      rl.draw_texture(self._bg_pressed_txt, int(self.rect.x), int(self.rect.y), with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x)))
     else:
-      rl.draw_texture(self._bg_txt, int(self.rect.x), int(self.rect.y), rl.Color(255, 255, 255, int(255 * self._opacity_filter.x)))
+      rl.draw_texture(self._bg_txt, int(self.rect.x), int(self.rect.y), with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x)))
 
     opacity = 0.9 if self.enabled else 0.35
-    self._label.set_color(rl.Color(255, 255, 255, int(255 * opacity * self._opacity_filter.x)))
+    self._label.set_color(with_alpha(Console.TEXT_PRIMARY, int(255 * opacity * self._opacity_filter.x)))
     self._label.render(self._rect)
 
 
