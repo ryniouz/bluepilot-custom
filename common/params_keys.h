@@ -312,6 +312,17 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlinkerPauseLaneChange", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Custom: Lightning control and CAN (stream B)
+    {"BPLightningTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // Lightning tune profile, selected by fingerprint
+    {"BPTowProfile", {PERSISTENT | BACKUP, INT, "0"}},              // 0 auto (trailer or Tow/Haul), 1 off, 2 always on
+    {"BPDriveModeTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // follow the drive mode (sport, off-road, slippery)
+    {"BPOnePedalMode", {PERSISTENT | BACKUP, INT, "2"}},            // 0 off, 1 on, 2 estimate from coast-down
+    {"BPLowSocAlertPct", {PERSISTENT | BACKUP, INT, "20"}},
+    {"BPCriticalSocAlertPct", {PERSISTENT | BACKUP, INT, "10"}},
+    {"BPTireLowPressureKpa", {PERSISTENT | BACKUP, INT, "240"}},
+    {"BPLowVoltAlertV", {PERSISTENT | BACKUP, FLOAT, "11.8"}},
+    // Custom: end
+
     // BluePilot: Portal (Web Routes Server)
     {"EnableWebRoutesServer", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPPortalPort", {PERSISTENT | BACKUP, INT, "8088"}},

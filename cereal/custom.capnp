@@ -472,6 +472,130 @@ struct CarStateBP @0xb057204d7deadf3f {
   hybridDrive @0 :HybridDrive;
   hybridBattery @1 :HybridBattery;
   brakeLightStatus @2 :BrakeLightStatus;
+  # Custom: Lightning EV data, vehicle mode and tune state (stream B). Append-only field numbers.
+  evBattery @3 :EvBattery;
+  tirePressure @4 :TirePressure;
+  lowVoltBattery @5 :LowVoltBattery;
+  ambient @6 :Ambient;
+  vehicleMode @7 :VehicleMode;
+  tune @8 :TuneState;
+  evAlerts @9 :EvAlerts;
+
+  # Traction battery and energy. Power sign convention: + = discharging (driving), - = charging/regen.
+  struct EvBattery {
+    dataAvailable @0 :Bool;
+    socPercent @1 :Float32;          # displayed SOC, BattTracSoc2_Pc_Actl (0x24C)
+    packVoltage @2 :Float32;         # V, BattTrac_U_Actl (0x07A)
+    packCurrent @3 :Float32;         # A, + = discharge
+    packCurrentSource @4 :CurrentSource;
+    powerKw @5 :Float32;             # packVoltage * packCurrent / 1000
+    regenKw @6 :Float32;             # max(0, -powerKw), for a regen meter
+    packTempC @7 :Float32;           # BattTrac_Te_Actl (0x24C)
+    coolantTempC @8 :Float32;        # BattTracClnt_Te_Actl (0x24B)
+    packDeltaTempC @9 :Float32;      # BattTracDelta_Te_Actl (0x458)
+    chargeLimitKw @10 :Float32;      # BattTrac2_Pw_LimChrg (0x24D)
+    dischargeLimitKw @11 :Float32;   # BattTrac2_Pw_LimDchrg (0x24D)
+    limitsAvailable @12 :Bool;
+    rangeKm @13 :Float32;            # VehElRnge_L_Dsply (0x442), fallback VehElRngeNut_L_Dsply (0x352)
+    rangeAvailable @14 :Bool;
+    motorTorqueNm @15 :Float32;      # MtrTrac2_Tq_Actl (0x475)
+    motorTorqueAvailable @16 :Bool;
+    efficiencyWhPerKm @17 :Float32;  # smoothed live efficiency, 0 when stopped
+    tripEnergyUsedKwh @18 :Float32;  # since this carState session started (ignition on)
+    tripEnergyRegenKwh @19 :Float32;
+    tripDistanceKm @20 :Float32;
+
+    enum CurrentSource {
+      none @0;
+      battTracActl @1;    # BattTrac_I_Actl (0x07A), reads a constant -750 A on Lightning
+      mtrTrac2Actl @2;    # MtrTrac2_I_Actl (0x441)
+      battTracEstVsc @3;  # BattTrac_I_EstVsc (0x185)
+    }
+  }
+
+  struct TirePressure {
+    dataAvailable @0 :Bool;
+    frontLeftKpa @1 :Float32;
+    frontRightKpa @2 :Float32;
+    rearLeftKpa @3 :Float32;
+    rearRightKpa @4 :Float32;
+    lowThresholdKpa @5 :Float32;     # from BPTireLowPressureKpa
+    lowPressure @6 :Bool;            # any tire below threshold
+  }
+
+  struct LowVoltBattery {
+    dataAvailable @0 :Bool;
+    voltage @1 :Float32;             # BattULoAux_U_Actl (0x42B), fallback pandaState voltage is up to the UI
+    current @2 :Float32;             # A
+    socPercent @3 :Float32;          # BattULoAuxSoc_Pc_Actl, fallback BSBattSOC (0x43C)
+    tempC @4 :Float32;               # BattULo2_Te_Actl (0x43C)
+    fault @5 :Bool;                  # BattULoAux_B_Falt
+    low @6 :Bool;                    # voltage or SOC below alert threshold
+  }
+
+  struct Ambient {
+    dataAvailable @0 :Bool;
+    outsideTempC @1 :Float32;        # AirAmb_Te_ActlCld (0x308)
+    rangeImpactPercent @2 :Float32;  # estimated range change from temperature (negative = less range)
+  }
+
+  struct VehicleMode {
+    driveModeAvailable @0 :Bool;
+    driveMode @1 :DriveMode;
+    driveModeRaw @2 :UInt8;          # SelDrvMdePt_D_Rq (0x420)
+    trailerAvailable @3 :Bool;
+    trailerConnected @4 :Bool;       # TrlrLampCnnct_B_Actl (0x443) or TrlrBrkActCnnct_B_Actl (0x445), debounced
+    onePedalActive @5 :Bool;
+    onePedalSource @6 :OnePedalSource;
+
+    enum DriveMode {
+      unknown @0;
+      normal @1;
+      sport @2;
+      tow @3;
+      offroad @4;
+      slippery @5;
+      eco @6;
+    }
+
+    enum OnePedalSource {
+      off @0;        # BPOnePedalMode = 0
+      setting @1;    # BPOnePedalMode = 1 (driver says it is on)
+      estimated @2;  # BPOnePedalMode = 2, inferred from coast-down deceleration
+    }
+  }
+
+  struct TuneState {
+    platformTuneActive @0 :Bool;     # Lightning tune selected by fingerprint and BPLightningTune
+    profile @1 :Profile;
+    accelMaxScale @2 :Float32;       # <= 1.0, applied under openpilot longitudinal only
+    latAccelScale @3 :Float32;       # <= 1.0, scales the CAN FD lateral-accel cap
+
+    enum Profile {
+      stock @0;
+      lightning @1;
+      tow @2;
+      sport @3;
+      offroad @4;
+      slippery @5;
+    }
+  }
+
+  struct EvAlerts {
+    lowSoc @0 :SocLevel;
+    lowSocThresholdPercent @1 :Float32;
+    criticalSocThresholdPercent @2 :Float32;
+    tirePressureLow @3 :Bool;
+    lowVoltBatteryLow @4 :Bool;
+    alertText @5 :Text;              # short text for the highest-priority active alert, "" when none
+
+    enum SocLevel {
+      none @0;
+      low @1;
+      critical @2;
+    }
+  }
+  # Custom: end
 
   struct HybridDrive {
     dataAvailable @0 :Bool;
