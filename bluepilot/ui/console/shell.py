@@ -128,13 +128,15 @@ class ConsoleShell(Widget):
       self.register_page(Dest.HOME, Page(tr("Alerts"), "bell", alerts, key="alerts", subtitle=tr("Home"),
                                          action=lambda: tr("Back"), on_action=lambda: self.go(Dest.HOME, 0)))
 
-    drive = tr("Drive") + " | " + tr("Changes apply on the next drive")
-    panel(Dest.DRIVE, tr("Assist"), "gauge", "TOGGLES", drive)
-    panel(Dest.DRIVE, tr("Steering"), "steer", "STEERING", drive)
-    self._hide_torque_rows(PT)
-    panel(Dest.DRIVE, tr("Speed and cruise"), "pulse", "CRUISE", drive)
-    panel(Dest.DRIVE, tr("Driving model"), "cpu", "MODELS", tr("Drive"))
-    panel(Dest.DRIVE, tr("BluePilot tuning"), "tune", "BLUEPILOT", drive)
+    # Drive: Console form pages in place of the Toggles, Steering, Cruise, Models and BluePilot tuning panels. Keys stay
+    # the PanelTypes they replace, so open_settings(PanelType.MODELS) etc. still land on the right page.
+    from bluepilot.ui.console.pages.drive import AssistPage, SpeedPage, SteeringPage
+    from bluepilot.ui.console.pages.drive_model import DrivingModelPage
+    for title, icon, widget, name in ((tr("Assist"), "wheel", AssistPage(), "TOGGLES"),
+                                      (tr("Speed and cruise"), "pulse", SpeedPage(), "CRUISE"),
+                                      (tr("Steering"), "steer", SteeringPage(), "STEERING"),
+                                      (tr("Driving model"), "cpu", DrivingModelPage(), "MODELS")):
+      self.register_page(Dest.DRIVE, Page(title, icon, widget, key=getattr(PT, name, name.lower()), framed=False))
 
     # Energy (stream B): Console pages instead of the BluePilot rows and sunnypilot's Trips panel. sunnypilot's
     # TripsLayout still exists inside the settings layout and keeps ApiCache_DriveStats fresh for TripsPage.
@@ -169,6 +171,9 @@ class ConsoleShell(Widget):
                                          subtitle=tr("Screen"), framed=False, aliases=old_keys("VISUALS")))
     self.register_page(Dest.SCREEN, Page(tr("Display"), "sun", DisplayPage(), key="display",
                                          subtitle=tr("Screen"), framed=False, aliases=old_keys("DISPLAY")))
+    # Road view and the BluePilot driving-view rows (Onroad display has the sunnypilot ones)
+    from bluepilot.ui.console.pages.driving_screen import DrivingScreenPage
+    self.register_page(Dest.SCREEN, Page(tr("Road view"), "car", DrivingScreenPage(), key="road_view", framed=False), index=2)
 
     from bluepilot.ui.console.pages.connectivity import ConnectivityPage
     net = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None
@@ -216,20 +221,10 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.developer import DeveloperPage
     self.register_page(Dest.SYSTEM, Page(tr("Developer"), "code", DeveloperPage(), key=getattr(PT, "DEVELOPER", "developer"),
                                          framed=False))
+    # BluePilot rows that aren't driving and have no Console page yet (preferred Wi-Fi, 12 V limit, UI debug log)
+    item_page(Dest.SYSTEM, tr("More settings"), "sliders", "bp_misc", tr("System"))
     from bluepilot.ui.console.pages.about import AboutPage
     self.register_page(Dest.SYSTEM, Page(tr("About"), "info", AboutPage(), key="about", subtitle=tr("System"), framed=False))
-
-  def _hide_torque_rows(self, PT):
-    """The Lightning steers by curvature: torque control, torque tuning and NNLC never apply, so hide them
-    (and the separators above them) instead of showing them greyed out."""
-    info = self._panels.get(getattr(PT, "STEERING", None))
-    inst = getattr(info, "instance", None)
-    scroller = getattr(inst, "_scroller", None)
-    hide = [getattr(inst, n, None) for n in ("_torque_control_toggle", "_torque_customization_button", "_nnlc_toggle")]
-    items = getattr(scroller, "_items", [])
-    for i, item in enumerate(items):
-      if item in hide or (i + 1 < len(items) and items[i + 1] in hide and type(item).__name__.startswith("LineSeparator")):
-        item.set_visible(False)
 
   # -- pages ------------------------------------------------------------------------
 

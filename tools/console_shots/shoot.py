@@ -980,6 +980,95 @@ DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals",
 SCENES.update({f"drive_alert_{k}": f"Alert audit: {v[1]} {v[0]}, {v[2]!r} / {v[3]!r}" for k, v in ALERT_SAMPLES.items()})
 ALIASES["drive_alerts"] = [f"drive_alert_{k}" for k in ALERT_SAMPLES]
 
+# Drive settings pages (bluepilot/ui/console/pages/drive*.py, driving_screen.py); "_2" scrolls to the bottom
+DRIVE_SETTINGS = {
+  "dset_assist": "Drive > Assist", "dset_exp_confirm": "Drive > Assist, experimental mode confirm",
+  "dset_speed": "Drive > Speed and cruise", "dset_speed_2": "Drive > Speed and cruise, scrolled",
+  "dset_steering": "Drive > Steering", "dset_steering_2": "Drive > Steering, scrolled, every option open",
+  "dset_model": "Drive > Driving model", "dset_model_dl": "Drive > Driving model, downloading",
+  "dset_model_browse": "Drive > Driving model > Choose a model", "dset_model_folder": "Drive > Driving model > a folder",
+  "dset_model_confirm": "Drive > Driving model, switch model confirm",
+  "dset_screen": "Screen > Road view", "dset_screen_2": "Screen > Road view, scrolled",
+}
+SCENES.update(DRIVE_SETTINGS)
+ALIASES["drive_settings"] = list(DRIVE_SETTINGS)
+
+
+def _fake_models(downloading: bool = False):
+  from cereal import custom
+  from openpilot.selfdrive.ui.ui_state import ui_state
+  MM = custom.ModelManagerSP
+  msg = MM.new_message()
+  folders = [("Firehose", "Oct 02, 2026", ["North Dakota v2", "Tomb Raider 14", "Steam Powered v3"]),
+             ("Release", "Sep 18, 2026", ["Space Lab 2", "Vacation", "Notre Dame"]),
+             ("Experimental", "Aug 30, 2026", ["Desert Night", "Wide Eyes"])]
+  n = sum(len(x[2]) for x in folders)
+  bundles = msg.init("availableBundles", n)
+  i = 0
+  for folder, date, names in folders:
+    for nm in names:
+      b = bundles[i]
+      b.index, b.ref, b.internalName = 100 - i, f"ref{i}", nm.lower().replace(" ", "_")
+      b.displayName, b.generation = f"{nm} ({date})", 11 if i < 3 else 10
+      ov = b.init("overrides", 1)
+      ov[0].key, ov[0].value = "folder", folder
+      i += 1
+
+  def fill(dst, src, status, progress):
+    for f in ("index", "ref", "internalName", "displayName", "generation"):
+      setattr(dst, f, getattr(src, f))
+    dst.status = status
+    ms = dst.init("models", 3)
+    for k, t in enumerate(("supercombo", "vision", "policy")):
+      ms[k].type = t
+      ms[k].artifact.downloadProgress.status = status if k else MM.DownloadStatus.downloaded
+      ms[k].artifact.downloadProgress.progress = progress if k else 100.0
+  fill(msg.activeBundle, bundles[1], MM.DownloadStatus.downloaded, 100.0)
+  if downloading:
+    fill(msg.selectedBundle, bundles[0], MM.DownloadStatus.downloading, 62.0)
+  ui_state.sm.data["modelManagerSP"] = msg.as_reader()
+  sc_params = __import__("openpilot.common.params", fromlist=["Params"]).Params()
+  sc_params.put("ModelManager_Favs", "ref0;ref4")
+  if downloading:
+    sc_params.put("ModelManager_DownloadIndex", 100)
+
+
+def setup_drive_settings(sc, name):
+  from bluepilot.ui.console.shell import Dest
+  sc.put("IsMetric", True)
+  for k, v in (("Mads", True), ("AutoLaneChangeTimer", 3), ("AutoLaneChangeBsmDelay", True), ("BlinkerPauseLateralControl", True),
+               ("LaneTurnDesire", True), ("enable_lane_positioning", True), ("custom_profile", True), ("CustomAccIncrementsEnabled", True),
+               ("SpeedLimitMode", 2), ("SpeedLimitOffsetType", 1), ("SpeedLimitValueOffset", 5), ("LagdToggle", True)):
+    try:
+      sc.put(k, v)
+    except Exception as e:
+      print("[shoot] drive settings param", k, e)
+  sc.main._open_shell()
+  shell = sc.main._shell
+  base = name.removesuffix("_2")
+  page_i = {"dset_assist": 0, "dset_exp_confirm": 0, "dset_speed": 1, "dset_steering": 2}.get(base, 3)
+  if base.startswith("dset_model"):
+    _fake_models(downloading=base == "dset_model_dl")
+  if base == "dset_screen":
+    shell.go(Dest.SCREEN, [p.title for p in shell.pages(Dest.SCREEN)].index("Road view"))
+  else:
+    shell.go(Dest.DRIVE, page_i)
+  page = shell.current_page().widget
+  sc.settle()
+  if base == "dset_exp_confirm":
+    page._experimental()
+  elif base in ("dset_model_browse", "dset_model_folder", "dset_model_confirm"):
+    page._open_browse()
+    if base == "dset_model_folder":
+      page._open_folder("Release")
+    if base == "dset_model_confirm":
+      page._pick("ref2", "Steam Powered v3 (Oct 02, 2026)")
+  if name.endswith("_2"):
+    sc.step(2)
+    page._offset = 1e6
+  sc.settle()
+  sc.shot()
+
 
 def drive_scene_params(name: str) -> dict:
   if not name.startswith("drive_"):
@@ -1129,7 +1218,7 @@ def run_scene(sc: Scene):
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
               "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
               "boot_os_prompt", "boot_os_progress", "boot_os_failed", "form_gallery", "form_confirm",
-              "device", "device_languages", "updates_branches", "maps", "maps_pick", "developer", "developer_log"):
+              "device", "device_languages", "updates_branches", "maps", "maps_pick", "developer", "developer_log") or name.startswith("dset_"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1394,6 +1483,8 @@ def run_scene(sc: Scene):
                    "Reset", lambda: None, danger=True)
     sc.settle()
     sc.shot()
+  elif name.startswith("dset_"):
+    setup_drive_settings(sc, name)
   elif name in ("theme", "theme_light"):
     sc.main._open_shell()
     sc.main._shell.open_panel("theme")

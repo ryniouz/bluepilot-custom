@@ -786,6 +786,8 @@ class BluePilotLayout(Widget):
       "theme": [self._console_mode_btn, self._console_scale_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud],
       "charging": [self._charging_screen, self._charge_sleep_btn],
       "export": [self._bridge_enabled, self._keep_until_synced, self._bridge_address, self._bridge_token],
+      # driving rows moved to the Console Drive pages and visuals to Screen > Driving screen; these three are left
+      "bp_misc": [self._preferred_network_btn, self._vbatt_pause_charging, self._ui_debug_log],
     }
 
   def _set_int_param(self, key: str, value: int, ui_attr: str | None = None):
