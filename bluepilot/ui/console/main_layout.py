@@ -181,6 +181,8 @@ class ConsoleMainLayout(Widget):
   def _on_onroad_clicked(self):
     if self._debug_panel.is_panel_visible:
       return
+    if self._quick.in_gesture:  # the release of a drag on the dock or handle is not a tap
+      return
     pos = rl.get_mouse_position()
     if self._quick.visible:
       self._quick.handle_tap(pos)

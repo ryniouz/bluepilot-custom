@@ -48,11 +48,26 @@ FULL_GROUND = {
 SUB_TEXT = with_alpha(Onroad.ALERT_TEXT, 0xC8)
 
 
+_SMALL_WORDS = {"a", "an", "and", "at", "for", "in", "of", "on", "or", "the", "to", "with"}
+
+
 def sentence(text: str) -> str:
-  """openpilot shouts some alerts in capitals; the Console speaks in sentence case."""
-  if text and text.upper() == text and any(c.isalpha() for c in text):
+  """openpilot shouts some alerts in capitals or Title Case; the Console speaks in sentence case.
+  Acronyms and mixed-case names (ACC, openpilot, BluePilot) are left alone."""
+  if not text:
+    return text
+  if text.upper() == text and any(c.isalpha() for c in text):
     return text[:1] + text[1:].lower()
-  return text
+  words = text.split(" ")
+  alpha = [w for w in words[1:] if w[:1].isalpha()]
+  title_case = len(alpha) >= 1 and all(w[0].isupper() or w.lower() in _SMALL_WORDS for w in alpha) and \
+    any(w[0].isupper() for w in alpha)
+  if not title_case:
+    return text
+  out = [words[0]]
+  for w in words[1:]:
+    out.append(w.lower() if (w[:1].isupper() and w[1:].islower()) else w)
+  return " ".join(out)
 
 
 def alert_icon(alert) -> str:
