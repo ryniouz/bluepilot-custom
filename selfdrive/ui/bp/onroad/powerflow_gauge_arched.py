@@ -13,6 +13,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import arc_bar_pts
 from openpilot.system.ui.lib.shader_polygon import draw_polygon
 from opendbc.car.ford.helpers import get_hev_power_flow_text, get_hev_engine_on_reason_text
+from bluepilot.ui.lib.theme import Console, Onroad  # Custom: Console theme
 
 # Constants
 POWERFLOW_ANGLE_SPAN = 15.0  # Slightly longer than torque bar (12.7 degrees)
@@ -20,18 +21,18 @@ POWERFLOW_RADIUS = 3400  # Slightly larger radius than torque bar (3300) for mor
 POWERFLOW_LINE_HEIGHT = 60  # Height/thickness of the powerflow arch (for tick marks and animated bar)
 POWERFLOW_BG_HEIGHT = 60 + 80 + 34 + 12  # Background height: arch + text offset + font size + padding
 POWERFLOW_Y_OFFSET = 50  # Vertical offset above torque bar
-POWERFLOW_BG_COLOR = rl.Color(20, 20, 20, 200)  # Translucent dark grey
-POWERFLOW_TICK_COLOR = rl.Color(200, 200, 200, 255)  # Light grey for tick marks
-POWERFLOW_BORDER_COLOR = rl.Color(200, 200, 200, 255)  # Light grey for border (same as tick marks)
+POWERFLOW_BG_COLOR = Onroad.PANEL  # Translucent dark grey
+POWERFLOW_TICK_COLOR = Console.BORDER_STRONG  # Light grey for tick marks
+POWERFLOW_BORDER_COLOR = Console.BORDER_STRONG  # Light grey for border (same as tick marks)
 POWERFLOW_TICK_LENGTH_RATIO = 0.10  # Tick marks extend 10% into the bar
 POWERFLOW_BORDER_THICKNESS = 2.0  # Border line thickness
 POWERFLOW_BAR_HEIGHT = 40  # Height/thickness of the animated power flow bar
-POWERFLOW_CENTER_COLOR = rl.Color(255, 255, 255, 255)  # White at center (no power flow)
-POWERFLOW_REGEN_COLOR = rl.Color(100, 255, 100, 255)  # Green for regenerative braking (left)
-POWERFLOW_DEMAND_COLOR = rl.Color(100, 150, 255, 255)  # Brighter blue for throttle demand (right)
+POWERFLOW_CENTER_COLOR = Console.TEXT_PRIMARY  # White at center (no power flow)
+POWERFLOW_REGEN_COLOR = Console.SUCCESS  # Green for regenerative braking (left)
+POWERFLOW_DEMAND_COLOR = Console.ACCENT  # Brighter blue for throttle demand (right)
 POWERFLOW_TEXT_FONT_SIZE = 51  # Font size for power flow mode and engine on reason text
 POWERFLOW_TEXT_Y_OFFSET = 95  # Vertical offset below the powerflow meter arch
-POWERFLOW_TEXT_COLOR = rl.Color(255, 255, 255, 255)  # White text
+POWERFLOW_TEXT_COLOR = Console.TEXT_PRIMARY  # White text
 POWERFLOW_TEXT_BG_PADDING = 18  # Padding around text
 # Move arch and battery together down (half of "arc bottom 10px from screen" shift)
 ARCH_DOWN_OFFSET = 87

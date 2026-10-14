@@ -26,11 +26,11 @@
 }
 
 .toast--success {
-  border-left: 3px solid #4caf50;
+  border-left: 3px solid var(--success);
 }
 
 .toast--error {
-  border-left: 3px solid #f44336;
+  border-left: 3px solid var(--danger);
 }
 
 .toast--info {
@@ -50,12 +50,12 @@
 }
 
 .toast--success .toast__icon {
-  background: #4caf50;
+  background: var(--success);
   color: white;
 }
 
 .toast--error .toast__icon {
-  background: #f44336;
+  background: var(--danger);
   color: white;
 }
 
@@ -89,7 +89,7 @@
 
 .toast__close:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--ink-rgb), 0.1);
 }
 
 .toast__close:active {

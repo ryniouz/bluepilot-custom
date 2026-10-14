@@ -3,7 +3,7 @@
   padding: var(--spacing-md);
   border-radius: var(--radius-2xl);
   border: 1px solid var(--border-color);
-  background: rgba(24, 24, 24, 0.9);
+  background: var(--bg-page);
   box-shadow: var(--panel-card-shadow);
 }
 
@@ -13,7 +13,7 @@
   justify-content: space-between;
   margin-bottom: var(--spacing-lg);
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.05);
 }
 
 .panel-group-title {
@@ -46,7 +46,7 @@
 }
 
 .panel-group-reset-modal .reset-warning {
-  color: var(--warning-color, #ff9800);
+  color: var(--warning-color, var(--warning));
   font-size: 0.9rem;
 }
 

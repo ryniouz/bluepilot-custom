@@ -58,7 +58,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IsDriverViewEnabled", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsEngaged", {PERSISTENT, BOOL}},
     {"IsLdwEnabled", {PERSISTENT | BACKUP, BOOL}},
-    {"IsMetric", {PERSISTENT | BACKUP, BOOL}},
+    {"IsMetric", {PERSISTENT | BACKUP, BOOL, "1"}},  // Custom: Canadian units (km, km/h) by default
     {"IsOffroad", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsOnroad", {PERSISTENT, BOOL}},
     {"IsRhdDetected", {PERSISTENT, BOOL}},
@@ -307,6 +307,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"mici_hide_onroad_border", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPHideOnroadBorder", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadView", {PERSISTENT | BACKUP, INT, "375"}},
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPUIDebugLog", {PERSISTENT, BOOL, "0"}},
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
@@ -318,6 +319,36 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // BluePilot: UI params
     {"BPLastSeenVersion", {PERSISTENT, STRING}},
+
+    // Custom: Console UI params (stream A, Comma Console UI)
+    {"BPConsoleAccent", {PERSISTENT | BACKUP, STRING, "blue"}},
+    {"BPConsoleMode", {PERSISTENT | BACKUP, STRING, "auto"}},  // auto, day, night
+    {"BPLayoutPreset", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPConsoleScale", {PERSISTENT | BACKUP, INT, "1"}},  // UI size: 0 small, 1 standard, 2 large
+    {"BPAutoHomeWifi", {PERSISTENT | BACKUP, BOOL, "1"}},  // join a saved home network when parked at home
+    {"BPAutoHotspotHome", {PERSISTENT | BACKUP, BOOL, "1"}},  // turn the hotspot off at home
+    {"BPAutoHotspotAway", {PERSISTENT | BACKUP, BOOL, "0"}},  // turn the hotspot on when driving away from home
+    {"BPEvHud", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
+    {"BPChargeOffDcMin", {PERSISTENT | BACKUP, INT, "60"}},  // same, DC fast charging with the truck off
+    {"BPChargeOnAcMin", {PERSISTENT | BACKUP, INT, "0"}},    // unused since Lucas 22:46: someone inside never dims (kept for old settings)
+    {"BPChargeOnDcMin", {PERSISTENT | BACKUP, INT, "0"}},    // same, DC fast charging
+    {"BPChargeOnThen", {PERSISTENT | BACKUP, INT, "0"}},     // after that with the truck on: 0 dim, 1 display off
+    {"BPChargeOffThen", {PERSISTENT | BACKUP, INT, "0"}},    // after that with the truck off: 0 dim, 1 display off
+    {"BPChargeMinimal", {PERSISTENT | BACKUP, BOOL, "1"}},   // truck off: the minimal dark charging screen
+    {"BPLastEvSnapshot", {PERSISTENT, JSON}},
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
+    {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
+    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},  // pinned update branch; empty = UpdaterTargetBranch / current
+    {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
+    {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
+    {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
+    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home
+    {"BPObdDongle", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the chosen Bluetooth OBD dongle
+    {"BPPhoneLink", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the phone picked for the planned Bluetooth link
+    // Custom: end
 
     // WiFi Management
     {"WifiFavoriteSSID", {PERSISTENT | BACKUP, STRING}},

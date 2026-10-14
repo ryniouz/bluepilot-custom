@@ -2,8 +2,13 @@ import time
 import pyray as rl
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.console import draw as D  # Custom: shared Console icons
+from bluepilot.ui.lib.theme import Console, Onroad, roundness, copy as copy_color  # Custom: Console theme
+
+# Custom: Console rounded-square button, inset in the stock touch area
+FACE_SIZE = 164
+FACE_RADIUS = 28
 
 
 class ExpButton(Widget):
@@ -18,10 +23,11 @@ class ExpButton(Widget):
     self._held_mode: bool | None = None
     self._hold_end_time: float | None = None
 
-    self._white_color: rl.Color = rl.Color(255, 255, 255, 255)
-    self._black_bg: rl.Color = rl.Color(0, 0, 0, 166)
-    self._txt_wheel: rl.Texture = gui_app.texture('icons/chffr_wheel.png', icon_size, icon_size)
-    self._txt_exp: rl.Texture = gui_app.texture('icons/experimental.png', icon_size, icon_size)
+    # Custom: Console panel button with hairline ring
+    self._white_color: rl.Color = copy_color(Console.TEXT_PRIMARY)
+    self._black_bg: rl.Color = Onroad.PANEL
+    # Custom: shared Console line icons ("wheel", "flask") replace the stock textures
+    self._icon_size = FACE_SIZE * 0.5
     self._rect = rl.Rectangle(0, 0, button_size, button_size)
     self._animate_wheel = self._params.get_bool("BPAnimateSteeringWheel")
     self._param_counter = 0
@@ -56,18 +62,26 @@ class ExpButton(Widget):
     self._white_color.a = 180 if self.is_pressed or not self._engageable else 255
 
     is_exp = self._held_or_actual_mode()
-    texture = self._txt_exp if is_exp else self._txt_wheel
-    rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
-
-    if is_exp or not self._animate_wheel:
-      rl.draw_texture(texture, center_x - texture.width // 2, center_y - texture.height // 2, self._white_color)
+    # Custom: Console face. Accent fill marks experimental mode; a hairline otherwise.
+    face = rl.Rectangle(center_x - FACE_SIZE / 2, center_y - FACE_SIZE / 2, FACE_SIZE, FACE_SIZE)
+    r = roundness(face, FACE_RADIUS)
+    if is_exp:
+      rl.draw_rectangle_rounded(face, r, 10, Console.ACCENT_FILL)
     else:
-      # Rotate wheel icon to match steering angle
-      rotation = -ui_state.sm['carState'].steeringAngleDeg
-      src_rect = rl.Rectangle(0, 0, texture.width, texture.height)
-      dest_rect = rl.Rectangle(center_x, center_y, texture.width, texture.height)
-      origin = rl.Vector2(texture.width / 2, texture.height / 2)
-      rl.draw_texture_pro(texture, src_rect, dest_rect, origin, rotation, self._white_color)
+      rl.draw_rectangle_rounded(face, r, 10, Console.BG_HIGH if self.is_pressed else self._black_bg)
+      rl.draw_rectangle_rounded_lines_ex(face, r, 10, 2, Console.BORDER_DEFAULT)
+
+    sz = self._icon_size
+    if is_exp:
+      D.icon("flask", center_x - sz / 2, center_y - sz / 2, sz, Console.ON_ACCENT)
+    else:
+      # Rotate the wheel to match the steering angle when BPAnimateSteeringWheel is on
+      rotation = -ui_state.sm['carState'].steeringAngleDeg if self._animate_wheel else 0.0
+      rl.rl_push_matrix()
+      rl.rl_translatef(center_x, center_y, 0)
+      rl.rl_rotatef(rotation, 0, 0, 1)
+      D.icon("wheel", -sz / 2, -sz / 2, sz, self._white_color)
+      rl.rl_pop_matrix()
 
   def _held_or_actual_mode(self):
     now = time.monotonic()

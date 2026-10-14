@@ -3,6 +3,7 @@ import pyray as rl
 from enum import IntEnum
 from openpilot.system.ui.lib.application import gui_app, MouseEvent
 from openpilot.common.filter_simple import FirstOrderFilter
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 # Scroll constants for smooth scrolling behavior
 MOUSE_WHEEL_SCROLL_SPEED = 50
@@ -39,7 +40,7 @@ class GuiScrollPanel:
 
   def _update_state(self, bounds: rl.Rectangle, content: rl.Rectangle):
     if DEBUG:
-      rl.draw_rectangle_lines(0, 0, abs(int(self._velocity_filter_y.x)), 10, rl.RED)
+      rl.draw_rectangle_lines(0, 0, abs(int(self._velocity_filter_y.x)), 10, Console.DANGER)
 
     # Handle mouse wheel only when the mouse cursor is over this panel
     mouse_wheel = rl.get_mouse_wheel_move()

@@ -4,6 +4,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 from openpilot.system.ui.lib.application import gui_app, GL_VERSION
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 MAX_GRADIENT_COLORS = 20  # includes stops as well
 
@@ -299,7 +300,7 @@ def _configure_shader_color(state: ShaderState, color: Optional[rl.Color],
     rl.set_shader_value(state.rainbow_shader, state.rainbow_locations['offset'], state.offset_val, rl.SHADER_UNIFORM_FLOAT)
     state.shader = state.rainbow_shader
   else:
-    color = color or rl.WHITE
+    color = color or Console.TEXT_PRIMARY
     state.fill_color_ptr[0:4] = [color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0]
     rl.set_shader_value(state.exp_shader, state.locations['fillColor'], state.fill_color_ptr, UNIFORM_VEC4)
     state.shader = state.exp_shader
@@ -349,7 +350,7 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
 
   # Draw strip, color here doesn't matter
   rl.begin_shader_mode(state.shader)
-  rl.draw_triangle_strip(tri_strip, len(tri_strip), rl.WHITE)
+  rl.draw_triangle_strip(tri_strip, len(tri_strip), Console.TEXT_PRIMARY)
   rl.end_shader_mode()
 
 def draw_circle_gradient(rect: rl.Rectangle, center_x: float, center_y: float, radius: float, top_color: rl.Color, bottom_color: rl.Color) -> None:
@@ -371,7 +372,7 @@ def draw_circle_gradient(rect: rl.Rectangle, center_x: float, center_y: float, r
   # square_size = int(radius * 2)
 
   rl.begin_shader_mode(state.circle_shader)
-  rl.draw_rectangle_rec(rect, rl.WHITE)
+  rl.draw_rectangle_rec(rect, Console.TEXT_PRIMARY)
   rl.end_shader_mode()
 
 
@@ -477,7 +478,7 @@ def draw_shader_circle_gradient(center_x: float, center_y: float, radius: float,
   pad = 2  # 1px extra for anti-aliasing
   rl.begin_shader_mode(state.shader)
   rl.draw_rectangle(int(center_x - radius - pad), int(center_y - radius - pad),
-                    int(radius * 2 + pad * 2), int(radius * 2 + pad * 2), rl.WHITE)
+                    int(radius * 2 + pad * 2), int(radius * 2 + pad * 2), Console.TEXT_PRIMARY)
   rl.end_shader_mode()
 
 

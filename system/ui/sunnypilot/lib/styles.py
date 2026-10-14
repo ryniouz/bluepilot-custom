@@ -6,90 +6,97 @@ See the LICENSE.md file in the root directory for more details.
 """
 from dataclasses import dataclass
 
-import pyray as rl
+import pyray as rl  # noqa: F401
+
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 @dataclass
 class Base:
   # Widget/Control Base Dimensions
-  ITEM_BASE_HEIGHT = 170
+  # Custom: Console (Citadel form rows) sizes; stock was 170 / 50 / 40 / 150
+  ITEM_BASE_HEIGHT = 124
   ITEM_PADDING = 20
-  ITEM_TEXT_FONT_SIZE = 50
-  ITEM_DESC_FONT_SIZE = 40
-  ITEM_DESC_V_OFFSET = 150
-  ITEM_TEXT_VALUE_COLOR = rl.Color(170, 170, 170, 255)
+  ITEM_TEXT_FONT_SIZE = 34
+  ITEM_DESC_FONT_SIZE = 28
+  ITEM_DESC_V_OFFSET = 104
+  # Custom: end
+  ITEM_TEXT_VALUE_COLOR = Console.TEXT_SECONDARY  # Custom: Console
   CLOSE_BTN_SIZE = 160
 
   TEXT_PADDING = 20
 
+  # Custom: Console sizes; stock toggle 120 high, buttons 120 / 150 high
   # Toggle Control
-  TOGGLE_HEIGHT = 120
+  TOGGLE_HEIGHT = 64
   TOGGLE_WIDTH = int(TOGGLE_HEIGHT * 1.75)
-  TOGGLE_BG_HEIGHT = TOGGLE_HEIGHT - 20
+  TOGGLE_BG_HEIGHT = TOGGLE_HEIGHT - 8
 
   # Button Control
-  BUTTON_ACTION_WIDTH = 300
-  BUTTON_HEIGHT = 120
+  BUTTON_ACTION_WIDTH = 260
+  BUTTON_HEIGHT = 80
 
   # Simple Button Control
-  SIMPLE_BUTTON_WIDTH = 800
-  SIMPLE_BUTTON_HEIGHT = 150
+  SIMPLE_BUTTON_WIDTH = 640
+  SIMPLE_BUTTON_HEIGHT = 88
+  # Custom: end
 
 
 @dataclass
 class DefaultStyleSP(Base):
+  # Custom: every colour comes from the Console theme (bluepilot/ui/lib/theme.py)
   # Base Colors
-  BASE_BG_COLOR = rl.Color(57, 57, 57, 255)  # Grey
-  ON_BG_COLOR = rl.Color(28, 101, 186, 255)  # Blue
+  BASE_BG_COLOR = Console.BG_RAISED
+  ON_BG_COLOR = Console.ACCENT_FILL
   OFF_BG_COLOR = BASE_BG_COLOR
-  ON_HOVER_BG_COLOR = rl.Color(17, 78, 150, 255)  # Dark Blue
-  OFF_HOVER_BG_COLOR = rl.Color(21, 21, 21, 255)  # Dark gray
-  DISABLED_ON_BG_COLOR = rl.Color(37, 70, 107, 255)  # Dull Blue
-  DISABLED_OFF_BG_COLOR = rl.Color(39, 39, 39, 255)  # Grey
-  ITEM_TEXT_COLOR = rl.WHITE
-  ITEM_DISABLED_TEXT_COLOR = rl.Color(88, 88, 88, 255)
-  ITEM_DESC_TEXT_COLOR = rl.Color(128, 128, 128, 255)
+  ON_HOVER_BG_COLOR = Console.ACCENT_FILL_HOVER
+  OFF_HOVER_BG_COLOR = Console.BG_HIGH
+  DISABLED_ON_BG_COLOR = Console.ACCENT_TINT_STRONG
+  DISABLED_OFF_BG_COLOR = Console.BG_PANEL
+  ITEM_TEXT_COLOR = Console.TEXT_PRIMARY
+  ITEM_DISABLED_TEXT_COLOR = Console.TEXT_GHOST
+  ITEM_DESC_TEXT_COLOR = Console.TEXT_MUTED
 
   # Toggle Control
   TOGGLE_ON_COLOR = ON_BG_COLOR
-  TOGGLE_OFF_COLOR = OFF_BG_COLOR
-  TOGGLE_KNOB_COLOR = rl.WHITE
+  TOGGLE_OFF_COLOR = Console.TOGGLE_OFF
+  TOGGLE_KNOB_COLOR = Console.TOGGLE_KNOB
   TOGGLE_DISABLED_ON_COLOR = DISABLED_ON_BG_COLOR
   TOGGLE_DISABLED_OFF_COLOR = DISABLED_OFF_BG_COLOR
-  TOGGLE_DISABLED_KNOB_COLOR = rl.Color(88, 88, 88, 255)  # Lighter Grey
+  TOGGLE_DISABLED_KNOB_COLOR = Console.TEXT_GHOST
 
   # Multi Button Control
-  MBC_TRANSPARENT = rl.Color(255, 255, 255, 0)
-  MBC_BG_CHECKED_ENABLED = rl.Color(0x69, 0x68, 0x68, 0xFF)
-  MBC_DISABLED = rl.Color(0xFF, 0xFF, 0xFF, 0x33)
+  MBC_TRANSPARENT = Console.TRANSPARENT
+  MBC_BG_CHECKED_ENABLED = Console.ACCENT_FILL
+  MBC_DISABLED = with_alpha(Console.TEXT_PRIMARY, 0x33)
 
   # Option Control
   OPTION_CONTROL_CONTAINER_BG = OFF_BG_COLOR
-  OPTION_CONTROL_BTN_ENABLED = rl.Color(88, 88, 88, 255)
-  OPTION_CONTROL_BTN_PRESSED = rl.Color(0x69, 0x68, 0x68, 0xFF)
+  OPTION_CONTROL_BTN_ENABLED = Console.BG_HIGH
+  OPTION_CONTROL_BTN_PRESSED = Console.BORDER_DEFAULT
   OPTION_CONTROL_BTN_DISABLED = DISABLED_OFF_BG_COLOR
-  OPTION_CONTROL_TEXT_ENABLED = rl.WHITE
-  OPTION_CONTROL_TEXT_PRESSED = rl.WHITE
+  OPTION_CONTROL_TEXT_ENABLED = Console.TEXT_PRIMARY
+  OPTION_CONTROL_TEXT_PRESSED = Console.TEXT_PRIMARY
   OPTION_CONTROL_TEXT_DISABLED = ITEM_DISABLED_TEXT_COLOR
 
   # Tree Button Colors
-  BUTTON_PRIMARY_COLOR = rl.Color(70, 91, 234, 255)  # Royal Blue
-  BUTTON_NEUTRAL_GRAY = rl.Color(51, 51, 51, 255)
-  BUTTON_DISABLED_BG_COLOR = rl.Color(30, 30, 30, 255)  # Very Dark Grey
-  TREE_DIALOG_TRANSPARENT = rl.Color(0, 0, 0, 0)
-  TREE_DIALOG_SEARCH_BUTTON_PRESSED = rl.Color(0x69, 0x68, 0x68, 0xFF)
-  TREE_DIALOG_SEARCH_BUTTON_BORDER = rl.Color(150, 150, 150, 200)
+  BUTTON_PRIMARY_COLOR = Console.ACCENT_FILL
+  BUTTON_NEUTRAL_GRAY = Console.BG_RAISED
+  BUTTON_DISABLED_BG_COLOR = Console.BG_PANEL
+  TREE_DIALOG_TRANSPARENT = Console.TRANSPARENT
+  TREE_DIALOG_SEARCH_BUTTON_PRESSED = Console.BG_HIGH
+  TREE_DIALOG_SEARCH_BUTTON_BORDER = Console.BORDER_DEFAULT
 
-  # Vehicle Description Colors
-  GREEN = rl.Color(0, 241, 0, 255)
-  BLUE = rl.Color(0, 134, 233, 255)
-  YELLOW = rl.Color(255, 213, 0, 255)
+  # Vehicle Description Colors (status marks)
+  GREEN = Console.SUCCESS
+  BLUE = Console.INFO
+  YELLOW = Console.WARNING
 
   # Button Colors
-  BUTTON_ENABLED_OFF = rl.Color(0x39, 0x39, 0x39, 0xFF)
-  BUTTON_OFF_PRESSED = rl.Color(0x4A, 0x4A, 0x4A, 0xFF)
-  BUTTON_DISABLED = rl.Color(0x12, 0x12, 0x12, 0xFF)
-  BUTTON_TEXT_DISABLED = rl.Color(0x5C, 0x5C, 0x5C, 0xFF)
+  BUTTON_ENABLED_OFF = Console.BG_RAISED
+  BUTTON_OFF_PRESSED = Console.BG_HIGH
+  BUTTON_DISABLED = Console.BG_PANEL
+  BUTTON_TEXT_DISABLED = Console.TEXT_GHOST
 
 
 style = DefaultStyleSP

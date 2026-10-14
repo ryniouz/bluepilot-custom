@@ -6,6 +6,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.common.filter_simple import FirstOrderFilter
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class SmallSlider(Widget):
@@ -33,7 +34,7 @@ class SmallSlider(Widget):
 
     self._is_dragging_circle = False
 
-    self._label = UnifiedLabel(title, font_size=36, font_weight=FontWeight.SEMI_BOLD, text_color=rl.Color(255, 255, 255, int(255 * 0.65)),
+    self._label = UnifiedLabel(title, font_size=36, font_weight=FontWeight.SEMI_BOLD, text_color=with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65)),
                                alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
                                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE, line_height=0.9)
 
@@ -121,7 +122,7 @@ class SmallSlider(Widget):
   def _render(self, _):
     # TODO: iOS text shimmering animation
 
-    white = rl.Color(255, 255, 255, int(255 * self._opacity_filter.x))
+    white = with_alpha(Console.TEXT_PRIMARY, int(255 * self._opacity_filter.x))
 
     bg_txt_x = self._rect.x + (self._rect.width - self._bg_txt.width) / 2
     bg_txt_y = self._rect.y + (self._rect.height - self._bg_txt.height) / 2
@@ -131,7 +132,7 @@ class SmallSlider(Widget):
     btn_y = self._rect.y + (self._rect.height - self._circle_bg_txt.height) / 2
 
     if self._confirmed_time == 0.0 or self._scroll_x_circle > 0:
-      self._label.set_text_color(rl.Color(255, 255, 255, int(255 * 0.65 * (1.0 - self.slider_percentage) * self._opacity_filter.x)))
+      self._label.set_text_color(with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65 * (1.0 - self.slider_percentage) * self._opacity_filter.x)))
       label_rect = rl.Rectangle(
         self._rect.x + 20,
         self._rect.y,
@@ -168,7 +169,7 @@ class BigSlider(SmallSlider):
   def __init__(self, title: str, icon: rl.Texture, confirm_callback: Callable | None = None):
     self._icon = icon
     super().__init__(title, confirm_callback=confirm_callback)
-    self._label = UnifiedLabel(title, font_size=48, font_weight=FontWeight.DISPLAY, text_color=rl.Color(255, 255, 255, int(255 * 0.65)),
+    self._label = UnifiedLabel(title, font_size=48, font_weight=FontWeight.DISPLAY, text_color=with_alpha(Console.TEXT_PRIMARY, int(255 * 0.65)),
                                alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
                                line_height=0.875)
 

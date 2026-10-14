@@ -1,72 +1,242 @@
-/* BluePilot Theme Variables */
+/* Custom: Console theme for the BluePilot Portal.
+ *
+ * Same tokens as the comma 3X screen (bluepilot/ui/lib/theme.py) and the Citadel EV apps:
+ * dark-first ground that steps toward the viewer, one accent for interactive work,
+ * status colours for state only, Inter 400/600, 4px grid, squared bars, no gradients.
+ *
+ * The accent follows data-theme on <html> (blue default, teal, violet, ember), which the
+ * app sets from the device's BPConsoleAccent param. Older --bp-* names are kept as aliases
+ * so existing component CSS keeps working.
+ */
 
 :root {
-  /* Match BluePilot Qt panel colors */
-  --bp-bg-primary: #1a1a1a;
-  --bp-bg-secondary: #242424;
-  --bp-bg-tertiary: #303030;
-  --bp-accent-blue: #2196f3;
-  --bp-accent-blue-hover: #1976d2;
-  --bp-text-primary: #e4e4e4;
-  --bp-text-secondary: #aaaaaa;
-  --bp-border: rgba(255, 255, 255, 0.1);
-  --bp-success: #4caf50;
-  --bp-warning: #ff9800;
-  --bp-error: #f44336;
+  /* Ground */
+  --bg-page: #131416;
+  --bg-panel: #1c1e21;
+  --bg-raised: #282b2f;
+  --bg-high: #34383d;
+  --bg-track: rgba(249, 250, 250, 0.18);
 
-  /* Semantic aliases used across the web UI */
-  --text-primary: var(--bp-text-primary);
-  --text-secondary: #b5b5b5;
-  --text-tertiary: #7d7d7d;
+  /* Lines */
+  --border-subtle: #34383d;
+  --border-default: #42474d;
+  --border-strong: #737c87;
 
-  --primary-color: var(--bp-accent-blue);
-  --success-color: var(--bp-success);
-  --warning-color: var(--bp-warning);
-  --error-color: var(--bp-error);
+  /* Text */
+  --text-primary: #f9fafa;
+  --text-secondary: #dee0e3;
+  --text-muted: #b7bcc2;
+  --text-ghost: #737c87;
+  --ink-rgb: 249, 250, 250;
 
-  --card-bg: var(--bp-bg-secondary);
-  --bg-secondary: #1d1d1d;
-  --input-bg: #1a1a1a;
-  --hover-bg: rgba(255, 255, 255, 0.06);
+  /* Accent (blue) */
+  --accent: #4797ff;
+  --accent-rgb: 71, 151, 255;
+  --accent-text: #4797ff;
+  --accent-fill: #005ed9;
+  --accent-fill-hover: #006fff;
+  --accent-tint: #05254d;
+  --accent-tint-strong: #0b4ead;
+  --on-accent: #ffffff;
 
-  --border-color: rgba(255, 255, 255, 0.08);
-  --control-border-color: rgba(255, 255, 255, 0.16);
-  --panel-border-strong: rgba(255, 255, 255, 0.16);
+  /* Status: marks, paired with a word */
+  --success: #37be5f;
+  --success-rgb: 55, 190, 95;
+  --warning: #e79613;
+  --warning-rgb: 231, 150, 19;
+  --danger: #ee6368;
+  --danger-rgb: 238, 99, 104;
+  --danger-fill: #f0383b;
+  --info: #3ca9d7;
+  --info-rgb: 60, 169, 215;
+  --purple: #b47cde;
+  --purple-rgb: 180, 124, 222;
+  --scrim: rgba(0, 0, 0, 0.6);
 
-  --info-bg: rgba(33, 150, 243, 0.12);
-  --warning-bg: rgba(255, 193, 7, 0.18);
+  /* Type */
+  --font-sans: 'Inter Variable', Inter, Lato, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --panel-card-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
-  --panel-card-gradient: linear-gradient(135deg, #2e2e2e 0%, #1c1c1c 65%);
+  /* ---- Legacy names, mapped onto Console ---- */
+  --bp-bg-primary: var(--bg-page);
+  --bp-bg-secondary: var(--bg-panel);
+  --bp-bg-tertiary: var(--bg-raised);
+  --bp-accent-blue: var(--accent);
+  --bp-accent-blue-hover: var(--accent-fill-hover);
+  --bp-text-primary: var(--text-primary);
+  --bp-text-secondary: var(--text-muted);
+  --bp-border: var(--border-subtle);
+  --bp-success: var(--success);
+  --bp-warning: var(--warning);
+  --bp-error: var(--danger);
 
-  /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
+  --text-tertiary: var(--text-ghost);
 
-  /* Border radius */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 18px;
-  --radius-2xl: 20px;
+  --primary-color: var(--accent);
+  --success-color: var(--success);
+  --warning-color: var(--warning);
+  --error-color: var(--danger);
+
+  --card-bg: var(--bg-panel);
+  --bg-secondary: var(--bg-panel);
+  --input-bg: var(--bg-raised);
+  --hover-bg: var(--bg-high);
+
+  --border-color: var(--border-subtle);
+  --control-border-color: var(--border-default);
+  --panel-border-strong: var(--border-default);
+
+  --info-bg: var(--accent-tint);
+  --warning-bg: rgba(var(--warning-rgb), 0.16);
+
+  /* Depth comes from tone in dark theme, not shadow or gradient */
+  --panel-card-shadow: none;
+  --panel-card-gradient: var(--bg-panel);
+
+  /* Spacing: 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-4);
+  --spacing-lg: var(--space-6);
+  --spacing-xl: var(--space-8);
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 14px;
+  --radius-2xl: 14px;
   --radius-full: 9999px;
 
-  /* Transitions */
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  /* Motion */
+  --transition-fast: 0.2s ease-out;
+  --transition-normal: 0.2s ease-out;
+  --transition-slow: 0.3s ease-out;
 
-  /* Shadows */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.4);
+  /* Elevation (floating surfaces only) */
+  --shadow-sm: 0 0 1px 0 rgba(249, 250, 250, 0.08);
+  --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.4), 0 0 1px 0 rgba(249, 250, 250, 0.08);
+  --shadow-lg: 0 12px 48px 0 #000000, 0 0 1px 0 rgba(249, 250, 250, 0.08);
 
   /* Z-index layers */
   --z-modal: 3000;
   --z-dropdown: 500;
   --z-header: 100;
   --z-overlay: 900;
+}
+
+:root[data-theme='teal'] {
+  --accent: #2dd4bf;
+  --accent-rgb: 45, 212, 191;
+  --accent-text: #2dd4bf;
+  --accent-fill: #0f766e;
+  --accent-fill-hover: #0d9488;
+  --accent-tint: #0b2f2c;
+  --accent-tint-strong: #115e59;
+}
+
+:root[data-theme='violet'] {
+  --accent: #a78bfa;
+  --accent-rgb: 167, 139, 250;
+  --accent-text: #a78bfa;
+  --accent-fill: #6d28d9;
+  --accent-fill-hover: #7c3aed;
+  --accent-tint: #251a45;
+  --accent-tint-strong: #4c2fa0;
+}
+
+:root[data-theme='ember'] {
+  --accent: #ff8a3d;
+  --accent-rgb: 255, 138, 61;
+  --accent-text: #ff8a3d;
+  --accent-fill: #c2410c;
+  --accent-fill-hover: #ea580c;
+  --accent-tint: #3a2010;
+  --accent-tint-strong: #7c2d12;
+}
+
+/* Day (light) palette. The app sets data-mode="light" from the device's BPConsoleMode param
+ * (day, or auto when the viewing device prefers a light scheme). */
+:root[data-mode='light'] {
+  --bg-page: #f4f5f6;
+  --bg-panel: #ffffff;
+  --bg-raised: #f9fafa;
+  --bg-high: #eef0f1;
+  --bg-track: rgba(33, 35, 39, 0.08);
+
+  --border-subtle: #eef0f1;
+  --border-default: #dee0e3;
+  --border-strong: #c2c6cb;
+
+  --text-primary: #212327;
+  --text-secondary: #50565e;
+  --text-muted: #676f79;
+  --text-ghost: #808893;
+  --ink-rgb: 33, 35, 39;
+
+  --accent: #006fff;
+  --accent-rgb: 0, 111, 255;
+  --accent-text: #005ed9;
+  --accent-fill: #006fff;
+  --accent-fill-hover: #005ed9;
+  --accent-tint: #e6f1ff;
+  --accent-tint-strong: #cce2ff;
+
+  --success: #38cc65;
+  --success-rgb: 56, 204, 101;
+  --warning: #f5a524;
+  --warning-rgb: 245, 165, 36;
+  --danger: #f0383b;
+  --danger-rgb: 240, 56, 59;
+  --danger-fill: #f0383b;
+  --info: #6bd2fd;
+  --info-rgb: 107, 210, 253;
+  --purple: #a354e3;
+  --purple-rgb: 163, 84, 227;
+  --scrim: rgba(33, 35, 39, 0.4);
+
+  /* Light theme: card edges come from a hairline, floating surfaces from a soft shadow */
+  --panel-card-shadow: 0 0 0 1px var(--border-default);
+  --shadow-sm: 0 0 0 1px var(--border-default);
+  --shadow-md: 0 4px 12px 0 rgba(33, 35, 39, 0.12), 0 0 0 1px var(--border-default);
+  --shadow-lg: 0 12px 48px 0 rgba(33, 35, 39, 0.18), 0 0 0 1px var(--border-default);
+  color-scheme: light;
+}
+
+:root[data-mode='light'][data-theme='teal'] {
+  --accent: #0d9488;
+  --accent-rgb: 13, 148, 136;
+  --accent-text: #0f766e;
+  --accent-fill: #0f766e;
+  --accent-fill-hover: #115e59;
+  --accent-tint: #e6f7f5;
+  --accent-tint-strong: #b9ebe4;
+}
+
+:root[data-mode='light'][data-theme='violet'] {
+  --accent: #7c3aed;
+  --accent-rgb: 124, 58, 237;
+  --accent-text: #6d28d9;
+  --accent-fill: #7c3aed;
+  --accent-fill-hover: #6d28d9;
+  --accent-tint: #f1ecfe;
+  --accent-tint-strong: #ddd2fc;
+}
+
+:root[data-mode='light'][data-theme='ember'] {
+  --accent: #ea580c;
+  --accent-rgb: 234, 88, 12;
+  --accent-text: #c2410c;
+  --accent-fill: #c2410c;
+  --accent-fill-hover: #9a3412;
+  --accent-tint: #fff1e8;
+  --accent-tint-strong: #fed7bd;
 }

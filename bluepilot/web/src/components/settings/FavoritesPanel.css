@@ -8,8 +8,8 @@
 .favorites-info {
   padding: 0.25rem 1rem;
   border-radius: 18px;
-  background: rgba(33, 150, 243, 0.1);
-  border: 1px solid rgba(33, 150, 243, 0.25);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: var(--text-secondary);
   font-size: 0.8rem;
   /* box-shadow: var(--panel-card-shadow); */
@@ -29,7 +29,7 @@
   border-radius: 22px;
   border: 1px dashed var(--border-color);
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--ink-rgb), 0.02);
 }
 
 .favorites-empty-icon {
@@ -56,7 +56,7 @@
   justify-content: center;
   padding: 3rem 2rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
 }
@@ -70,7 +70,7 @@
   padding: 1.35rem 1.5rem 1.75rem;
   border-radius: 22px;
   border: 1px solid var(--border-color);
-  background: rgba(24, 24, 24, 0.95);
+  background: var(--bg-page);
   box-shadow: var(--panel-card-shadow);
 }
 
@@ -80,7 +80,7 @@
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-primary);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.05);
 }
 
 .favorites-controls {

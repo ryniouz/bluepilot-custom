@@ -18,6 +18,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, Onroad  # Custom: Console theme
 
 
 # Base constants (at scale 1.0, these produce the "natural" size)
@@ -48,15 +49,15 @@ FULL_CONTENT_WIDTH = 2100.0
 GAUGE_SIZE_HEIGHTS = {1: 120, 2: 155}
 
 # Colors
-BACKGROUND_BOX_COLOR = rl.Color(20, 20, 20, 100)
-BATTERY_BG_COLOR = rl.Color(40, 40, 40, 220)
-BATTERY_BORDER_COLOR = rl.Color(200, 200, 200, 255)
-BATTERY_LOW_COLOR = rl.Color(200, 100, 100, 255)
-BATTERY_MID_COLOR = rl.Color(200, 200, 100, 255)
-BATTERY_HIGH_COLOR = rl.Color(100, 200, 100, 255)
-TEXT_COLOR = rl.Color(255, 255, 255, 255)
-CHARGING_COLOR = rl.Color(100, 255, 100, 255)
-DISCHARGING_COLOR = rl.Color(255, 100, 100, 255)
+BACKGROUND_BOX_COLOR = Onroad.PANEL
+BATTERY_BG_COLOR = Console.BG_RAISED
+BATTERY_BORDER_COLOR = Console.BORDER_STRONG
+BATTERY_LOW_COLOR = Console.DANGER
+BATTERY_MID_COLOR = Console.WARNING
+BATTERY_HIGH_COLOR = Console.SUCCESS
+TEXT_COLOR = Console.TEXT_PRIMARY
+CHARGING_COLOR = Console.SUCCESS
+DISCHARGING_COLOR = Console.DANGER
 
 PARAM_REFRESH_FRAMES = 60
 
@@ -303,7 +304,7 @@ class HybridBatteryGauge(Widget):
           background_height + glow_exp * 2,
         )
         rl.draw_rectangle_rounded(
-          glow_rect, BACKGROUND_ROUNDNESS, 10, rl.Color(20, 20, 20, int(BACKGROUND_BOX_COLOR.a * 0.3))
+          glow_rect, BACKGROUND_ROUNDNESS, 10, Console.TRANSPARENT
         )
         rl.draw_rectangle_rounded(background_rect, BACKGROUND_ROUNDNESS, 10, BACKGROUND_BOX_COLOR)
 

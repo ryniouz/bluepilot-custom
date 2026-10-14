@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.lib.colors import BPColors
 from bluepilot.ui.lib.constants import BPConstants
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class IconButton(Widget):
@@ -79,7 +80,7 @@ class IconButton(Widget):
       icon_y = int(rect.y + (rect.height - scaled_height) / 2)
 
       # Draw with tint for opacity effect
-      tint = rl.Color(255, 255, 255, int(255 * opacity))
+      tint = with_alpha(Console.TEXT_PRIMARY, int(255 * opacity))
 
       # Draw scaled texture
       source_rect = rl.Rectangle(0, 0, self._icon_texture.width, self._icon_texture.height)
@@ -118,7 +119,7 @@ class InfoButton(Widget):
     cx = int(rect.x + rect.width / 2)
     cy = int(rect.y + rect.height / 2)
     radius = int(min(rect.width, rect.height) * 0.32)
-    icon_color = rl.Color(180, 180, 180, 255) if self.is_pressed else rl.WHITE
+    icon_color = Console.TEXT_MUTED if self.is_pressed else Console.TEXT_PRIMARY
     rl.draw_circle(cx, cy, radius, icon_color)
 
     # "i" text centered in circle (dark, matching button bg)

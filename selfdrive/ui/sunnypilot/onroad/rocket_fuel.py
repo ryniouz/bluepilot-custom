@@ -7,6 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 import pyray as rl
 
 from openpilot.selfdrive.ui.ui_state import ui_state
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class RocketFuel:
@@ -23,14 +24,14 @@ class RocketFuel:
     self.vc_accel = self.vc_accel + (vc_accel0 - self.vc_accel) / 5.0
 
     hha = 0.0
-    color = rl.Color(0, 0, 0, 0)  # Transparent by default
+    color = with_alpha(Console.BG_PAGE, 0)  # Transparent by default
 
     if self.vc_accel > 0:
       hha = 0.85 - 0.1 / self.vc_accel  # only extend up to 85%
-      color = rl.Color(0, 245, 0, 200)
+      color = with_alpha(Console.SUCCESS, 200)
     elif self.vc_accel < 0:
       hha = 0.85 + 0.1 / self.vc_accel  # only extend up to 85%
-      color = rl.Color(245, 0, 0, 200)
+      color = with_alpha(Console.DANGER, 200)
 
     if hha < 0:
       hha = 0.0

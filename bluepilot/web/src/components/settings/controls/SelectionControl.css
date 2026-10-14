@@ -28,7 +28,7 @@
 .selection-control__select:hover:not(:disabled),
 .selection-control__select:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
 }
 
 .selection-control__select:disabled {

@@ -17,6 +17,7 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui.elements import (
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 def get_bottom_dev_ui_offset():
@@ -109,7 +110,7 @@ class DeveloperUiRenderer(Widget):
     unit_size = 28
     label_width = measure_text_cached(self._font_bold, element.label, label_size, 0).x
     centered_label_x = x + (container_width - label_width) / 2
-    rl.draw_text_ex(self._font_bold, element.label, rl.Vector2(centered_label_x, y), label_size, 0, rl.WHITE)
+    rl.draw_text_ex(self._font_bold, element.label, rl.Vector2(centered_label_x, y), label_size, 0, Console.TEXT_PRIMARY)
 
     y += 45
     value_width = measure_text_cached(self._font_bold, element.value, value_size, 0).x
@@ -122,7 +123,7 @@ class DeveloperUiRenderer(Widget):
       units_x = x + container_width
       units_y = y + (value_size / 2) + (units_height / 2)
 
-      rl.draw_text_pro(self._font_bold, element.unit, rl.Vector2(units_x, units_y), rl.Vector2(0, 0), -90.0, unit_size, 0, rl.WHITE)
+      rl.draw_text_pro(self._font_bold, element.unit, rl.Vector2(units_x, units_y), rl.Vector2(0, 0), -90.0, unit_size, 0, Console.TEXT_PRIMARY)
 
     return 130
 
@@ -132,7 +133,7 @@ class DeveloperUiRenderer(Widget):
     y = int(rect.y + rect.height - bar_height)
 
     rl.draw_rectangle(int(rect.x), y, int(rect.width), bar_height,
-                      rl.Color(0, 0, 0, 100))
+                      with_alpha(Console.BG_PAGE, 100))
 
     elements = [
       self.a_ego_elem.update(sm, ui_state.is_metric),
@@ -183,9 +184,9 @@ class DeveloperUiRenderer(Widget):
     font_size = 38
     start_x = center_x - element.total_width / 2
 
-    rl.draw_text_ex(self._font_bold, element.label_text, rl.Vector2(start_x, y - font_size // 2), font_size, 0, rl.WHITE)
+    rl.draw_text_ex(self._font_bold, element.label_text, rl.Vector2(start_x, y - font_size // 2), font_size, 0, Console.TEXT_PRIMARY)
     rl.draw_text_ex(self._font_bold, element.val_text, rl.Vector2(start_x + element.label_width, y - font_size // 2), font_size, 0, element.color)
 
     if element.unit:
       rl.draw_text_ex(self._font_bold, element.unit_text, rl.Vector2(start_x + element.label_width + element.val_width, y - font_size // 2),
-                      font_size, 0, rl.WHITE)
+                      font_size, 0, Console.TEXT_PRIMARY)

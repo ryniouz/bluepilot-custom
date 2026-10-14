@@ -13,6 +13,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.network import NetworkUI
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 # Constants
 SIDEBAR_WIDTH = 500
@@ -22,12 +23,12 @@ NAV_BTN_HEIGHT = 110
 PANEL_MARGIN = 50
 
 # Colors
-SIDEBAR_COLOR = rl.BLACK
-PANEL_COLOR = rl.Color(41, 41, 41, 255)
-CLOSE_BTN_COLOR = rl.Color(41, 41, 41, 255)
-CLOSE_BTN_PRESSED = rl.Color(59, 59, 59, 255)
-TEXT_NORMAL = rl.Color(128, 128, 128, 255)
-TEXT_SELECTED = rl.WHITE
+SIDEBAR_COLOR = Console.BG_PAGE
+PANEL_COLOR = Console.BG_RAISED
+CLOSE_BTN_COLOR = Console.BG_RAISED
+CLOSE_BTN_PRESSED = Console.BG_HIGH
+TEXT_NORMAL = Console.TEXT_MUTED
+TEXT_SELECTED = Console.TEXT_PRIMARY
 
 
 class PanelType(IntEnum):
@@ -95,7 +96,7 @@ class SettingsLayout(Widget):
     close_color = CLOSE_BTN_PRESSED if pressed else CLOSE_BTN_COLOR
     rl.draw_rectangle_rounded(close_btn_rect, 1.0, 20, close_color)
 
-    icon_color = rl.Color(255, 255, 255, 255) if not pressed else rl.Color(220, 220, 220, 255)
+    icon_color = with_alpha(Console.TEXT_PRIMARY, 255) if not pressed else Console.TEXT_SECONDARY
     icon_dest = rl.Rectangle(
       close_btn_rect.x + (close_btn_rect.width - self._close_icon.width) / 2,
       close_btn_rect.y + (close_btn_rect.height - self._close_icon.height) / 2,

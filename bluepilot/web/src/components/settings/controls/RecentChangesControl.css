@@ -32,11 +32,11 @@
 }
 
 .recent-changes-btn--bluepilot {
-  border: 1px solid rgba(33, 150, 243, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
 }
 
 .recent-changes-btn--sunnypilot {
-  border: 1px solid rgba(255, 193, 7, 0.35);
+  border: 1px solid rgba(var(--warning-rgb), 0.35);
 }
 
 .recent-changes-modal {
@@ -53,15 +53,15 @@
 }
 
 .recent-changes-error {
-  border-color: rgba(244, 67, 54, 0.35);
+  border-color: rgba(var(--danger-rgb), 0.35);
   color: var(--error-color);
 }
 
 .recent-changes-content {
   max-height: 65vh;
   overflow: auto;
-  background: var(--code-bg, #0f111a);
-  color: var(--code-fg, #f5f7ff);
+  background: var(--code-bg, var(--bg-page));
+  color: var(--code-fg, var(--text-primary));
   padding: 1rem;
   border-radius: 12px;
   font-size: 0.85rem;

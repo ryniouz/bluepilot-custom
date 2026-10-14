@@ -22,6 +22,7 @@ from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 
 from openpilot.system.ui.sunnypilot.lib.application import GuiApplicationExt
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
@@ -37,6 +38,7 @@ SHOW_FPS = os.getenv("SHOW_FPS") == "1"
 SHOW_TOUCHES = os.getenv("SHOW_TOUCHES") == "1"
 STRICT_MODE = os.getenv("STRICT_MODE") == "1"
 SCALE = float(os.getenv("SCALE", "1.0"))
+SIM_SSAA = max(1, int(os.getenv("BP_SIM_SSAA", "2")))  # BluePilot: PC simulator supersampling
 GRID_SIZE = int(os.getenv("GRID", "0"))
 PROFILE_RENDER = int(os.getenv("PROFILE_RENDER", "0"))
 PROFILE_STATS = int(os.getenv("PROFILE_STATS", "100"))  # Number of functions to show in profile output
@@ -85,7 +87,7 @@ void main() {
 """
 
 DEFAULT_TEXT_SIZE = 60
-DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
+DEFAULT_TEXT_COLOR = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9))
 
 # Qt draws fonts accounting for ascent/descent differently, so compensate to match old styles
 # The real scales for the fonts below range from 1.212 to 1.266
@@ -96,18 +98,21 @@ FONT_DIR = ASSETS_DIR.joinpath("fonts")
 
 
 class FontWeight(StrEnum):
+  # Custom: Console type uses two weights on the 3X (BIG) UI: Inter 400 for text, 600 for
+  # headings, labels and numerals. MEDIUM maps to 400 and BOLD to 600 there; MICI is unchanged.
   LIGHT = "Inter-Light.fnt"
   NORMAL = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
-  MEDIUM = "Inter-Medium.fnt"
-  BOLD = "Inter-Bold.fnt"
+  MEDIUM = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
+  BOLD = "Inter-SemiBold.fnt" if BIG_UI else "Inter-Bold.fnt"
   SEMI_BOLD = "Inter-SemiBold.fnt"
+  # Custom: end
   UNIFONT = "unifont.fnt"
   AUDIOWIDE = "Audiowide-Regular.fnt"
 
   # Small UI fonts
   DISPLAY_REGULAR = "Inter-Regular.fnt"
   ROMAN = "Inter-Regular.fnt"
-  DISPLAY = "Inter-Bold.fnt"
+  DISPLAY = "Inter-SemiBold.fnt" if BIG_UI else "Inter-Bold.fnt"  # Custom: Console 600
 
 
 def font_fallback(font: rl.Font) -> rl.Font:
@@ -212,6 +217,7 @@ class GuiApplication(GuiApplicationExt):
     self._scaled_height += self._scaled_height % 2
 
     self._render_texture: rl.RenderTexture | None = None
+    self._ssaa = 1  # BluePilot: simulator supersampling factor
     self._burn_in_shader: rl.Shader | None = None
     self._ffmpeg_proc: subprocess.Popen | None = None
     self._ffmpeg_queue: queue.Queue | None = None
@@ -283,8 +289,18 @@ class GuiApplication(GuiApplicationExt):
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
-        self._render_texture = rl.load_render_texture(self._width, self._height)
-        rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        # BluePilot: the PC simulator draws into a render texture, which gets no MSAA, and then
+        # shrinks it to the window, so line icons and rings came out jagged. Supersample it: draw
+        # at SSAA x size, build mipmaps and let trilinear filtering average it down. Device is
+        # unaffected (scale 1, no render texture).
+        self._ssaa = SIM_SSAA if (PC and self._scale != 1.0 and not BURN_IN_MODE and not RECORD) else 1
+        self._render_texture = rl.load_render_texture(self._width * self._ssaa, self._height * self._ssaa)
+        if self._ssaa > 1:
+          rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+          self._patch_scissor_for_ssaa()
+        else:
+          rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        # End BluePilot
 
       if RECORD:
         output_fps = fps * RECORD_SPEED
@@ -597,10 +613,15 @@ class GuiApplication(GuiApplicationExt):
 
         if self._render_texture:
           rl.begin_texture_mode(self._render_texture)
-          rl.clear_background(rl.BLACK)
+          rl.clear_background(Console.BG_PAGE)
+          # BluePilot: supersampled simulator frame
+          if self._ssaa > 1:
+            rl.rl_push_matrix()
+            rl.rl_scalef(self._ssaa, self._ssaa, 1)
+          # End BluePilot
         else:
           rl.begin_drawing()
-          rl.clear_background(rl.BLACK)
+          rl.clear_background(Console.BG_PAGE)
 
         # Allow a Widget to still run a function regardless of the stack depth
         for tick in self._nav_stack_ticks:
@@ -613,10 +634,18 @@ class GuiApplication(GuiApplicationExt):
         yield True
 
         if self._render_texture:
+          # BluePilot: supersampled simulator frame
+          if self._ssaa > 1:
+            rl.rl_pop_matrix()
+          # End BluePilot
           rl.end_texture_mode()
+          # BluePilot: mipmaps for the trilinear downsample
+          if self._ssaa > 1:
+            rl.gen_texture_mipmaps(rl.ffi.addressof(self._render_texture, "texture"))
+          # End BluePilot
           rl.begin_drawing()
-          rl.clear_background(rl.BLACK)
-          src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
+          rl.clear_background(Console.BG_PAGE)
+          src_rect = rl.Rectangle(0, 0, float(self._width * self._ssaa), -float(self._height * self._ssaa))
           dst_rect = rl.Rectangle(0, 0, float(self._scaled_width), float(self._scaled_height))
           texture = self._render_texture.texture
           if texture:
@@ -680,9 +709,21 @@ class GuiApplication(GuiApplicationExt):
   def _set_styles(self):
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_SIZE, DEFAULT_TEXT_SIZE)
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.BACKGROUND_COLOR, rl.color_to_int(rl.BLACK))
+    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.BACKGROUND_COLOR, rl.color_to_int(Console.BG_PAGE))
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.TEXT_COLOR_NORMAL, rl.color_to_int(DEFAULT_TEXT_COLOR))
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BASE_COLOR_NORMAL, rl.color_to_int(rl.Color(50, 50, 50, 255)))
+    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BASE_COLOR_NORMAL, rl.color_to_int(Console.BG_HIGH))
+
+  # BluePilot: widgets give scissor rects in UI pixels; scale them into the supersampled frame
+  def _patch_scissor_for_ssaa(self):
+    if not hasattr(rl, "_orig_begin_scissor_mode"):
+      rl._orig_begin_scissor_mode = rl.begin_scissor_mode
+    k = self._ssaa
+
+    def _begin_scissor_mode_ssaa(x, y, width, height):
+      return rl._orig_begin_scissor_mode(int(x * k), int(y * k), int(width * k), int(height * k))
+
+    rl.begin_scissor_mode = _begin_scissor_mode_ssaa
+  # End BluePilot
 
   def _patch_text_functions(self):
     # Wrap pyray text APIs to apply a global text size scale so our px sizes match Qt
@@ -768,14 +809,14 @@ class GuiApplication(GuiApplicationExt):
 
     if self._mouse_history:
       mouse_pos = self._mouse_history[-1]
-      rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 15, rl.RED)
+      rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 15, Console.DANGER)
       for idx, mouse_pos in enumerate(self._mouse_history):
         perc = idx / len(self._mouse_history)
         color = rl.Color(min(int(255 * (1.5 - perc)), 255), int(min(255 * (perc + 0.5), 255)), 50, 255)
         rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 5, color)
 
   def _draw_grid(self):
-    grid_color = rl.Color(60, 60, 60, 255)
+    grid_color = Console.BG_HIGH
     # Draw vertical lines
     x = 0
     while x <= self._scaled_width:

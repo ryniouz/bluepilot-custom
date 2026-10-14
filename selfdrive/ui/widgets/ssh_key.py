@@ -21,6 +21,7 @@ from openpilot.system.ui.widgets.list_view import (
   BUTTON_FONT_SIZE,
   BUTTON_WIDTH,
 )
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 VALUE_FONT_SIZE = 48
 
@@ -72,7 +73,7 @@ class SshKeyAction(ItemAction):
         (rect.x + rect.width - BUTTON_WIDTH - text_size.x - 30, rect.y + (rect.height - text_size.y) / 2),
         VALUE_FONT_SIZE,
         1.0,
-        rl.Color(170, 170, 170, 255),
+        Console.TEXT_MUTED,
       )
 
     # Draw button

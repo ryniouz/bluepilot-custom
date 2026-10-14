@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.utils import GuiStyleContext
 from openpilot.system.ui.lib.emoji import find_emoji, emoji_tex
 from openpilot.system.ui.lib.wrap_text import wrap_text
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 ICON_PADDING = 15
 
@@ -179,9 +180,9 @@ class MiciLabel(Widget):
     if self._needs_scroll:
       # draw black fade on left and right
       fade_width = 20
-      rl.draw_rectangle_gradient_h(int(rect.x + rect.width - fade_width), int(rect.y), fade_width, int(rect.height), rl.BLANK, rl.BLACK)
+      rl.draw_rectangle_gradient_h(int(rect.x + rect.width - fade_width), int(rect.y), fade_width, int(rect.height), rl.BLANK, Console.BG_PAGE)
       if self._scroll_state != ScrollState.STARTING:
-        rl.draw_rectangle_gradient_h(int(rect.x), int(rect.y), fade_width, int(rect.height), rl.BLACK, rl.BLANK)
+        rl.draw_rectangle_gradient_h(int(rect.x), int(rect.y), fade_width, int(rect.height), Console.BG_PAGE, rl.BLANK)
 
       rl.end_scissor_mode()
 
@@ -364,7 +365,7 @@ class Label(Widget):
           icon_x = (self._rect.x + self._rect.width - text_size.x - self._text_padding) - ICON_PADDING - self._icon.width
       else:
         icon_x = self._rect.x + (self._rect.width - self._icon.width) / 2
-      rl.draw_texture_v(self._icon, rl.Vector2(icon_x, icon_y), rl.WHITE)
+      rl.draw_texture_v(self._icon, rl.Vector2(icon_x, icon_y), Console.TEXT_PRIMARY)
 
     for text, text_size, emojis in zip_longest(self._text_wrapped, self._text_size, self._emojis, fillvalue=[]):
       line_pos = rl.Vector2(text_pos.x, text_pos.y)
@@ -759,14 +760,15 @@ class UnifiedLabel(Widget):
     if self._needs_scroll:
       # draw black fade on left and right
       fade_width = 20
-      rl.draw_rectangle_gradient_h(int(self._rect.x + self._rect.width - fade_width), int(self._rect.y), fade_width, int(self._rect.height), rl.BLANK, rl.BLACK)
+      rl.draw_rectangle_gradient_h(int(self._rect.x + self._rect.width - fade_width), int(self._rect.y), fade_width, int(self._rect.height),
+                                   rl.BLANK, Console.BG_PAGE)
 
       # stop drawing left fade once text scrolls past
       text_width = visible_sizes[0].x if visible_sizes else 0
       first_copy_in_view = self._scroll_offset + text_width > 0
       draw_left_fade = self._scroll_state != ScrollState.STARTING and first_copy_in_view
       if draw_left_fade:
-        rl.draw_rectangle_gradient_h(int(self._rect.x), int(self._rect.y), fade_width, int(self._rect.height), rl.BLACK, rl.BLANK)
+        rl.draw_rectangle_gradient_h(int(self._rect.x), int(self._rect.y), fade_width, int(self._rect.height), Console.BG_PAGE, rl.BLANK)
 
       rl.end_scissor_mode()
 

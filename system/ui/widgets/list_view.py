@@ -10,22 +10,25 @@ from openpilot.system.ui.widgets.button import Button, ButtonStyle
 from openpilot.system.ui.widgets.toggle import Toggle, WIDTH as TOGGLE_WIDTH, HEIGHT as TOGGLE_HEIGHT
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.html_render import HtmlRenderer, ElementType
+from bluepilot.ui.lib.theme import Console, roundness as console_roundness  # Custom: Console theme
 
 ITEM_BASE_WIDTH = 600
-ITEM_BASE_HEIGHT = 170
+# Custom: Console (Citadel form rows) sizes; stock was 170 / 50 / 40 / 140, buttons 100 high, 35 pt
+ITEM_BASE_HEIGHT = 124
 ITEM_PADDING = 20
-ITEM_TEXT_FONT_SIZE = 50
-ITEM_TEXT_COLOR = rl.WHITE
-ITEM_TEXT_VALUE_COLOR = rl.Color(170, 170, 170, 255)
-ITEM_DESC_TEXT_COLOR = rl.Color(128, 128, 128, 255)
-ITEM_DESC_FONT_SIZE = 40
-ITEM_DESC_V_OFFSET = 140
+ITEM_TEXT_FONT_SIZE = 34
+ITEM_TEXT_COLOR = Console.TEXT_PRIMARY  # Custom: Console text ramp
+ITEM_TEXT_VALUE_COLOR = Console.TEXT_SECONDARY
+ITEM_DESC_TEXT_COLOR = Console.TEXT_MUTED
+ITEM_DESC_FONT_SIZE = 28
+ITEM_DESC_V_OFFSET = 104
 RIGHT_ITEM_PADDING = 20
-ICON_SIZE = 80
-BUTTON_WIDTH = 250
-BUTTON_HEIGHT = 100
-BUTTON_BORDER_RADIUS = 50
-BUTTON_FONT_SIZE = 35
+ICON_SIZE = 56
+BUTTON_WIDTH = 220
+BUTTON_HEIGHT = 72
+BUTTON_BORDER_RADIUS = 16
+BUTTON_FONT_SIZE = 28
+# Custom: end
 BUTTON_FONT_WEIGHT = FontWeight.MEDIUM
 
 TEXT_PADDING = 20
@@ -236,25 +239,26 @@ class MultipleButtonAction(ItemAction):
       is_selected = i == self.selected_button
 
       # Button colors
+      # Custom: Console segmented control - selected segment is accent-fill
       if is_selected:
-        bg_color = rl.Color(51, 171, 76, 255)  # Green
+        bg_color = Console.ACCENT_FILL
       elif is_pressed:
-        bg_color = rl.Color(74, 74, 74, 255)  # Dark gray
+        bg_color = Console.BG_HIGH
       else:
-        bg_color = rl.Color(57, 57, 57, 255)  # Gray
+        bg_color = Console.BG_RAISED
 
       if not self.enabled:
         bg_color = rl.Color(bg_color.r, bg_color.g, bg_color.b, 150)  # Dim
 
       # Draw button
-      rl.draw_rectangle_rounded(button_rect, 1.0, 20, bg_color)
+      rl.draw_rectangle_rounded(button_rect, console_roundness(button_rect, 12), 20, bg_color)
 
       # Draw text
       text = _resolve_value(_text, "")
       text_size = measure_text_cached(self._font, text, 40)
       text_x = button_x + (self.button_width - text_size.x) / 2
       text_y = button_y + (BUTTON_HEIGHT - text_size.y) / 2
-      text_color = rl.Color(228, 228, 228, 255) if self.enabled else rl.Color(150, 150, 150, 255)
+      text_color = (Console.ON_ACCENT if is_selected else Console.TEXT_PRIMARY) if self.enabled else Console.TEXT_GHOST
       rl.draw_text_ex(self._font, text, rl.Vector2(text_x, text_y), 40, 0, text_color)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
@@ -354,7 +358,7 @@ class ListItem(Widget):
     if self.title:
       # Draw icon if present
       if self.icon:
-        rl.draw_texture(self._icon_texture, int(content_x), int(self._rect.y + (ITEM_BASE_HEIGHT - self._icon_texture.height) // 2), rl.WHITE)
+        rl.draw_texture(self._icon_texture, int(content_x), int(self._rect.y + (ITEM_BASE_HEIGHT - self._icon_texture.height) // 2), Console.TEXT_MUTED)
         text_x += ICON_SIZE + ITEM_PADDING
 
       # Draw main text

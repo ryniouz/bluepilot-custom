@@ -2,11 +2,11 @@ import pyray as rl
 from enum import IntEnum
 import cereal.messaging as messaging
 from openpilot.system.ui.lib.application import gui_app
-from openpilot.selfdrive.ui.layouts.sidebar import Sidebar, SIDEBAR_WIDTH  # noqa: F401
+from openpilot.selfdrive.ui.layouts.sidebar import Sidebar, SIDEBAR_WIDTH
 from openpilot.selfdrive.ui.layouts.home import HomeLayout
 from openpilot.selfdrive.ui.layouts.settings import settings as _settings_mod
 from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout
-from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView  # noqa: F401
+from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 
 # BluePilot: START - BP sidebar, home layout, and onroad overlays
 from bluepilot.ui.widgets.sidebar import SidebarBP as Sidebar  # noqa: F811
@@ -21,7 +21,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
 
 if gui_app.sunnypilot_ui():
-  from openpilot.selfdrive.ui.sunnypilot.layouts.settings.settings import SettingsLayoutSP as SettingsLayout  # noqa: F811
+  from openpilot.selfdrive.ui.sunnypilot.layouts.settings.settings import SettingsLayoutSP as SettingsLayout
 
 
 class MainState(IntEnum):
@@ -145,3 +145,10 @@ class MainLayout(Widget):
     # BluePilot: Render debug panel overlay on top of onroad view
     if self._current_mode == MainState.ONROAD and self._debug_panel.is_panel_visible:
       self._debug_panel.render(content_rect)
+
+
+# Custom: Console redesign. The 3X uses the Console shell (standby splash, rail navigation,
+# quick-controls sheet, charging page) in place of the stock sidebar/home/settings layout.
+from bluepilot.ui.console.main_layout import ConsoleMainLayout, MainState
+MainLayout = ConsoleMainLayout  # noqa: F811
+# Custom: end

@@ -84,7 +84,7 @@
 }
 
 .tabs__content::-webkit-scrollbar-thumb:hover {
-  background: #404040;
+  background: var(--border-default);
 }
 
 @media (max-width: 768px) {

@@ -171,7 +171,9 @@ class Multilang:
       self._translations, self._plurals = load_translations(po_path)
       self._plural_selector = PLURAL_SELECTORS.get(self._language, lambda n: 0)
       cloudlog.debug(f"Loaded translations for language: {self._language}")
-    except FileNotFoundError:
+    # Custom: inside a zipapp (updater_magic) the .po path is not a real file; fall back to English
+    except (FileNotFoundError, NotADirectoryError):
+    # End Custom
       cloudlog.error(f"No translation file found for language: {self._language}, using default.")
       self._translations = {}
       self._plurals = {}

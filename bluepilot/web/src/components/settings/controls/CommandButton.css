@@ -12,15 +12,15 @@
 }
 
 .command-button-result.success {
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(var(--success-rgb), 0.1);
   color: var(--success-color);
-  border-color: rgba(76, 175, 80, 0.35);
+  border-color: rgba(var(--success-rgb), 0.35);
 }
 
 .command-button-result.error {
-  background: rgba(244, 67, 54, 0.12);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--error-color);
-  border-color: rgba(244, 67, 54, 0.35);
+  border-color: rgba(var(--danger-rgb), 0.35);
 }
 
 .command-button-device-notice {
@@ -28,7 +28,7 @@
   padding: 0.5rem 0.7rem;
   border-radius: var(--radius-md);
   background: #ffc1071a;
-  border: 1px solid rgba(255, 193, 7, 0.35);
+  border: 1px solid rgba(var(--warning-rgb), 0.35);
   color: var(--text-secondary);
   font-size: 0.7rem;
   line-height: 1.4;

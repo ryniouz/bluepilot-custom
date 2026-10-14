@@ -7,6 +7,7 @@ from openpilot.system.ui.widgets.button import Button, ButtonStyle
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.lib.application import FontWeight, gui_app
 from openpilot.system.ui.lib.multilang import tr
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class FloatInputDialogTici(Widget):
@@ -77,7 +78,7 @@ class FloatInputDialogTici(Widget):
       rect.width - 2 * margin,
       rect.height - 2 * margin
     )
-    rl.draw_rectangle_rounded(dialog_rect, 0.02, 20, rl.Color(30, 30, 30, 255))
+    rl.draw_rectangle_rounded(dialog_rect, 0.02, 20, Console.BG_PANEL)
     
     # Content area
     content_margin = 50
@@ -95,7 +96,7 @@ class FloatInputDialogTici(Widget):
       self.title,
       font_size=70,
       font_weight=FontWeight.BOLD,
-      color=rl.WHITE
+      color=Console.TEXT_PRIMARY
     )
     
     # Range hint
@@ -106,7 +107,7 @@ class FloatInputDialogTici(Widget):
         range_text,
         font_size=40,
         font_weight=FontWeight.MEDIUM,
-        color=rl.Color(150, 150, 150, 255)
+        color=Console.TEXT_MUTED
       )
     
     # Input box
@@ -120,14 +121,14 @@ class FloatInputDialogTici(Widget):
     )
     
     # Draw input box background
-    rl.draw_rectangle_rounded(input_rect, 0.02, 10, rl.Color(50, 50, 50, 255))
-    rl.draw_rectangle_rounded_lines(input_rect, 0.02, 10, 2, rl.Color(100, 100, 100, 255))
+    rl.draw_rectangle_rounded(input_rect, 0.02, 10, Console.BG_HIGH)
+    rl.draw_rectangle_rounded_lines(input_rect, 0.02, 10, 2, Console.TEXT_GHOST)
     
     # Render input box
     self._input_box.set_rect(input_rect)
-    self._input_box._render(input_rect, color=rl.Color(50, 50, 50, 255), 
-                           border_color=rl.Color(100, 100, 100, 255), 
-                           text_color=rl.WHITE, font_size=60)
+    self._input_box._render(input_rect, color=Console.BG_HIGH, 
+                           border_color=Console.TEXT_GHOST, 
+                           text_color=Console.TEXT_PRIMARY, font_size=60)
     
     # Suffix label if provided
     if self.suffix:
@@ -137,7 +138,7 @@ class FloatInputDialogTici(Widget):
         self.suffix,
         font_size=50,
         font_weight=FontWeight.MEDIUM,
-        color=rl.Color(200, 200, 200, 255)
+        color=Console.TEXT_SECONDARY
       )
     
     # Buttons

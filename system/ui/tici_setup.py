@@ -21,6 +21,7 @@ from openpilot.system.ui.widgets.button import Button, ButtonStyle, ButtonRadio
 from openpilot.system.ui.widgets.keyboard import Keyboard
 from openpilot.system.ui.widgets.label import Label
 from openpilot.system.ui.widgets.network import WifiManagerUI, WifiManager
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 NetworkType = log.DeviceState.NetworkType
 
@@ -81,7 +82,7 @@ class Setup(Widget):
     self.checkmark = gui_app.texture("icons/circled_check.png", 100, 100)
 
     self._low_voltage_title_label = Label("WARNING: Low Voltage", TITLE_FONT_SIZE, FontWeight.MEDIUM, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                                          text_color=rl.Color(255, 89, 79, 255), text_padding=20)
+                                          text_color=Console.DANGER, text_padding=20)
     self._low_voltage_body_label = Label("Power your device in a car with a harness or proceed at your own risk.", BODY_FONT_SIZE,
                                          text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
     self._low_voltage_continue_button = Button("Continue", self._low_voltage_continue_button_callback)
@@ -118,7 +119,7 @@ class Setup(Widget):
     self._custom_software_warning_continue_button.set_enabled(False)
     self._custom_software_warning_back_button = Button("Back", self._custom_software_warning_back_button_callback)
     self._custom_software_warning_title_label = Label("WARNING: Custom Software", 81, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                                                      text_color=rl.Color(255, 89, 79, 255),
+                                                      text_color=Console.DANGER,
                                                       text_padding=60)
     self._custom_software_warning_body_label = Label("Use caution when installing third-party software.\n\n"
                                                      + "⚠️ It has not been tested by comma.\n\n"
@@ -194,7 +195,7 @@ class Setup(Widget):
       self.state = SetupState.CUSTOM_SOFTWARE
 
   def render_low_voltage(self, rect: rl.Rectangle):
-    rl.draw_texture(self.warning, int(rect.x + 150), int(rect.y + 110), rl.WHITE)
+    rl.draw_texture(self.warning, int(rect.x + 150), int(rect.y + 110), Console.TEXT_PRIMARY)
 
     self._low_voltage_title_label.render(rl.Rectangle(rect.x + 150, rect.y + 110 + 150 + 100, rect.width - 500 - 150, TITLE_FONT_SIZE * FONT_SCALE))
     self._low_voltage_body_label.render(rl.Rectangle(rect.x + 150, rect.y + 110 + 150 + 150, rect.width - 500, BODY_FONT_SIZE * FONT_SCALE * 3))
@@ -212,7 +213,8 @@ class Setup(Widget):
     btn_rect = rl.Rectangle(rect.width - NEXT_BUTTON_WIDTH, 0, NEXT_BUTTON_WIDTH, rect.height)
     self._getting_started_button.render(btn_rect)
     triangle = gui_app.texture("images/button_continue_triangle.png", 54, int(btn_rect.height))
-    rl.draw_texture_v(triangle, rl.Vector2(btn_rect.x + btn_rect.width / 2 - triangle.width / 2, btn_rect.height / 2 - triangle.height / 2), rl.WHITE)
+    rl.draw_texture_v(triangle, rl.Vector2(btn_rect.x + btn_rect.width / 2 - triangle.width / 2, btn_rect.height / 2 - triangle.height / 2),
+                      Console.TEXT_PRIMARY)
 
   def check_network_connectivity(self):
     while not self.stop_network_check_thread.is_set():
@@ -243,7 +245,7 @@ class Setup(Widget):
 
     wifi_rect = rl.Rectangle(rect.x + MARGIN, rect.y + TITLE_FONT_SIZE * FONT_SCALE + MARGIN + 25, rect.width - MARGIN * 2,
                              rect.height - TITLE_FONT_SIZE * FONT_SCALE - 25 - BUTTON_HEIGHT - MARGIN * 3)
-    rl.draw_rectangle_rounded(wifi_rect, 0.05, 10, rl.Color(51, 51, 51, 255))
+    rl.draw_rectangle_rounded(wifi_rect, 0.05, 10, Console.BG_HIGH)
     wifi_content_rect = rl.Rectangle(wifi_rect.x + MARGIN, wifi_rect.y, wifi_rect.width - MARGIN * 2, wifi_rect.height)
     self.wifi_ui.render(wifi_content_rect)
 

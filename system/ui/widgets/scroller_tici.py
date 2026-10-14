@@ -1,9 +1,10 @@
 import pyray as rl
 from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 ITEM_SPACING = 40
-LINE_COLOR = rl.GRAY
+LINE_COLOR = Console.TEXT_GHOST
 LINE_PADDING = 40
 
 

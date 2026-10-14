@@ -32,7 +32,7 @@
 
 /* Default hover state */
 .btn:hover:not(:disabled) {
-  background: #3a3a3a;
+  background: var(--bg-high);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
@@ -74,12 +74,12 @@
 .btn--primary {
   background: var(--bp-accent-blue);
   color: white;
-  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.25);
 }
 
 .btn--primary:hover:not(:disabled) {
   background: var(--bp-accent-blue-hover);
-  box-shadow: 0 6px 16px rgba(33, 150, 243, 0.35);
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.35);
 }
 
 /* Secondary: Default gray for standard actions (Cancel, Close) */
@@ -90,8 +90,8 @@
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background: #3a3a3a;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--bg-high);
+  border-color: rgba(var(--ink-rgb), 0.2);
 }
 
 /* Danger: Red for destructive actions (Delete, Reset) */
@@ -101,7 +101,7 @@
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: #d32f2f;
+  background: var(--danger-fill);
 }
 
 /* Success: Green for positive actions (Confirm, Apply) */
@@ -152,7 +152,7 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(var(--ink-rgb), 0.3);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;

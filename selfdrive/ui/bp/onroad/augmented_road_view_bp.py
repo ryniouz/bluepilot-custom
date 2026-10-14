@@ -1,7 +1,9 @@
+import numpy as np
 import time
 import pyray as rl
 from cereal import log, messaging
 from openpilot.common.params import Params
+from openpilot.common.params_pyx import UnknownKeyName
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
@@ -9,34 +11,20 @@ from openpilot.selfdrive.ui.bp.onroad.blindspot_renderer import BlindspotRendere
 from openpilot.selfdrive.ui.bp.onroad.hud_renderer_bp import HudRendererBP
 from openpilot.selfdrive.ui.bp.onroad.alert_renderer_bp import AlertRendererBP
 from openpilot.selfdrive.ui.bp.onroad.model_renderer_bp import ModelRendererBP
-from openpilot.selfdrive.ui.bp.onroad.hybrid_battery_gauge import HybridBatteryGauge
-from openpilot.selfdrive.ui.bp.onroad.hybrid_battery_gauge_arched import HybridBatteryGaugeArched, BATTERY_START_ANGLE
-from openpilot.selfdrive.ui.bp.onroad.power_flow_gauge import PowerFlowGauge
-from openpilot.selfdrive.ui.bp.onroad.powerflow_gauge_arched import PowerflowGaugeArched, POWERFLOW_ANGLE_SPAN
+from openpilot.selfdrive.ui.bp.onroad.driver_monitor_bp import DriverMonitorBP
+from openpilot.selfdrive.ui.bp.onroad.road_view import CARD_W as LEAD_CARD_W, SHOW_LEAD_CARD, draw_lead_card, road_prefs
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
-from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceBallTiciBP
-from openpilot.selfdrive.ui.onroad.driver_state import BTN_SIZE
+from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
+from openpilot.selfdrive.ui.bp.onroad.console_cues import ConsoleConfidence, draw_blindspot_edge
 from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState, get_bottom_dev_ui_offset
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
+from openpilot.selfdrive.ui.ui_state import UIStatus
+from openpilot.selfdrive.ui.onroad.augmented_road_view import DEFAULT_DEVICE_CAMERA, INF_POINT, WIDE_CAM
+from bluepilot.ui.lib.theme import Console
+from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
-# BluePilot: Margin to keep confidence ball inside the colored border
-BALL_BORDER_MARGIN = UI_BORDER_SIZE // 2  # 15px
-
-# Shared container styling (matches battery/power flow gauge backgrounds)
-SHARED_BG_COLOR = rl.Color(20, 20, 20, 100)
-SHARED_BG_ROUNDNESS = 0.3
-SHARED_BG_GLOW_EXPANSION = 4
-SHARED_INNER_GAP = 10  # Pixels between battery and power flow gauges inside shared container
-SHARED_PADDING = 8     # Padding around inner content in shared container
-SHARED_BORDER_THICKNESS = 2.0  # Power flow mode-colored border thickness
-
-# Torque crown strip (thin torque bar integrated into the top of the shared container)
-TORQUE_STRIP_HEIGHT = 11   # Height of the torque strip inside shared container
-TORQUE_STRIP_GAP = 3       # Gap between strip bottom and gauge content top
-
-# Full screen reference for sidebar detection
-FULL_CONTENT_WIDTH = 2100.0
 
 
 class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
@@ -51,29 +39,27 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # BluePilot: Replace renderers with BP versions
     self.model_renderer = ModelRendererBP()
+    # Custom: Console driver-monitoring tile
+    self.driver_state_renderer = DriverMonitorBP()
     self._hud_renderer = HudRendererBP()
     self.alert_renderer = AlertRendererBP()
-    self._battery_gauge_bp = HybridBatteryGauge()
-    self._power_flow_gauge = PowerFlowGauge()
-    self._battery_gauge_arched = HybridBatteryGaugeArched()
-    self._power_flow_gauge_arched = PowerflowGaugeArched()
-    # BluePilot: Torque bar renderer (renders as crown strip inside gauge container)
+    # BluePilot: Torque bar renderer. Custom: a strip along the top of the Console dock, or the
+    # stock arc when the dock is hidden.
     self._torque_bar = TorqueBarRendererBP(scale=3.0)
-    self._power_flow_gauge_arched.set_torque_bar(self._torque_bar)
+
+    # Custom: Console EV HUD. The bottom dock (charge, power, range) replaces BluePilot's hybrid
+    # battery and power-flow gauges; a details card on the right carries the rest.
+    self._ev_hud = EvHudRenderer()
 
     # BluePilot: Add confidence ball on left side (MADS beam + enhanced coloring)
-    self._confidence_ball = ConfidenceBallTiciBP()
+    # Custom: Console confidence bar (same signal and zones as the ball)
+    self._confidence_ball = ConsoleConfidence()
     self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
     self._param_counter = 0
-    raw_style = self._bp_params.get("FordPrefHybridGaugeStyle") or b"flat"
-    self._hybrid_gauge_style = (raw_style.decode("utf-8", errors="replace").strip("\x00").lower()
-                                if isinstance(raw_style, bytes) else str(raw_style).strip().lower())
-    if self._hybrid_gauge_style not in ("flat", "arched"):
-      self._hybrid_gauge_style = "flat"
+    self._guest = self._read_guest()
 
   def update_fade_out_bottom_overlay(self, _content_rect):
     """BluePilot: Skip MICI fade overlay on TICI — causes unwanted black gradient at bottom."""
-    pass
 
   def _render(self, rect):
     """Override render to add blindspot, gauges, confidence ball on left."""
@@ -86,32 +72,25 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._param_counter += 1
     if self._param_counter >= 60:
       self._param_counter = 0
+      self._guest = self._read_guest()
       self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
-      raw_style = self._bp_params.get("FordPrefHybridGaugeStyle") or b"flat"
-      self._hybrid_gauge_style = (raw_style.decode("utf-8", errors="replace").strip("\x00").lower()
-                                  if isinstance(raw_style, bytes) else str(raw_style).strip().lower())
-      if self._hybrid_gauge_style not in ("flat", "arched"):
-        self._hybrid_gauge_style = "flat"
 
     self._switch_stream_if_needed(ui_state.sm)
     self._update_calibration()
 
-    # Create inner content area with border padding
-    self._content_rect = rl.Rectangle(
-      rect.x + UI_BORDER_SIZE,
-      rect.y + UI_BORDER_SIZE,
-      rect.width - 2 * UI_BORDER_SIZE,
-      rect.height - 2 * UI_BORDER_SIZE,
-    )
+    # Custom: Console layout preset filters optional overlays for this frame
+    preset = current_preset()
+    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL and not self._guest
+    self._hud_renderer.guest = self.alert_renderer.guest = self._guest
 
-    # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
-    ball_offset = (ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN) if self._show_confidence_ball else 0
-    ui_rect = rl.Rectangle(
-      self._content_rect.x + ball_offset,
-      self._content_rect.y,
-      self._content_rect.width - ball_offset,
-      self._content_rect.height,
-    )
+    # Custom: the camera fills the whole screen (no border frame); the UI keeps its inset
+    self._content_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
+    inset = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                         rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
+
+    # Custom: confidence lives in the driver-monitor chip, so the UI no longer shifts right for it
+    ui_rect = inset
+    self.driver_state_renderer.confidence = self._confidence_ball.level if show_ball else None
 
     bp_ui_log.scissor("AugRoadView", "begin",
                        x=int(self._content_rect.x), y=int(self._content_rect.y),
@@ -127,44 +106,46 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     CameraView._render(self, rect)
 
     # Render model (uses full content rect for camera-space overlays)
-    self.model_renderer.render(self._content_rect)
+    # Custom: no path or lead marker on a Guest Mode drive (openpilot is not driving)
+    if not self._guest:
+      self.model_renderer.render(self._content_rect)
 
     # SP fade overlay
     self.update_fade_out_bottom_overlay(self._content_rect)
 
-    # BluePilot: Render confidence ball on left side (narrow rect = ball strip only, not full width)
-    if self._show_confidence_ball:
-      ball_strip_width = ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN
-      # Semi-transparent dark backdrop so ball is visible against bright camera feed
-      rl.draw_rectangle_gradient_h(
-        int(self._content_rect.x),
-        int(self._content_rect.y),
-        int(ball_strip_width),
-        int(self._content_rect.height),
-        rl.Color(20, 20, 20, 120),  # darker at left edge
-        rl.Color(20, 20, 20, 0),    # fade to transparent at right edge
-      )
-      ball_rect = rl.Rectangle(
-        self._content_rect.x + BALL_BORDER_MARGIN,
-        self._content_rect.y,
-        ball_strip_width,
-        self._content_rect.height,
-      )
-      self._confidence_ball.render(ball_rect)
+    # Custom: a prompt or critical alert owns the bottom of the screen, so the dock steps aside
+    alert = self.alert_renderer.get_alert(ui_state.sm)
+    alert_blocks_dock = alert is not None and not (alert.status == log.SelfdriveState.AlertStatus.normal and
+                                                   alert.size != log.SelfdriveState.AlertSize.full)
+
+    # BluePilot: Update torque bar filter state (once per frame, before the dock or arc uses it)
+    self._torque_bar.update()
+
+    # Custom: Console dock and details card, drawn under the blindspot edges so the red warning
+    # is never covered
+    dock = None if alert_blocks_dock else self._ev_hud.render_dock(self._content_rect, preset, self._torque_bar)
+    self._ev_hud.render(self._content_rect, preset, bottom=dock.y if dock is not None else None)
 
     # BluePilot: Draw blindspot screen edge indicators ON TOP of confidence ball backdrop
     # so the red safety warning is never obscured
     self._draw_blindspot_screen_edges(self._content_rect, self.BLIND_SPOT_WIDTH)
 
-    # BluePilot: Render HUD, driver state before gauges and alerts
-    self._hud_renderer.set_gradient_rect(self._content_rect)
     self._hud_renderer.render(ui_rect)
 
+    # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
+    lead = None if self._guest else self.model_renderer.lead_info
+    if lead is not None and preset != LayoutPreset.MINIMAL and road_prefs.on(SHOW_LEAD_CARD):
+      details = self._ev_hud.last_rect
+      if details is not None:  # Dense: the details card owns the right edge; sit to its left
+        x, y = details.x - 24 - LEAD_CARD_W, details.y
+      else:
+        x, y = self._hud_renderer.lead_card_pos(ui_rect, LEAD_CARD_W)
+      draw_lead_card(x, y, lead, road_prefs.value, ui_state.is_metric, self.model_renderer.lead_alpha)
+
     bp_ui_log.scissor("AugRoadView", "reset (defensive)")
-    # Defensive: re-establish scissor before drawing driver state and battery. Some HUD widgets
-    # (e.g. speed limit, brake status, unified gauge) can leave raylib state in a bad way on device,
-    # causing the bottom-left widgets to be clipped or not drawn. Resetting scissor to content_rect
-    # ensures DM and battery always render in the correct clip region.
+    # Defensive: re-establish scissor before drawing driver state. Some HUD widgets (e.g. speed
+    # limit, brake status) can leave raylib state in a bad way on device, causing the bottom-left
+    # widgets to be clipped or not drawn.
     rl.end_scissor_mode()
     rl.begin_scissor_mode(
       int(self._content_rect.x),
@@ -172,287 +153,116 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       int(self._content_rect.width),
       int(self._content_rect.height)
     )
-    self.driver_state_renderer.render(ui_rect)
+    # Custom: a prompt or critical card at the bottom covers the tile's corner; the card shows the ask
+    if not alert_blocks_dock and not self._guest:
+      self.driver_state_renderer.render(ui_rect)
 
-    # BluePilot: Update torque bar filter state (once per frame, before _render_gauges uses it)
-    self._torque_bar.update()
-
-    # BluePilot: Render gauges + torque crown strip inside shared container
-    gauge_height_offset, hybrid_active = self._render_gauges(self._content_rect, ball_offset)
-    bp_ui_log.state("AugRoadView", "hybrid_active", hybrid_active)
-    bp_ui_log.state("AugRoadView", "gauge_height_offset", round(gauge_height_offset))
-
-    # BluePilot: When no hybrid gauge is active, fall back to the stock arc torque bar
-    if not hybrid_active:
+    # BluePilot: stock arc torque bar when the dock (which carries the strip) is hidden.
+    # Custom: the Minimal preset hides it.
+    if dock is None and preset != LayoutPreset.MINIMAL and not self._guest:
       torque_rect = ui_rect
       if ui_state.developer_ui in (DeveloperUiState.BOTTOM, DeveloperUiState.BOTH):
         torque_rect = rl.Rectangle(ui_rect.x, ui_rect.y, ui_rect.width, ui_rect.height - get_bottom_dev_ui_offset())
-      self._torque_bar.render(torque_rect, gauge_height_offset=gauge_height_offset)
+      self._torque_bar.render(torque_rect, gauge_height_offset=0.0)
 
     # Alerts last so they are never covered by gauges or other overlays.
     # BluePilot: Full-screen alerts (e.g. reverse gear) must use content_rect so they cover
     # the confidence ball strip; otherwise the camera shows through where the ball was.
-    alert = self.alert_renderer.get_alert(ui_state.sm)
-    alert_rect = (
-      self._content_rect
-      if (alert and alert.size == log.SelfdriveState.AlertSize.full and self._show_confidence_ball)
-      else ui_rect
-    )
+    alert_rect = self._content_rect if (alert and alert.size == log.SelfdriveState.AlertSize.full) else ui_rect
+    self.alert_renderer.notify_band = self._hud_renderer.notify_band(ui_rect)
+    self.alert_renderer.notify_top = self._hud_renderer.notify_top(ui_rect)
     self.alert_renderer.render(alert_rect)
 
     bp_ui_log.scissor("AugRoadView", "end")
     rl.end_scissor_mode()
 
-    # BluePilot: Conditionally draw border
-    if not self._bp_params.get_bool("BPHideOnroadBorder"):
-      self._draw_border(rect)
+    # Custom: no border or edge glow (Lucas 2026-10-14); the speed card's status band carries the
+    # engagement state. Quick controls read where the dock is so a swipe up from it opens them.
+    ui_state.qc_dock = dock
+    ui_state.qc_blocked = alert_blocks_dock or self._guest
+    ui_state.qc_bottom_inset = 0.0  # px a theme's bottom cluster reserves above the screen edge
 
     # Publish uiDebug
     msg = messaging.new_message('uiDebug')
     msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
     self._pm.send('uiDebug', msg)
 
-  def _get_dm_center_y(self, content_rect: rl.Rectangle) -> float:
-    """Get the driver monitor face icon's vertical center Y coordinate.
+  def _draw_blindspot_screen_edges(self, rect: rl.Rectangle, blind_spot_width: int = 250):
+    """Custom: Console blind-spot edges, squared danger bars instead of a red gradient.
+    Same toggle (ShowBlindspotOverlay) and fade as BluePilot's."""
+    try:
+      if not self._blindspot_params.get_bool("ShowBlindspotOverlay"):
+        return
+    except UnknownKeyName:
+      return
+    sm = ui_state.sm
+    if not sm.valid['carState']:
+      return
+    cs = sm['carState']
+    self._blindspot_left_alpha_filter.update(1.0 if cs.leftBlindspot else 0.0)
+    self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
+    draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x,
+                        cs.leftBlindspot and cs.leftBlinker, cs.rightBlindspot and cs.rightBlinker)
 
-    This matches the positioning in DriverStateRendererSP._pre_calculate_drawing_elements():
-      position_y = rect.y + height - (UI_BORDER_SIZE + BTN_SIZE // 2) - dev_ui_offset
-    """
-    dev_ui_offset = get_bottom_dev_ui_offset()
-    return content_rect.y + content_rect.height - (UI_BORDER_SIZE + BTN_SIZE // 2) - dev_ui_offset
+  def _read_guest(self) -> bool:
+    """Guest Mode drive: BPGuestModeActive is set by the Lightning control stream for the whole
+    drive (card passive, panda noOutput, factory ACC and lane keeping). False on builds that do
+    not have the key yet."""
+    try:
+      return self._bp_params.get_bool("BPGuestModeActive")
+    except UnknownKeyName:
+      return False
 
-  def _render_gauges(self, content_rect: rl.Rectangle, ball_offset: float) -> tuple[float, bool]:
-    """Render power flow, battery gauges, and torque strip, vertically centered with the driver monitor.
+  def _calc_frame_matrix(self, rect: rl.Rectangle) -> np.ndarray:
+    """Custom: stock framing, but the zoom never drops below what covers the whole content rect,
+    so the full-screen camera has no bars at the edges (the road camera's 1.1x falls a few
+    pixels short of the panel's width otherwise)."""
+    cache_key = (ui_state.sm.recv_frame['liveCalibration'], self._content_rect.width, self._content_rect.height, self.stream_type)
+    if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
+      return self._cached_matrix
 
-    The torque strip ("crown strip") is a thin horizontal torque bar rendered at the top
-    of the shared container when a hybrid gauge (battery or power flow) is active.
-    When no hybrid gauge is active, the strip is not rendered — the stock arc torque bar
-    is used instead (handled by the caller).
+    device_camera = self.device_camera or DEFAULT_DEVICE_CAMERA
+    is_wide_camera = self.stream_type == WIDE_CAM
+    intrinsic = device_camera.ecam.intrinsics if is_wide_camera else device_camera.fcam.intrinsics
+    calibration = self.view_from_wide_calib if is_wide_camera else self.view_from_calib
 
-    When FordPrefHybridGaugeStyle is "arched" and powerflow is ON: use arched powerflow + arched battery.
-    When powerflow is OFF: always use flat battery (no arched battery solo).
-    When style is "flat": use flat battery and/or flat powerflow.
+    x, y = self._content_rect.x, self._content_rect.y
+    w, h = self._content_rect.width, self._content_rect.height
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+    margin = 5
+    zoom = max(2.0 if is_wide_camera else 1.1, (w / 2 + margin + 1) / cx, (h / 2 + margin + 1) / cy)
 
-    Returns:
-        (gauge_height_offset, hybrid_active): gauge_height_offset is pixels from bottom of
-            content_rect to top of gauge area (0 if nothing visible). hybrid_active is True
-            when at least one hybrid gauge was rendered (strip was used for torque).
-    """
-    # Arched style + powerflow on: use arched layout. Powerflow off → flat battery only.
-    if getattr(self, "_hybrid_gauge_style", "flat") == "arched":
-      self._power_flow_gauge_arched._update_state()
-      if self._power_flow_gauge_arched._should_render():
-        try:
-          gauge_size = int(self._bp_params.get("FordPrefHybridDriveGaugeSize", return_default=True))
-        except (TypeError, ValueError):
-          gauge_size = 2
-        gauge_size = min(max(gauge_size, 1), 2)  # 1 = small, 2 = large
-        arched_scale = 0.75 if gauge_size == 1 else 1.0
-        return self._render_gauges_arched(content_rect, ball_offset, scale=arched_scale)
-      # Powerflow off: fall through to flat path (flat battery)
-
-    left_offset = content_rect.x + ball_offset
-    sidebar_visible = content_rect.width < (FULL_CONTENT_WIDTH * 0.9)
-    content_bottom = content_rect.y + content_rect.height
-
-    # Driver monitor center Y — container will be vertically centered to this
-    dm_center_y = self._get_dm_center_y(content_rect)
-
-    # Check visibility of each element
-    battery_rect = self._battery_gauge_bp.get_bounding_rect(content_rect, left_offset)
-    pf_visible = self._power_flow_gauge.should_render()
-    hybrid_active = battery_rect is not None or pf_visible
-    torque_strip_visible = ui_state.torque_bar and hybrid_active
-
-    # Strip adds height to the container when visible
-    strip_allocation = (TORQUE_STRIP_HEIGHT + TORQUE_STRIP_GAP) if torque_strip_visible else 0
-
-    # Track the top of the gauge area
-    gauge_top = content_bottom  # default: nothing visible, no offset
-
-    if battery_rect is not None and pf_visible:
-      # Both gauges visible: horizontally center the combined container
-      pf_rect = self._power_flow_gauge.get_gauge_rect(
-        content_rect, sidebar_visible, self._show_confidence_ball,
-      )
-
-      total_inner_width = battery_rect.width + SHARED_INNER_GAP + pf_rect.width
-      combined_left = content_rect.x + (content_rect.width - total_inner_width) / 2
-
-      # Gauge content height (without strip)
-      gauge_content_height = max(battery_rect.height, pf_rect.height)
-      container_inner_height = gauge_content_height + strip_allocation
-
-      # Vertically center the entire container with driver monitor
-      container_top = dm_center_y - container_inner_height / 2
-
-      # Strip at top, gauges below
-      strip_top = container_top
-      gauge_content_top = container_top + strip_allocation
-
-      pf_y = gauge_content_top
-      pf_x = combined_left + battery_rect.width + SHARED_INNER_GAP
-      battery_y = gauge_content_top + (gauge_content_height - battery_rect.height) / 2
-
-      # Shared container rect with padding
-      shared_rect = rl.Rectangle(
-        combined_left - SHARED_PADDING,
-        container_top - SHARED_PADDING,
-        total_inner_width + SHARED_PADDING * 2,
-        container_inner_height + SHARED_PADDING * 2,
-      )
-
-      # Draw shared background + power flow mode-colored border
-      self._draw_shared_background(shared_rect)
-      border_color = self._power_flow_gauge.get_border_color()
-      rl.draw_rectangle_rounded_lines_ex(
-        shared_rect, SHARED_BG_ROUNDNESS, 10, SHARED_BORDER_THICKNESS, border_color,
-      )
-
-      # Torque strip at the top of the inner content
-      if torque_strip_visible:
-        strip_rect = rl.Rectangle(combined_left, strip_top, total_inner_width, TORQUE_STRIP_HEIGHT)
-        self._torque_bar.render_strip(strip_rect)
-
-      # Battery at centered position
-      battery_x_offset = combined_left - battery_rect.x
-      battery_y_offset = battery_y - battery_rect.y
-      self._battery_gauge_bp.render_at(content_rect, left_offset, draw_background=False,
-                                       x_offset=battery_x_offset, y_offset=battery_y_offset)
-
-      # Power flow gauge
-      adjusted_pf_rect = rl.Rectangle(pf_x, pf_y, pf_rect.width, pf_rect.height)
-      self._power_flow_gauge.render_at(adjusted_pf_rect, draw_background=False, draw_border=False)
-
-      gauge_top = shared_rect.y
-
-    elif pf_visible:
-      # Only power flow visible: shared container with optional strip
-      pf_rect = self._power_flow_gauge.get_gauge_rect(
-        content_rect, sidebar_visible, self._show_confidence_ball,
-      )
-
-      total_height = pf_rect.height + strip_allocation
-      container_top = dm_center_y - total_height / 2
-
-      strip_top = container_top
-      pf_y = container_top + strip_allocation
-
-      # Shared container around power flow + optional strip
-      shared_rect = rl.Rectangle(
-        pf_rect.x - SHARED_PADDING,
-        container_top - SHARED_PADDING,
-        pf_rect.width + SHARED_PADDING * 2,
-        total_height + SHARED_PADDING * 2,
-      )
-
-      self._draw_shared_background(shared_rect)
-      border_color = self._power_flow_gauge.get_border_color()
-      rl.draw_rectangle_rounded_lines_ex(
-        shared_rect, SHARED_BG_ROUNDNESS, 10, SHARED_BORDER_THICKNESS, border_color,
-      )
-
-      if torque_strip_visible:
-        strip_rect = rl.Rectangle(pf_rect.x, strip_top, pf_rect.width, TORQUE_STRIP_HEIGHT)
-        self._torque_bar.render_strip(strip_rect)
-
-      centered_pf_rect = rl.Rectangle(pf_rect.x, pf_y, pf_rect.width, pf_rect.height)
-      self._power_flow_gauge.render_at(centered_pf_rect, draw_background=False, draw_border=False)
-      gauge_top = shared_rect.y
-
-    elif battery_rect is not None:
-      # Only battery visible
-      if torque_strip_visible:
-        # Wrap battery + strip in a shared container
-        total_height = battery_rect.height + strip_allocation
-        container_top = dm_center_y - total_height / 2
-
-        strip_top = container_top
-        battery_content_top = container_top + strip_allocation
-
-        shared_rect = rl.Rectangle(
-          battery_rect.x - SHARED_PADDING,
-          container_top - SHARED_PADDING,
-          battery_rect.width + SHARED_PADDING * 2,
-          total_height + SHARED_PADDING * 2,
-        )
-        self._draw_shared_background(shared_rect)
-        rl.draw_rectangle_rounded_lines_ex(
-          shared_rect, SHARED_BG_ROUNDNESS, 10, SHARED_BORDER_THICKNESS,
-          rl.Color(120, 120, 120, 100),
-        )
-
-        strip_rect = rl.Rectangle(battery_rect.x, strip_top, battery_rect.width, TORQUE_STRIP_HEIGHT)
-        self._torque_bar.render_strip(strip_rect)
-
-        y_shift = battery_content_top - battery_rect.y
-        self._battery_gauge_bp.render_at(content_rect, left_offset, draw_background=False,
-                                         x_offset=0.0, y_offset=y_shift)
-        gauge_top = shared_rect.y
+    calib_transform = intrinsic @ calibration
+    kep = calib_transform @ INF_POINT
+    max_x_offset = cx * zoom - w / 2 - margin
+    max_y_offset = cy * zoom - h / 2 - margin
+    try:
+      if abs(kep[2]) > 1e-6:
+        x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
+        y_offset = np.clip((kep[1] / kep[2] - cy) * zoom, -max_y_offset, max_y_offset)
       else:
-        # Battery only, no strip — original behavior
-        battery_center_y = battery_rect.y + battery_rect.height / 2
-        y_shift = dm_center_y - battery_center_y
-        self._battery_gauge_bp.render(content_rect, left_offset, y_offset=y_shift)
+        x_offset, y_offset = 0, 0
+    except (ZeroDivisionError, OverflowError):
+      x_offset, y_offset = 0, 0
 
-    # Return offset and whether hybrid gauges were active
-    return max(0.0, content_bottom - gauge_top), hybrid_active
+    self._matrix_cache_key = cache_key
+    self._cached_matrix = np.array([
+      [zoom * 2 * cx / w, 0, -x_offset / w * 2],
+      [0, zoom * 2 * cy / h, -y_offset / h * 2],
+      [0, 0, 1.0]
+    ])
+    video_transform = np.array([
+      [zoom, 0.0, (w / 2 + x - x_offset) - (cx * zoom)],
+      [0.0, zoom, (h / 2 + y - y_offset) - (cy * zoom)],
+      [0.0, 0.0, 1.0]
+    ])
+    self.model_renderer.set_transform(video_transform @ calib_transform)
+    return self._cached_matrix
 
-  # Arched gauge layout height (approx. arch + text + battery area) for torque bar offset
-  _ARCHED_GAUGE_HEIGHT_OFFSET = 220.0
-
-  def _render_gauges_arched(self, content_rect: rl.Rectangle, ball_offset: float, scale: float = 1.0) -> tuple[float, bool]:
-    """Render arched-style powerflow and battery gauges (FordPrefHybridGaugeStyle = arched).
-    scale: 0.75 for small (gauge size 1), 1.0 for large (gauge size 2).
-    When both are visible, the steering strip spans battery + powerflow with center at screen middle.
-    """
-    left_offset = int(content_rect.x + ball_offset)
-    self._battery_gauge_arched.set_scale(scale)
-    self._power_flow_gauge_arched.set_scale(scale)
-    self._battery_gauge_arched._update_state()
-    self._power_flow_gauge_arched._update_state()
-    battery_visible = self._battery_gauge_arched._should_render()
-    pf_visible = self._power_flow_gauge_arched._should_render()
-    hybrid_active = battery_visible or pf_visible
-
-    strip_drawn_by_view = False
-    if battery_visible and pf_visible and ui_state.torque_bar and self._power_flow_gauge_arched._torque_bar is not None:
-      geo = self._power_flow_gauge_arched.get_arch_geometry(content_rect)
-      # Center fill one powerflow tick left so zero aligns with visual center of battery+powerflow
-      fill_center = geo["top_angle"] - POWERFLOW_ANGLE_SPAN * 0.10
-      self._torque_bar.render_strip_arched(
-        content_rect,
-        geo["cx"], geo["cy"], geo["top_angle"],
-        BATTERY_START_ANGLE,
-        geo["powerflow_end_angle"],
-        geo["outer_radius"],
-        fill_center_angle=fill_center,
-        scale=scale,
-      )
-      strip_drawn_by_view = True
-
-    if battery_visible:
-      self._battery_gauge_arched.set_powerflow_visible(pf_visible)
-      self._battery_gauge_arched.render(content_rect, left_offset=left_offset)
-    if pf_visible:
-      self._power_flow_gauge_arched.render(
-        content_rect,
-        strip_drawn_by_view=strip_drawn_by_view,
-        battery_visible=battery_visible,
-      )
-
-    offset = self._ARCHED_GAUGE_HEIGHT_OFFSET * scale if hybrid_active else 0.0
-    return offset, hybrid_active
-
-  def _draw_shared_background(self, rect: rl.Rectangle):
-    """Draw shared background container (glow + fill). Border drawn separately."""
-    glow_exp = SHARED_BG_GLOW_EXPANSION
-    glow_rect = rl.Rectangle(
-      rect.x - glow_exp, rect.y - glow_exp,
-      rect.width + glow_exp * 2, rect.height + glow_exp * 2,
-    )
-    rl.draw_rectangle_rounded(
-      glow_rect, SHARED_BG_ROUNDNESS, 10,
-      rl.Color(20, 20, 20, int(SHARED_BG_COLOR.a * 0.3)),
-    )
-    rl.draw_rectangle_rounded(rect, SHARED_BG_ROUNDNESS, 10, SHARED_BG_COLOR)
+  def _draw_border(self, rect: rl.Rectangle):
+    """Console: page-ground outer frame, status-coloured inner frame."""
+    rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, Console.BG_PAGE)
+    border_color = BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                               rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
+    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, UI_BORDER_SIZE, border_color)

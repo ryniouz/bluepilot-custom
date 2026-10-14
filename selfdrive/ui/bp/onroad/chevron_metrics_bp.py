@@ -6,6 +6,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.sunnypilot.onroad.chevron_metrics import ChevronMetrics, ChevronOptions
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness, with_alpha
 
 # BluePilot: Inversion thresholds for radar overlay (close-proximity mode)
 # When lead is closer than INVERT_UNDER_M, overlay moves to top with chevron flipped
@@ -17,10 +18,11 @@ NORMAL_OVER_M = 125.0 * 0.3048    # 125 feet = 38.10 m - revert to bottom
 INVERTED_TOP_OFFSET = 350
 
 # BluePilot: Border colors for radar vs vision leads
-LEAD_RADAR_GLOW = rl.Color(0, 134, 233, 255)
-RADAR_BORDER_COLOR_BASE = rl.Color(0, 100, 200, 255)   # Blue for radar
-LEAD_VISION_GLOW = rl.Color(218, 202, 37, 255)
-VISION_BORDER_COLOR_BASE = rl.Color(201, 34, 49, 255)   # Red for vision
+# Custom: Console - radar = info, vision = warning; chevron outlined in page ground
+LEAD_RADAR_GLOW = Console.BG_PAGE
+RADAR_BORDER_COLOR_BASE = Onroad.LEAD_RADAR
+LEAD_VISION_GLOW = Console.BG_PAGE
+VISION_BORDER_COLOR_BASE = Onroad.LEAD_VISION
 
 class ChevronMetricsBP(ChevronMetrics):
   """BluePilot ChevronMetrics with horizontal boxed layout and radar/vision colored borders."""
@@ -97,8 +99,8 @@ class ChevronMetricsBP(ChevronMetrics):
 
     margin = 20
     alpha = int(255 * self._lead_status_alpha)
-    text_color = rl.Color(255, 255, 255, alpha)
-    shadow_color = rl.Color(0, 0, 0, int(200 * self._lead_status_alpha))
+    text_color = with_alpha(Console.TEXT_PRIMARY, alpha)
+    shadow_color = with_alpha(Console.BG_PAGE, int(160 * self._lead_status_alpha))
 
     if self.ford_overlay_enabled and len(text_lines) == 3:
       # BluePilot: Horizontal boxed layout with colored borders, scaled by overlay size
@@ -106,7 +108,8 @@ class ChevronMetricsBP(ChevronMetrics):
       font_size = int(60 * scale)
       padding = int(12 * scale)
       box_spacing = int(15 * scale)
-      box_color = rl.Color(40, 40, 40, int(220 * self._lead_status_alpha))
+      box_color = with_alpha(Console.BG_PANEL, int(225 * self._lead_status_alpha))
+      outline_color = with_alpha(Console.BORDER_DEFAULT, alpha)
 
       chevron_x = lead_vehicle.chevron[1][0]
       chevron_y = lead_vehicle.chevron[1][1]
@@ -161,13 +164,15 @@ class ChevronMetricsBP(ChevronMetrics):
       for line, text_size in zip(text_lines, text_sizes):
         box_width = text_size.x + (padding * 2)
 
-        # Dark grey box
+        # Console panel with hairline; the status colour lives in a squared bar along the top
         box_rect = rl.Rectangle(int(current_x), int(y), box_width, box_height)
         box_rects.append(box_rect)
-        rl.draw_rectangle_rounded(box_rect, 0.2, 10, box_color)
-
-        # Colored border (drawn on same rect so there's no gap)
-        rl.draw_rectangle_rounded_lines_ex(box_rect, 0.2, 10, border_thickness, border_color)
+        box_round = roundness(box_rect, Radius.MD * scale)
+        rl.draw_rectangle_rounded(box_rect, box_round, 10, box_color)
+        rl.draw_rectangle_rounded_lines_ex(box_rect, box_round, 10, 2, outline_color)
+        bar_rect = rl.Rectangle(box_rect.x + padding, box_rect.y + max(3, int(5 * scale)),
+                                box_rect.width - 2 * padding, max(3, int(6 * scale)))
+        rl.draw_rectangle_rounded(bar_rect, roundness(bar_rect, Radius.XS), 4, border_color)
 
         # Text centered in box
         text_x = int(current_x + padding)
