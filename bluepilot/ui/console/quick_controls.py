@@ -270,8 +270,9 @@ class QuickControls:
     self._hits.append((c, lambda: setattr(self, "_page", "road")))
 
   def _render_road_page(self, body: rl.Rectangle):
-    """What the road view shows: a 4 x 2 grid of switches."""
-    cols, rows = 4, 2
+    """What the road view shows: a grid of switches, two rows."""
+    rows = 2
+    cols = (len(ROAD_OPTIONS) + rows - 1) // rows
     w = (body.width - CARD_GAP * (cols - 1)) / cols
     h = (body.height - CARD_GAP * (rows - 1)) / rows
     for i, (bit, label) in enumerate(ROAD_OPTIONS):

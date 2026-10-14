@@ -120,13 +120,18 @@ SCENES.update({
   "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
   "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band",
   "drive_off": "Disengaged: neutral state band",
+  "drive_lead_bracket": "Lead speed beside the car (Speed at car on, lead card off), bracket marker",
+  "drive_lead_floor": "Lead speed beside the car, floor-pad marker candidate",
+  "drive_lead_corners": "Lead speed beside the car, corner-frame marker candidate",
+  "drive_lead_chevron": "Lead speed beside the car, roof-chevron marker candidate",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                    "drive_guest", "drive_qc_handle", "drive_qc_drag", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
+                    "drive_lead_corners", "drive_lead_chevron", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -906,7 +911,8 @@ def scene_params(name: str) -> dict:
 # --- Stream B (driving screen) scene setup ------------------------------------------------
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                "drive_guest", "drive_qc_handle", "drive_qc_drag")
+                "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
+                "drive_lead_corners", "drive_lead_chevron")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -923,6 +929,8 @@ def drive_scene_params(name: str) -> dict:
     p.update({"StandstillTimer": True})
   if name == "drive_lead":
     p.update({"BPRoadView": 0x17F})  # every row on
+  if name.startswith("drive_lead_"):
+    p.update({"BPRoadView": 0xF7})  # default with the speed tag on and the lead card off
   return p
 
 
@@ -945,6 +953,10 @@ def setup_drive_scene(name: str, d: dict):
     d.update(v_ego=0.0, lead_d=12.0)
     _inject_popup()
   elif name == "drive_lead":
+    d.update(lead_d=24.0, lead_v_rel=-4.2)
+  elif name.startswith("drive_lead_"):
+    from openpilot.selfdrive.ui.bp.onroad import road_view
+    road_view.LEAD_STYLE = name.split("_")[-1]
     d.update(lead_d=24.0, lead_v_rel=-4.2)
   elif name == "drive_steer_only":
     d.update(enabled=False, state="disabled", mads=(True, True))
