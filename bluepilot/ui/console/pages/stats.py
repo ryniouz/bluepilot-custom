@@ -167,16 +167,22 @@ class StatsPage(Widget):
   def _draw_graph(self, r: rl.Rectangle, h):
     inner = K.inset(r, PAD, 24)
     # Controls: Live on the left (a button when panned back), window buttons on the right
-    self._seg_rects = K.segmented(inner.x + inner.width, inner.y + 40, [lab for _, lab in WINDOWS], self.window_i)
+    labels = [lab for _, lab in WINDOWS]
+    live_w = D.text_w(tr("Live"), CAP + 2, semi=True) + 80
+    if sum(D.text_w(lab, CAP, semi=True) + 56 for lab in labels) + 12 > inner.width - live_w:  # narrow (UI size Large)
+      labels = [lab.replace(" min", "m").replace(" s", "s").replace(" h", "h") for lab in labels]
+    self._seg_rects = K.segmented(inner.x + inner.width, inner.y + 40, labels, self.window_i)
+    room = (self._seg_rects[0].x - 6 - inner.x) if self._seg_rects else inner.width
     self._live_rect = None
     if self.end_offset > 0.5:
-      label = tr("Live")
+      label = tr("Live") if room >= live_w else "»"
       w = D.text_w(label, CAP + 2, semi=True) + 56
       self._live_rect = rl.Rectangle(inner.x, inner.y, w, 80)
       D.button(self._live_rect, label, primary=True, size=CAP + 2)
     else:
       D.dot(inner.x + 8, inner.y + 40, 8, Console.SUCCESS)
-      D.text(tr("Live"), inner.x + 28, inner.y + 40 - CAP / 2 - 2, CAP, Console.TEXT_SECONDARY, semi=True)
+      if room >= live_w:
+        D.text(tr("Live"), inner.x + 28, inner.y + 40 - CAP / 2 - 2, CAP, Console.TEXT_SECONDARY, semi=True)
 
     plot = rl.Rectangle(inner.x, inner.y + 80 + 24, inner.width, inner.height - 80 - 24 - CAP - 16)
     window = WINDOWS[self.window_i][0]
@@ -187,14 +193,17 @@ class StatsPage(Widget):
                     Console.TEXT_MUTED)
       return
 
-    # time axis
+    # time axis (every other label when they would touch)
+    step = (plot.width - GUTTER) / 4
+    every = 1 if step > 1.5 * D.text_w("-10 min", CAP) + 32 else 2
     for i in range(5):
       x = plot.x + GUTTER + (plot.width - GUTTER) * i / 4
       ago = self.end_offset + window * (1 - i / 4)
       lab = tr("Now") if ago < 0.5 else _ago(ago)
       w = D.text_w(lab, CAP)
       lx = x if i == 0 else (x - w if i == 4 else x - w / 2)
-      D.text(lab, lx, plot.y + plot.height + 12, CAP, Console.TEXT_MUTED)
+      if i % every == 0:
+        D.text(lab, lx, plot.y + plot.height + 12, CAP, Console.TEXT_MUTED)
       if 0 < i < 4:
         K.vline(x, plot.y, plot.y + plot.height, Console.BORDER_SUBTLE)
 
