@@ -58,7 +58,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IsDriverViewEnabled", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsEngaged", {PERSISTENT, BOOL}},
     {"IsLdwEnabled", {PERSISTENT | BACKUP, BOOL}},
-    {"IsMetric", {PERSISTENT | BACKUP, BOOL}},
+    {"IsMetric", {PERSISTENT | BACKUP, BOOL, "1"}},  // Custom: Canadian units (km, km/h) by default
     {"IsOffroad", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsOnroad", {PERSISTENT, BOOL}},
     {"IsRhdDetected", {PERSISTENT, BOOL}},
@@ -328,6 +328,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
     {"BPLastEvSnapshot", {PERSISTENT, JSON}},
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
     // Custom: end
 
     // WiFi Management

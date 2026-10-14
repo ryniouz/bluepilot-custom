@@ -39,6 +39,19 @@ else:
   from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout
 
 
+def _apply_canadian_units():
+  """Lucas drives in Canada: switch to km and km/h once; the Units toggle still works afterwards."""
+  from openpilot.common.params import Params
+  params = Params()
+  try:
+    if not params.get_bool("BPCanadianUnitsSet"):
+      params.put_bool("IsMetric", True)
+      params.put_bool("BPCanadianUnitsSet", True)
+      ui_state.is_metric = True
+  except Exception:
+    pass
+
+
 class MainState(IntEnum):
   STANDBY = 0
   SHELL = 1
@@ -54,6 +67,7 @@ class ConsoleMainLayout(Widget):
     super().__init__()
     self._pm = messaging.PubMaster(['bookmarkButton'])
 
+    _apply_canadian_units()
     self._settings = SettingsLayout()
     self._home = ConsoleHome()
     self._shell = ConsoleShell(self._settings, self._home, AlertsPage())

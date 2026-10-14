@@ -60,9 +60,8 @@ def truck_snapshot():
 
 
 def temp(c: float) -> tuple[str, str]:
-  if ui_state.is_metric:
-    return f"{c:.0f}", "°C"
-  return f"{c * 9 / 5 + 32:.0f}", "°F"
+  """Temperatures are always Celsius (Canadian units; tire pressure stays in psi)."""
+  return f"{c:.0f}", "°C"
 
 
 def active_alerts(params: Params) -> list[tuple[str, int]]:
