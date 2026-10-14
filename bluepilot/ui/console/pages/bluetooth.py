@@ -4,13 +4,15 @@ Console Bluetooth page (Connect > Bluetooth).
   Left    the adapter: present or not, on/off, what is paired
   Right   three tabs
             Devices      search nearby, pair, forget
-            OBD scanner  a four-step wizard: plug in, choose the dongle, pair, read data
+            OBD scanner  a four-step wizard: plug in, connect (Wi-Fi, USB or Bluetooth), test, live data
             Phone        the planned Android link (pair now; live data later)
 
+AGNOS is built with CONFIG_BT=n, so on a stock comma there is no adapter and the page says so. The OBD
+wizard therefore leads with Wi-Fi and USB ELM327 adapters, which PR #2's bp_obdd reads (obdStateBP).
+
 Built:     adapter check, search, pair and forget through bluetoothctl (when the OS has an adapter),
-           saving the chosen OBD dongle (BPObdDongle) and phone (BPPhoneLink).
-Not built: reading OBD data from the dongle and any data link to the phone. Those steps carry an
-           "In development" tag and do nothing.
+           OBD setup over Wi-Fi/USB (BPObdTransport, BPObdAddress, BPObdEnabled) with live link status and values.
+Not built: Bluetooth in AGNOS and any data link to the phone. Those carry an "In development" tag.
 """
 
 from __future__ import annotations
@@ -20,17 +22,29 @@ from collections.abc import Callable
 import pyray as rl
 
 from openpilot.common.params import Params
+from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.widgets import Widget
+from openpilot.system.ui.widgets import DialogResult, Widget
+from openpilot.system.ui.widgets.keyboard import Keyboard
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.lib.bluetooth import BtDevice, bluetooth, save, saved
+from bluepilot.ui.lib.obd_link import DEFAULT_WIFI, LINK_TEXT, fmt_value, obd_link
 from bluepilot.ui.lib.theme import Console, roundness, with_alpha
 
 GAP = 32
 DEV_ROW = 104
 TABS = ["Devices", "OBD scanner", "Phone"]
-OBD_STEPS = ["Plug in", "Choose", "Pair", "Read data"]
+OBD_STEPS = ["Plug in", "Connect", "Test", "Live data"]
+
+
+TRANSPORT_IDX = {"wifi": 0, "usb": 1, "bluetooth": 2}
+
+
+def _text(v) -> str:
+  if isinstance(v, bytes):
+    v = v.decode(errors="ignore")
+  return str(v or "").strip()
 
 
 def dev_tag(x: float, y: float, label: str, color: rl.Color) -> float:
@@ -51,12 +65,18 @@ class BluetoothPage(Widget):
     self._params = Params()
     self._tab = 0
     self._obd_step = 0
+    self._obd_kind = 0
+    self._addr_draft = ""
+    self._keyboard: Keyboard | None = None
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
 
   def show_event(self):
     super().show_event()
     bluetooth().refresh()
-    self._obd_step = 3 if saved(self._params, "BPObdDongle") else 0
+    link = obd_link()
+    on = link.available() and bool(link.get("BPObdEnabled", False))
+    self._obd_step = 2 if on else 0
+    self._obd_kind = max(0, TRANSPORT_IDX.get(_text(link.get("BPObdTransport", "wifi")), 0))
 
   # -- render -------------------------------------------------------------------------------
 
@@ -98,7 +118,13 @@ class BluetoothPage(Widget):
     rows = [(tr("Adapter"), tr("Found") if st.adapter else tr("Not found")),
             (tr("Paired devices"), str(sum(1 for d in st.devices if d.paired)))]
     obd, phone = saved(self._params, "BPObdDongle"), saved(self._params, "BPPhoneLink")
-    rows.append((tr("OBD dongle"), obd["name"] if obd else tr("None")))
+    link = obd_link()
+    if link.available() and link.get("BPObdEnabled", False):
+      kind = _text(link.get("BPObdTransport", "wifi"))
+      obd_txt = {"wifi": tr("Wi-Fi adapter"), "usb": tr("USB adapter")}.get(kind, obd["name"] if obd else kind)
+    else:
+      obd_txt = tr("None")
+    rows.append((tr("OBD adapter"), obd_txt))
     rows.append((tr("Phone"), phone["name"] if phone else tr("None")))
     for label, value in rows:
       K.hline(x, right, y)
@@ -178,46 +204,114 @@ class BluetoothPage(Widget):
     x, right = r.x + p, r.x + r.width - p
     D.text(tr("OBD scanner"), x, r.y + p, D.H2, semi=True)
     y = self._stepper(r, r.y + p + 76, OBD_STEPS, self._obd_step)
-    dongle = saved(self._params, "BPObdDongle")
-    if self._obd_step == 0:
-      for i, ln in enumerate(D.wrap(tr("Plug the OBD dongle into the diagnostic port under the dash, left of the steering column. Its light comes on."),
-                                    D.BODY, r.width - 2 * p, 4)):
-        D.text(ln, x, y + i * 50, D.BODY, Console.TEXT_SECONDARY)
-      self._next_button(r, tr("It's plugged in"), lambda: self._go_obd(1))
-    elif self._obd_step == 1:
-      obd = [d for d in st.devices if d.looks_like_obd] or st.devices
-      self._device_list(r, y, st, obd, tr("Choose"), self._choose_dongle)
-      self._search_button(r, st)
-    elif self._obd_step == 2:
-      name = dongle["name"] if dongle else "–"
-      D.text(D.fit(name, D.H2, r.width - 2 * p, semi=True), x, y, D.H2, semi=True)
-      paired = any(d.paired and dongle and d.mac == dongle["mac"] for d in st.devices)
-      msg = tr("Paired. The comma will reconnect to it on its own.") if paired else \
-        tr("Most dongles pair without a code. If one asks, the code is usually 1234 or 0000.")
-      for i, ln in enumerate(D.wrap(msg, D.BODY, r.width - 2 * p, 3)):
-        D.text(ln, x, y + 72 + i * 50, D.BODY, Console.TEXT_SECONDARY)
-      if paired:
-        self._next_button(r, tr("Next"), lambda: self._go_obd(3))
-      elif st.busy:
-        self._next_button(r, tr(st.busy) + "…", None)
-      elif dongle:
-        self._next_button(r, tr("Pair"), lambda: bluetooth().pair(dongle["mac"]))
+    link = obd_link()
+    snap = link.snapshot()
+    [self._obd_plug, self._obd_connect, self._obd_test, self._obd_live][self._obd_step](r, x, right, y, st, link, snap)
+
+  def _para(self, r: rl.Rectangle, x: float, y: float, text: str, size: int = D.BODY, color=None, lines: int = 4) -> float:
+    lh = 50 if size == D.BODY else 40
+    for ln in D.wrap(text, size, r.width - 2 * D.CARD_PAD, lines):
+      D.text(ln, x, y, size, color or Console.TEXT_SECONDARY)
+      y += lh
+    return y
+
+  def _obd_plug(self, r, x, right, y, st, link, snap):
+    y = self._para(r, x, y, tr("Plug a Wi-Fi or USB OBD adapter (ELM327 type) into the diagnostic port under the dash, " +
+                               "left of the steering column. Its light comes on."))
+    y += 24
+    self._para(r, x, y, tr("The comma's operating system (AGNOS) is built without Bluetooth, so a Bluetooth-only dongle " +
+                           "can't connect to it directly."), D.LABEL, Console.TEXT_MUTED, 3)
+    self._next_button(r, tr("It's plugged in"), lambda: self._go_obd(1))
+
+  def _obd_connect(self, r, x, right, y, st, link, snap):
+    seg = rl.Rectangle(x, y, right - x, 72)
+    for i, sr in enumerate(D.segmented(seg, [tr("Wi-Fi"), tr("USB"), tr("Bluetooth")], self._obd_kind, size=D.LABEL)):
+      self._hits.append((sr, lambda i=i: self._set_obd_kind(i)))
+    y += 72 + 28
+    ready = link.available()
+    go: Callable[[], None] | None = None
+    if self._obd_kind == 0:
+      addr = self._wifi_addr(link)
+      K.hline(x, right, y)
+      D.text(tr("Adapter address"), x, y + 20, D.BODY, Console.TEXT_MUTED)
+      bw = D.text_w(tr("Edit"), D.LABEL, semi=True) + 56
+      b = rl.Rectangle(right - bw, y + 12, bw, 64)
+      D.button(b, tr("Edit"), primary=False, size=D.LABEL)
+      self._hits.append((b, lambda: self._edit_addr(link)))
+      D.text_right(D.fit(addr, D.BODY, right - x - bw - 320, semi=True), right - bw - 24, y + 20, D.BODY, semi=True)
+      y += 96
+      self._para(r, x, y, tr("Most Wi-Fi adapters make their own network (often WiFi_OBDII). Join it in Wi-Fi first. " +
+                             "The comma leaves your home Wi-Fi while it's on the adapter's network."), D.LABEL, Console.TEXT_MUTED, 3)
+      go = lambda: self._connect(link, "wifi", addr)  # noqa: E731
+    elif self._obd_kind == 1:
+      devs = snap.usb_devices
+      K.hline(x, right, y)
+      D.text(tr("USB adapter"), x, y + 20, D.BODY, Console.TEXT_MUTED)
+      D.text_right(D.fit(devs[0] if devs else tr("Not found"), D.BODY, r.width * 0.45, semi=True), right, y + 20, D.BODY,
+                   Console.TEXT_PRIMARY if devs else Console.TEXT_GHOST, semi=True)
+      y += 96
+      self._para(r, x, y, tr("Plug the adapter's USB cable into the comma. It shows here a few seconds later. " +
+                             "If several are found, the first one is used."), D.LABEL, Console.TEXT_MUTED, 3)
+      go = lambda: self._connect(link, "usb", devs[0] if devs else "")  # noqa: E731
     else:
-      D.text(D.fit(dongle["name"] if dongle else tr("No dongle chosen"), D.H2, r.width - 2 * p - 220, semi=True), x, y, D.H2, semi=True)
-      in_dev(right - 200, y + 2)
-      y += 76
-      rows = [(tr("Link"), tr("Paired") if dongle else "–"),
-              (tr("Battery health and capacity"), tr("Not read yet")),
-              (tr("Heater power, charger details"), tr("Not read yet"))]
-      for label, value in rows:
-        K.hline(x, right, y)
-        D.text(label, x, y + 22, D.BODY, Console.TEXT_MUTED)
-        D.text_right(value, right, y + 22, D.BODY, Console.TEXT_GHOST, semi=True)
-        y += 84
-      for i, ln in enumerate(D.wrap(tr("Reading data from the dongle is being built. Until then, what the truck shares on its own still shows everywhere."),
-                                    D.LABEL, r.width - 2 * p, 3)):
-        D.text(ln, x, y + 16 + i * 40, D.LABEL, Console.TEXT_MUTED)
-      self._next_button(r, tr("Change dongle"), lambda: self._go_obd(1), primary=False)
+      if st.adapter and st.tool:
+        obd = [d for d in st.devices if d.looks_like_obd] or st.devices
+        self._device_list(r, y, st, obd, tr("Choose"), self._choose_dongle)
+        dongle = saved(self._params, "BPObdDongle")
+        if dongle:
+          go = lambda: self._connect(link, "bluetooth", dongle["mac"])  # noqa: E731
+      else:
+        D.text(tr("Not available on this comma"), x, y, D.BODY, Console.WARNING, semi=True)
+        y += 64
+        y = self._para(r, x, y, tr("AGNOS, the comma's OS, is built without Bluetooth. Using a Bluetooth dongle needs a custom AGNOS " +
+                                   "build, which is being looked into."), D.LABEL, Console.TEXT_MUTED, 3)
+        in_dev(x, y + 12)
+        return
+    if not ready:
+      in_dev(x, r.y + r.height - D.CARD_PAD - D.CONTROL_H - 64)
+      D.text(tr("OBD service not in this build"), x + 220, r.y + r.height - D.CARD_PAD - D.CONTROL_H - 58, D.LABEL, Console.TEXT_MUTED)
+      go = None
+    self._next_button(r, tr("Connect"), go)
+
+  def _obd_test(self, r, x, right, y, st, link, snap):
+    state = snap.link if snap.received else ("connecting" if link.get("BPObdEnabled", False) else "off")
+    color = {"connected": Console.SUCCESS, "error": Console.DANGER, "unavailable": Console.WARNING,
+             "carAsleep": Console.WARNING}.get(state, Console.TEXT_GHOST)
+    D.dot(x + 10, y + D.H2 / 2, 12, color)
+    D.text(tr(LINK_TEXT.get(state, state)), x + 40, y - 4, D.H2, semi=True)
+    y += 72
+    if snap.message:
+      y = self._para(r, x, y, snap.message, D.LABEL, Console.TEXT_MUTED, 2) + 8
+    kind = _text(link.get("BPObdTransport", "wifi"))
+    rows = [(tr("Connection"), {"wifi": tr("Wi-Fi"), "usb": tr("USB"), "bluetooth": tr("Bluetooth")}.get(kind, kind)),
+            (tr("Address"), _text(link.get("BPObdAddress", "")) or tr("Automatic")),
+            (tr("Adapter"), snap.adapter or "–"),
+            (tr("Protocol"), snap.protocol or "–")]
+    for label, value in rows:
+      K.hline(x, right, y)
+      D.text(label, x, y + 20, D.LABEL, Console.TEXT_MUTED)
+      D.text_right(D.fit(value, D.LABEL, r.width * 0.6, semi=True), right, y + 20, D.LABEL, semi=True)
+      y += 70
+    if state in ("connected", "idle"):
+      self._next_button(r, tr("Show live data"), lambda: self._go_obd(3))
+    else:
+      self._next_button(r, tr("Back"), lambda: self._go_obd(1), primary=False)
+
+  def _obd_live(self, r, x, right, y, st, link, snap):
+    bottom = r.y + r.height - D.CARD_PAD - D.CONTROL_H - 24
+    if not snap.polling and snap.received:
+      y = self._para(r, x, y, tr("Paused while the truck is off and not charging, to spare the 12 V battery."),
+                     D.LABEL, Console.TEXT_MUTED, 2) + 8
+    if not snap.values:
+      D.text(tr("No answers from the truck yet"), x, y + 8, D.BODY, Console.TEXT_MUTED)
+    for v in snap.values:
+      if y + 64 > bottom:
+        break
+      K.hline(x, right, y)
+      D.text(D.fit(v.name, D.LABEL, r.width * 0.55), x, y + 16, D.LABEL, Console.TEXT_MUTED)
+      D.text_right(fmt_value(v), right, y + 16, D.LABEL, Console.TEXT_GHOST if v.age_s > 30 else Console.TEXT_PRIMARY, semi=True)
+      y += 64
+    self._next_button(r, tr("Turn off OBD"), self._obd_off, primary=False)
 
   def _phone_tab(self, r: rl.Rectangle, st):
     D.card(r)
@@ -266,7 +360,42 @@ class BluetoothPage(Widget):
 
   def _choose_dongle(self, d: BtDevice):
     save(self._params, "BPObdDongle", d)
-    self._obd_step = 3 if d.paired else 2
+    if not d.paired:
+      bluetooth().pair(d.mac)
+
+  def _set_obd_kind(self, i: int):
+    self._obd_kind = i
+
+  @staticmethod
+  def _wifi_addr(link) -> str:
+    addr = _text(link.get("BPObdAddress", ""))
+    return addr if addr and not addr.startswith("/dev") and ":" in addr and addr.count(":") == 1 else DEFAULT_WIFI
+
+  def _connect(self, link, transport: str, address: str):
+    link.configure(transport, address)
+    self._obd_step = 2
+
+  def _obd_off(self):
+    obd_link().disable()
+    self._obd_step = 0
+
+  def _edit_addr(self, link):
+    if self._keyboard is None:
+      self._keyboard = Keyboard(max_text_size=64, min_text_size=0)
+
+    def done(result: DialogResult):
+      if result != DialogResult.CONFIRM or self._keyboard is None:
+        return
+      addr = self._keyboard.text.strip() or DEFAULT_WIFI
+      if link.available():
+        self._params.put("BPObdAddress", addr)
+      self._addr_draft = addr
+
+    self._keyboard.reset(min_text_size=0)
+    self._keyboard.set_title(tr("Adapter address"), tr("IP and port, for example") + " " + DEFAULT_WIFI)
+    self._keyboard.set_text(self._wifi_addr(link))
+    self._keyboard.set_callback(done)
+    gui_app.push_widget(self._keyboard)
 
   def _handle_mouse_release(self, pos) -> bool:
     for r, fn in self._hits:

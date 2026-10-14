@@ -59,7 +59,9 @@ SCENES: dict[str, str] = {
   "onboarding_sunnylink": "Console onboarding, sunnylink consent",
   "cellular": "Connect > Cellular on LTE (Rogers, band 4), modem details faked",
   "bluetooth": "Connect > Bluetooth as the PC really is: no adapter",
-  "bluetooth_obd": "Connect > Bluetooth, OBD wizard with a faked adapter and dongle (design preview)",
+  "bluetooth_obd": "Connect > Bluetooth, OBD wizard connect step (Wi-Fi adapter), no Bluetooth as on a real comma",
+  "bluetooth_obd_bt": "Connect > Bluetooth, OBD wizard with Bluetooth chosen on a comma without Bluetooth",
+  "bluetooth_obd_live": "Connect > Bluetooth, OBD wizard live data from a faked obdStateBP (design preview)",
   "bluetooth_phone": "Connect > Bluetooth, phone tab with a faked adapter (design preview)",
   "onboarding_guide": "Console onboarding, driving guide (calibration step)",
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
@@ -963,7 +965,8 @@ def run_scene(sc: Scene):
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
-              "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone"):
+              "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
+              "bluetooth_obd_bt", "bluetooth_obd_live"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1043,22 +1046,36 @@ def run_scene(sc: Scene):
     usage().month_bytes = 2_480_000_000
     sc.settle()
     sc.shot()
-  elif name in ("bluetooth", "bluetooth_obd", "bluetooth_phone"):
+  elif name in ("bluetooth", "bluetooth_obd", "bluetooth_phone", "bluetooth_obd_bt", "bluetooth_obd_live"):
     from bluepilot.ui.lib import bluetooth as bt
-    if name != "bluetooth":
+    from bluepilot.ui.lib import obd_link as ol
+    if name.startswith("bluetooth_obd"):
+      link = ol.obd_link()
+      link.available = lambda: True
+      if name == "bluetooth_obd_live":
+        V = ol.ObdValue
+        link.snapshot = lambda: ol.ObdSnapshot(
+          received=True, enabled=True, transport="wifi", link="connected", adapter="ELM327 v1.5",
+          protocol="ISO 15765-4 (CAN 11/500)", polling=True, values=[
+            V("HV battery charge", 78.4, "percent", 1.0), V("Energy to empty", 96.2, "kWh", 1.0),
+            V("Pack temperature", 21.5, "degC", 1.0), V("Coolant temperature", 19.0, "degC", 2.0),
+            V("12 V battery", 13.6, "V", 1.0), V("Front left tire", 248.0, "kPa", 4.0),
+            V("Front right tire", 251.0, "kPa", 4.0), V("Rear left tire", 262.0, "kPa", 4.0)])
+      else:
+        link.snapshot = lambda: ol.ObdSnapshot()
+    if name == "bluetooth_phone":
       b = bt.bluetooth()
       b.refresh = lambda: None
       devs = [bt.BtDevice("00:1D:A5:68:98:8B", "Vgate iCar Pro", paired=True), bt.BtDevice("66:1E:21:00:4F:10", "OBDII"),
               bt.BtDevice("A4:C1:38:5D:22:9E", "Pixel 8 Pro"), bt.BtDevice("F0:99:B6:12:33:01", "JBL Flip 6")]
       b._state = bt.BtState(adapter=True, tool=True, powered=True, devices=devs, checked_at=1.0)
-      if name == "bluetooth_obd":
-        bt.save(sc.params, "BPObdDongle", devs[0])
     sc.main._open_shell()
     sc.main._shell.open_panel("bluetooth")
     page = sc.main._shell.current_page().widget
-    page._tab = 1 if name == "bluetooth_obd" else (2 if name == "bluetooth_phone" else 0)
-    if name == "bluetooth_obd":
-      page._obd_step = 1
+    page._tab = 1 if name.startswith("bluetooth_obd") else (2 if name == "bluetooth_phone" else 0)
+    if name.startswith("bluetooth_obd"):
+      page._obd_step = 3 if name == "bluetooth_obd_live" else 1
+      page._obd_kind = 2 if name == "bluetooth_obd_bt" else 0
     sc.settle()
     sc.shot()
   elif name == "updates":
