@@ -95,6 +95,26 @@ class TestLightningState:
     assert values["evBattery.rangeAvailable"]
     assert values["evBattery.rangeKm"] == pytest.approx(300., abs=0.1)
 
+  def test_est_vsc_preferred_over_motor_current(self):
+    f = lightning_feed()
+    f.set("MtrTracData_1_FD1", MtrTrac2_I_Actl=50., MtrTrac2_U_Actl=400.)
+    f.set("PreCond_Hev_Data2_FD1", BattTrac_I_EstVsc=60.)
+    values = run(f, LightningState())
+    assert values["evBattery.packCurrentSource"] == "battTracEstVsc"
+    assert values["evBattery.powerKw"] == pytest.approx(24., abs=0.1)
+    # motor-only power is published separately
+    assert values["evBattery.motorPowerAvailable"]
+    assert values["evBattery.motorPowerKw"] == pytest.approx(20., abs=0.1)
+
+  def test_ambient_source_order(self):
+    f = lightning_feed()
+    f.set("EngineClimateData", AirAmb_Te_Actl=12.)
+    assert run(f, LightningState())["ambient.outsideTempC"] == pytest.approx(12.)
+    f.set("Climate_Control_Data_FD1", Outside_Air_Temp_Stat=87.)  # raw 254 = unknown, skipped
+    assert run(f, LightningState())["ambient.outsideTempC"] == pytest.approx(12.)
+    f.set("Climate_Control_Data_FD1", Outside_Air_Temp_Stat=8.5)
+    assert run(f, LightningState())["ambient.outsideTempC"] == pytest.approx(8.5)
+
   def test_working_batt_trac_current_preferred(self):
     f = lightning_feed()
     f.set("Battery_Traction_1_FD1", BattTrac_U_Actl=400., BattTrac_I_Actl=-100.)

@@ -504,12 +504,14 @@ struct CarStateBP @0xb057204d7deadf3f {
     tripEnergyUsedKwh @18 :Float32;  # since this carState session started (ignition on)
     tripEnergyRegenKwh @19 :Float32;
     tripDistanceKm @20 :Float32;
+    motorPowerKw @21 :Float32;       # MtrTrac2_U_Actl * MtrTrac2_I_Actl (0x441): one drive motor only, excludes HVAC/DC-DC
+    motorPowerAvailable @22 :Bool;
 
     enum CurrentSource {
       none @0;
       battTracActl @1;    # BattTrac_I_Actl (0x07A), reads a constant -750 A on Lightning
-      mtrTrac2Actl @2;    # MtrTrac2_I_Actl (0x441)
-      battTracEstVsc @3;  # BattTrac_I_EstVsc (0x185)
+      mtrTrac2Actl @2;    # MtrTrac2_I_Actl (0x441), last resort: one motor only
+      battTracEstVsc @3;  # BattTrac_I_EstVsc (0x185), whole-pack estimate, preferred on Lightning
     }
   }
 
@@ -535,7 +537,7 @@ struct CarStateBP @0xb057204d7deadf3f {
 
   struct Ambient {
     dataAvailable @0 :Bool;
-    outsideTempC @1 :Float32;        # AirAmb_Te_ActlCld (0x308)
+    outsideTempC @1 :Float32;        # Outside_Air_Temp_Stat (0x41A), fallback AirAmb_Te_Actl (0x178), AirAmb_Te_ActlCld (0x308)
     rangeImpactPercent @2 :Float32;  # estimated range change from temperature (negative = less range)
   }
 

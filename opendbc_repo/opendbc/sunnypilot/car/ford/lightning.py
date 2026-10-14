@@ -31,7 +31,9 @@ EV_PT_MESSAGES = (
   "Tire_Pressure_Data_FD1",   # 0x3B5
   "Battery_Mgmt_3_FD1",       # 0x43C 12 V SOC and temperature
   "Battery_Mgmt_4_FD1",       # 0x42B 12 V voltage and current
-  "SmartChargingData_ECG_3",  # 0x308 outside air temperature
+  "Climate_Control_Data_FD1", # 0x41A outside air temperature (display value)
+  "EngineClimateData",        # 0x178 outside air temperature fallback
+  "SmartChargingData_ECG_3",  # 0x308 outside air temperature fallback
   "SelectDriveModeData",      # 0x420 drive mode
   "TrailerInfo_FD1",          # 0x443 trailer lamp connection
   "TrailerBrakeInfo_FD1",     # 0x445 trailer brake connection
@@ -153,20 +155,27 @@ class LightningState:
 
   # *** traction battery ***
   @staticmethod
-  def _pack_current(cp) -> tuple[float, str]:
-    if msg_fresh(cp, "Battery_Traction_1_FD1"):
-      i = cp.vl["Battery_Traction_1_FD1"]["BattTrac_I_Actl"]
-      # raw 0 decodes to exactly -750 A: the Lightning never fills this signal
-      if -749.9 < i < 888.0:
-        return i, "battTracActl"
+  def _motor_current(cp) -> float | None:
     if msg_fresh(cp, "MtrTracData_1_FD1"):
       i = cp.vl["MtrTracData_1_FD1"]["MtrTrac2_I_Actl"]
-      if -999.9 < i < 5553.0:
-        return i, "mtrTrac2Actl"
+      if -999.9 < i < 5553.0:  # raw 0 / 65535 = unset / faulty
+        return i
+    return None
+
+  def _pack_current(self, cp) -> tuple[float, str]:
+    # Order matters: whole-pack values first. Seen on the truck (TELEMETRY-FEASIBILITY.md): BattTrac_I_Actl is a
+    # constant -750 A (raw 0); BattTrac_I_EstVsc and MtrTrac2_I_Actl both move, but MtrTrac2 is one motor only.
+    if msg_fresh(cp, "Battery_Traction_1_FD1"):
+      i = cp.vl["Battery_Traction_1_FD1"]["BattTrac_I_Actl"]
+      if -749.9 < i < 888.0:
+        return i, "battTracActl"
     if msg_fresh(cp, "PreCond_Hev_Data2_FD1"):
       i = cp.vl["PreCond_Hev_Data2_FD1"]["BattTrac_I_EstVsc"]
       if -749.9 < i < 888.0:
         return i, "battTracEstVsc"
+    i = self._motor_current(cp)
+    if i is not None:
+      return i, "mtrTrac2Actl"
     return 0.0, "none"
 
   def _update_battery(self, cp, v_ego: float, dt: float) -> None:
@@ -209,6 +218,11 @@ class LightningState:
           break
     v["evBattery.rangeKm"] = float(rng)
     v["evBattery.rangeAvailable"] = rng_ok
+
+    motor_i = self._motor_current(cp)
+    motor_u = cp.vl["MtrTracData_1_FD1"]["MtrTrac2_U_Actl"] if motor_i is not None else 0.0
+    v["evBattery.motorPowerAvailable"] = motor_i is not None and motor_u > 0.
+    v["evBattery.motorPowerKw"] = float(motor_u * motor_i / 1000.) if v["evBattery.motorPowerAvailable"] else 0.0
 
     tq_ok = msg_fresh(cp, "Cluster_HEV_Data9_FD1")
     v["evBattery.motorTorqueAvailable"] = tq_ok
@@ -271,9 +285,15 @@ class LightningState:
 
   def _update_ambient(self, cp) -> None:
     v = self.values
-    ok = msg_fresh(cp, "SmartChargingData_ECG_3")
-    t = cp.vl["SmartChargingData_ECG_3"]["AirAmb_Te_ActlCld"] if ok else 0.0
-    ok = ok and -60. < t < 70.
+    t, ok = 0.0, False
+    for msg, sig, hi in (("Climate_Control_Data_FD1", "Outside_Air_Temp_Stat", 86.4),  # raw 254/255 = unknown/invalid
+                         ("EngineClimateData", "AirAmb_Te_Actl", 127.7),
+                         ("SmartChargingData_ECG_3", "AirAmb_Te_ActlCld", 127.7)):
+      if msg_fresh(cp, msg):
+        t = cp.vl[msg][sig]
+        if -39.9 < t < min(hi, 70.):
+          ok = True
+          break
     v["ambient.dataAvailable"] = ok
     v["ambient.outsideTempC"] = float(t) if ok else 0.0
     v["ambient.rangeImpactPercent"] = range_impact_percent(t) if ok else 0.0
