@@ -10,7 +10,8 @@ import pytest
 from bluepilot.bridge.config import ALLOWED_FILES
 from bluepilot.bridge import segments as seg_index
 from bluepilot.bridge.roadtrip import RoadTripSettings, RoadTripUploader, UploadedStore, http_transport, plan_uploads
-from bluepilot.bridge.status import StatusWriter, connectivity, network_view, storage_breakdown
+from bluepilot.bridge import comma_connect
+from bluepilot.bridge.status import StatusWriter, cellular_view, connectivity, network_view, storage_breakdown
 from bluepilot.bridge.store import SyncedStore
 from bluepilot.bridge.usage import DataUsage, month_start
 
@@ -235,11 +236,52 @@ def test_storage_breakdown_and_status_file(tmp_path):
     {"type": "cell", "metered": True, "strength": "great"}
   assert network_view(None) == {"type": "none", "metered": False, "strength": "unknown"}
 
-  rts = {"server": {"configured": False}, "roadTrip": {"enabled": False}}
+
   path = str(tmp_path / "status.json")
-  w = StatusWriter(path, lambda: connectivity(network_view(None), rts, {"cell": {}}, True, True, 1, None),
+  rts = {"server": {"configured": False}, "roadTrip": {"enabled": False, "video": True, "cellular": False, "state": "off",
+         "pausedReason": "disabled", "queue": {"files": 0, "bytes": 0}, "current": None, "lastUpload": None,
+         "uploadedToday": {"files": 0, "bytes": 0}}}
+  comma = comma_connect.status(True, 0, 10, {"type": "wifi"}, True, (0, 0))
+  cell = cellular_view({"technology": "LTE", "operator": "Telus", "band": "B4", "channel": 2000, "state": "connected"},
+                       "good", {"sim_state": ["READY"], "mcc_mnc": "302220", "data_connected": True}, "EG25", False, "", True)
+  path = str(tmp_path / "status.json")
+  w = StatusWriter(path, lambda: connectivity(network_view(None), rts, {"cell": {}}, comma, True, 1, None, cell),
                    lambda: st)
   w.write_once(refresh_storage=True)
   with open(path) as f:
     doc = json.load(f)
   assert doc["storage"]["freeBytes"] == 4000 and doc["homeSync"]["unsyncedSegments"] == 1 and doc["commaConnect"] is True
+  assert doc["services"]["citadel"]["cellular"] is False and doc["services"]["commaConnect"]["connected"] is True
+  assert doc["cellular"]["operator"] == "Telus" and doc["cellular"]["sim"] == \
+    {"present": True, "state": "ready", "mccMnc": "302220", "dataConnected": True}
+  assert doc["cellular"]["settings"] == {"roaming": False, "apn": None, "metered": True}
+
+
+def test_comma_connect_status(tmp_path):
+  root = str(tmp_path)
+  make_segment(root, "00000001--aaaaaaaaaa--0", SEG_FILES)
+  make_segment(root, "00000001--aaaaaaaaaa--1", SEG_FILES, locked=True)
+  segs = seg_index.scan(root, ALLOWED_FILES)
+  assert comma_connect.pending(root, segs) == (2, 80)  # qlog + qcamera of the closed segment only
+  try:
+    os.setxattr(os.path.join(root, "00000001--aaaaaaaaaa--0", "qlog.zst"), "user.upload", b"1")
+    assert comma_connect.pending(root, segs) == (1, 50)
+  except OSError:
+    pass  # filesystem without user xattrs
+  wifi, cell = {"type": "wifi", "metered": False}, {"type": "cell", "metered": True}
+  st = comma_connect.status(True, 100, 100 + 10**9, wifi, True, (2, 80))
+  assert st["connected"] is True and st["state"] == "uploading"
+  st = comma_connect.status(True, None, 0, cell, True, (2, 80))
+  assert st["connected"] is False and (st["state"], st["pausedReason"]) == ("waiting", "wifi_only")
+  assert comma_connect.status(True, None, 0, cell, False, (2, 80))["state"] == "uploading"
+  assert comma_connect.status(False, None, 0, wifi, True, (0, 0))["pausedReason"] == "not_registered"
+  assert comma_connect.status(True, 0, 200 * 10**9, wifi, True, (0, 0))["connected"] is False
+
+
+def test_citadel_wifi_only(rt):
+  rt.settings.cellular = False
+  rt.up.step()
+  assert rt.up.status()["roadTrip"]["pausedReason"] == "wifi_only" and not rt.transport.calls
+  rt.net.update(type="wifi", metered=False)
+  rt.up.step()
+  assert rt.transport.calls[-1][1].endswith("/qlog.zst")

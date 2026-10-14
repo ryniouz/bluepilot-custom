@@ -226,8 +226,11 @@ class LiveMonitor(threading.Thread):
       network = {}
       if "deviceState" in seen:
         ds = sm["deviceState"]
+        ni = ds.networkInfo
         network = {"type": _enum_name(ds.networkType), "metered": bool(ds.networkMetered),
-                   "strength": _enum_name(ds.networkStrength)}
+                   "strength": _enum_name(ds.networkStrength),
+                   "info": {"technology": ni.technology, "operator": ni.operator, "band": ni.band,
+                            "channel": int(ni.channel), "state": ni.state}}
         if sm.updated["deviceState"] and self.on_modem_bytes is not None:
           self.on_modem_bytes(int(ds.networkStats.wwanTx), int(ds.networkStats.wwanRx))
 

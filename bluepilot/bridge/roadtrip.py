@@ -39,6 +39,7 @@ class RoadTripSettings:
   server_url: str = ""
   limit_bytes: int = 0
   limit_action: int = 0  # 0 = telemetry only once over the limit, 1 = stop uploading over cellular
+  cellular: bool = True  # False: wait for unmetered Wi-Fi
 
 
 class UploadedStore:
@@ -169,7 +170,7 @@ class RoadTripUploader(threading.Thread):
       return {
         "server": {"configured": bool(s.server_url), "reachable": reachable if s.server_url else False,
                    "lastContact": self.last_ok_iso, "url": s.server_url or None},
-        "roadTrip": {"enabled": s.enabled, "video": s.video, "state": self.state, "pausedReason": self.paused_reason,
+        "roadTrip": {"enabled": s.enabled, "video": s.video, "cellular": s.cellular, "state": self.state, "pausedReason": self.paused_reason,
                      "queue": {"files": self.queue[0], "bytes": self.queue[1]}, "current": self.current,
                      "lastUpload": self.last_upload,
                      "uploadedToday": {"files": self.today["files"], "bytes": self.today["bytes"]}},
@@ -193,6 +194,9 @@ class RoadTripUploader(threading.Thread):
       self._set("paused", "no_network")
       return IDLE_S
     cellular = net.get("type") == "cell" or bool(net.get("metered"))
+    if cellular and not s.cellular:
+      self._set("paused", "wifi_only")
+      return IDLE_S
     over = cellular and s.limit_bytes > 0 and self.usage.month_bytes() >= s.limit_bytes
     if over and s.limit_action == 1:
       self._set("paused", "over_limit")

@@ -90,16 +90,17 @@ GROUPS = [
             "Pause the comma when the truck's 12 V battery drops below this."),
     _bool("BPKeepUntilSynced", "Keep drives until synced"),
   ]},
-  {"id": "connectivity", "title": "Road trip and data", "settings": [
-    _bool("BPRoadTripMode", "Road Trip Mode",
-          "Upload each finished minute of driving to your server while you drive, over LTE or Wi-Fi."),
+  {"id": "connectivity", "title": "Uploads and data", "settings": [
+    _bool("BPRoadTripMode", "Citadel uploads (Road Trip Mode)",
+          "Upload each finished minute of driving, and live data while driving, to Citadel."),
+    _bool("BPRoadTripCellular", "Citadel uploads over LTE", "Off: Citadel uploads wait for Wi-Fi."),
     _choice("BPRoadTripVideo", "Road trip uploads", [(0, "Telemetry only"), (1, "Telemetry and low-res video")],
             "Telemetry is about 50 MB an hour; with low-res video about 250 MB an hour."),
     _number("BPCellLimitMB", "Monthly LTE limit", "int", 0, 200000, 100, "MB", "0 means no limit."),
     _choice("BPCellLimitAction", "When the limit is reached", [(0, "Telemetry only"), (1, "Stop uploading")]),
     _number("BPCellResetDay", "Billing month starts on day", "int", 1, 31, 1),
-    _bool("BPCommaConnect", "comma connect",
-          "Off stops comma's own uploads at once and comma connect (athena) after the next reboot."),
+    _bool("BPCommaConnectWifiOnly", "comma connect uploads on Wi-Fi only",
+          "comma connect stays on; its uploads wait for unmetered Wi-Fi."),
   ]},
 ]
 

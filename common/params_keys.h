@@ -334,6 +334,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPCellLimitMB", {PERSISTENT | BACKUP, INT, "0"}},
     {"BPCellLimitAction", {PERSISTENT | BACKUP, INT, "0"}},
     {"BPCellResetDay", {PERSISTENT | BACKUP, INT, "1"}},
-    {"BPCommaConnect", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadTripCellular", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPCommaConnectWifiOnly", {PERSISTENT | BACKUP, BOOL, "1"}},
     // End Custom
 };

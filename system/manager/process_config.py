@@ -92,10 +92,6 @@ def mapd_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
   return bool(os.path.exists(Paths.mapd_root()))
 
 def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
-  # Custom: comma connect switch (BPCommaConnect off = no uploads to comma's servers)
-  if not params.get_bool("BPCommaConnect"):
-    return False
-  # End Custom
   if not params.get_bool("OnroadUploads"):
     return only_offroad(started, params, CP)
 

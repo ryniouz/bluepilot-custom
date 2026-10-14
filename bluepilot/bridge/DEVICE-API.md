@@ -84,8 +84,22 @@ Cellular, or a metered Wi-Fi network, counts against `BPCellLimitMB` per billing
 
 Uploads do not mark segments synced: keep-until-synced still waits for the home pull (rlog and cameras).
 
-## comma connect switch
-`BPCommaConnect` (default 1). When 0, comma's `uploader` stops at once, and `manage_athenad` (comma connect) is not started from the next boot.
+## comma connect and Citadel, side by side
+comma connect stays on, unchanged (athenad and the stock `uploader`). The one change is `BPCommaConnectWifiOnly` (default 1): with it set, the stock uploader only uploads on unmetered Wi-Fi or ethernet (`system/loggerd/uploader.py`, Custom block).
+
+Citadel uploads (Road Trip Mode, above) are independent of comma connect. `BPRoadTripCellular` (default 1) lets them use LTE; when it's 0 they wait for unmetered Wi-Fi.
+
+`/v1/connectivity` reports each service separately under `services`:
+- `services.commaConnect`: `{ enabled, connected, wifiOnly, state, pausedReason, queue }`.
+  - `connected` comes from athena's last ping.
+  - `queue` counts the qlog and qcamera files not yet marked uploaded (xattr `user.upload`).
+- `services.citadel`: `{ enabled, cellular, video, state, pausedReason, queue, current, lastUpload, uploadedToday, server }`.
+
+`cellular` gives what the modem reports:
+- technology, operator, band, channel, state and strength
+- the SIM: present, state, MCC/MNC and data connected
+- the modem firmware
+- the three stock settings: `GsmRoaming`, `GsmApn` and `GsmMetered`
 
 ## Keep-until-synced
 With `BPKeepUntilSynced` = 1 (default 1 when bridge enabled), `system/loggerd/deleter.py` deletes synced segments first (oldest first). It only deletes unsynced segments when free space falls below the hard floor (5% or 2 GB), so the comma never fills up.

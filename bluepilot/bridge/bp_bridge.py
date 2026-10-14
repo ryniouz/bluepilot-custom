@@ -5,6 +5,7 @@ import os
 import secrets
 import signal
 import threading
+import time
 
 from openpilot.common.params import Params
 from openpilot.common.gps import get_gps_location_service
@@ -13,6 +14,7 @@ from openpilot.system.hardware.hw import Paths
 from openpilot.system.loggerd.config import get_available_percent
 from openpilot.system.version import get_build_metadata
 
+from bluepilot.bridge import comma_connect
 from bluepilot.bridge import config as cfg
 from bluepilot.bridge import segments as seg_index
 from bluepilot.bridge.config import (ALLOWED_FILES, DEFAULT_PORT, PARAM_KEEP_UNTIL_SYNCED, PARAM_NOTIFY_URL,
@@ -22,7 +24,8 @@ from bluepilot.bridge.notify import Notifier
 from bluepilot.bridge.params_allowlist import coerce_param
 from bluepilot.bridge.roadtrip import RoadTripSettings, RoadTripUploader, UploadedStore
 from bluepilot.bridge.server import BridgeContext, make_server
-from bluepilot.bridge.status import STATUS_PATH, StatusWriter, connectivity, disk_usage, network_view, storage_breakdown
+from bluepilot.bridge.status import (STATUS_PATH, StatusWriter, cellular_view, connectivity, disk_usage, network_view,
+                                     storage_breakdown)
 from bluepilot.bridge.store import EventLog, SyncedStore, iso_now
 from bluepilot.bridge.usage import DataUsage
 
@@ -68,7 +71,32 @@ def roadtrip_settings(params: Params) -> RoadTripSettings:
     server_url=((url.decode() if isinstance(url, bytes) else url) or "").strip(),
     limit_bytes=max(0, _int(params, cfg.PARAM_CELL_LIMIT_MB, 0)) * 1_000_000,
     limit_action=_int(params, cfg.PARAM_CELL_LIMIT_ACTION, 0),
+    cellular=params.get_bool(cfg.PARAM_ROADTRIP_CELLULAR),
   )
+
+
+def _str(params: Params, key: str) -> str:
+  v = params.get(key)
+  return (v.decode() if isinstance(v, bytes) else v) or ""
+
+
+class SlowStatus:
+  """Parts of the status that cost a scan or a dbus call; refreshed with storage (every 30 s)."""
+
+  def __init__(self, params: Params, log_root: str):
+    self.params, self.log_root = params, log_root
+    self.comma_queue = (0, 0)
+    self.sim: dict | None = None
+    self.modem_version: str | None = None
+
+  def refresh(self, segs) -> None:
+    self.comma_queue = comma_connect.pending(self.log_root, segs)
+    try:
+      from openpilot.system.hardware import HARDWARE
+      self.sim = HARDWARE.get_sim_info()
+      self.modem_version = HARDWARE.get_modem_version()
+    except Exception:
+      pass
 
 
 def main() -> None:
@@ -100,6 +128,8 @@ def main() -> None:
                               usage, lambda: network_view(live.latest_network()), live.latest)
   uploader.start()
 
+  slow = SlowStatus(params, Paths.log_root())
+
   def build_connectivity() -> dict:
     segs = seg_index.scan(Paths.log_root(), ALLOWED_FILES)
     unsynced = sum(1 for x in segs if not x.locked and synced.level(x.dir) is None)
@@ -107,13 +137,25 @@ def main() -> None:
       last_synced = iso_now(os.path.getmtime(cfg.state_path(cfg.SYNCED_FILE)))
     except OSError:
       last_synced = None
-    return connectivity(network_view(live.latest_network()), uploader.status(),
-                        usage.summary(rt_settings().limit_bytes), params.get_bool(cfg.PARAM_COMMA_CONNECT),
-                        params.get_bool(PARAM_KEEP_UNTIL_SYNCED), unsynced, last_synced)
+    net_raw = live.latest_network()
+    net = network_view(net_raw)
+    dongle_id = _str(params, "DongleId")
+    try:
+      last_ping = int(params.get("LastAthenaPingTime") or 0) or None
+    except (TypeError, ValueError):
+      last_ping = None
+    comma = comma_connect.status(bool(dongle_id) and dongle_id != "UnregisteredDevice", last_ping,
+                                 time.monotonic_ns(), net, params.get_bool(cfg.PARAM_COMMA_WIFI_ONLY), slow.comma_queue)
+    cellular = cellular_view(net_raw.get("info"), net["strength"], slow.sim, slow.modem_version,
+                             params.get_bool("GsmRoaming"), _str(params, "GsmApn"), params.get_bool("GsmMetered"))
+    return connectivity(net, uploader.status(), usage.summary(rt_settings().limit_bytes), comma,
+                        params.get_bool(PARAM_KEEP_UNTIL_SYNCED), unsynced, last_synced, cellular)
 
   def build_storage() -> dict:
+    segs = seg_index.scan(Paths.log_root(), ALLOWED_FILES)
+    slow.refresh(segs)
     total, free = disk_usage(Paths.log_root())
-    return storage_breakdown(seg_index.scan(Paths.log_root(), ALLOWED_FILES), synced, total, free)
+    return storage_breakdown(segs, synced, total, free)
 
   status_writer = StatusWriter(STATUS_PATH, build_connectivity, build_storage)
   status_writer.start()

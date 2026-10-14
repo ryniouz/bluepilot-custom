@@ -26,7 +26,8 @@ WRITABLE = frozenset({
   "OnroadScreenOffBrightness", "IsMetric",
   # bridge
   "BPKeepUntilSynced", "BPBridgeNotifyUrl", "BPServerUrl",
-  "BPRoadTripMode", "BPRoadTripVideo", "BPCellLimitMB", "BPCellLimitAction", "BPCellResetDay", "BPCommaConnect",
+  "BPRoadTripMode", "BPRoadTripVideo", "BPCellLimitMB", "BPCellLimitAction", "BPCellResetDay", "BPRoadTripCellular",
+  "BPCommaConnectWifiOnly",
 })
 
 READABLE = READ_ONLY | WRITABLE

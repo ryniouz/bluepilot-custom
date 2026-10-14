@@ -63,11 +63,38 @@ def disk_usage(path: str) -> tuple[int | None, int | None]:
   return st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
 
 
-def connectivity(network: dict, roadtrip_status: dict, usage_summary: dict, comma_connect: bool,
-                 keep_until_synced: bool, unsynced_segments: int, last_synced: str | None) -> dict:
+def cellular_view(network_info: dict | None, strength: str, sim: dict | None, modem_version: str | None,
+                  roaming: bool, apn: str, metered: bool) -> dict:
+  """What the modem reports, for a phone-style cellular page. Read-only except the three stock settings
+  (GsmRoaming, GsmApn, GsmMetered), which the stock network settings already apply through NetworkManager."""
+  ni = network_info or {}
+  sim = sim or {}
+  sim_state = (sim.get("sim_state") or ["UNKNOWN"])[0]
   return {
-    "t": iso_now(), "network": network, "server": roadtrip_status["server"], "commaConnect": comma_connect,
-    "roadTrip": roadtrip_status["roadTrip"], "usage": usage_summary,
+    "technology": ni.get("technology") or None, "operator": ni.get("operator") or None,
+    "band": ni.get("band") or None, "channel": ni.get("channel") or None, "state": ni.get("state") or None,
+    "strength": strength,
+    "sim": {"present": sim_state != "ABSENT", "state": sim_state.lower(), "mccMnc": sim.get("mcc_mnc"),
+            "dataConnected": bool(sim.get("data_connected"))},
+    "modemVersion": modem_version or None,
+    "settings": {"roaming": roaming, "apn": apn or None, "metered": metered},
+  }
+
+
+def connectivity(network: dict, roadtrip_status: dict, usage_summary: dict, comma_status: dict,
+                 keep_until_synced: bool, unsynced_segments: int, last_synced: str | None,
+                 cellular: dict | None = None) -> dict:
+  rt = roadtrip_status["roadTrip"]
+  citadel = {"enabled": rt["enabled"], "cellular": rt.get("cellular", True), "video": rt["video"],
+             "state": rt["state"], "pausedReason": rt["pausedReason"], "queue": rt["queue"],
+             "current": rt["current"], "lastUpload": rt["lastUpload"], "uploadedToday": rt["uploadedToday"],
+             "server": roadtrip_status["server"]}
+  return {
+    "t": iso_now(), "network": network, "cellular": cellular,
+    "services": {"commaConnect": comma_status, "citadel": citadel},
+    # kept for readers written against the first version of this file
+    "server": roadtrip_status["server"], "roadTrip": rt, "commaConnect": comma_status["enabled"],
+    "usage": usage_summary,
     "homeSync": {"keepUntilSynced": keep_until_synced, "unsyncedSegments": unsynced_segments,
                  "lastSynced": last_synced},
   }
