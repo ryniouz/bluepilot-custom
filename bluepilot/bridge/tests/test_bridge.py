@@ -32,7 +32,7 @@ def make_segment(root, name, files=None, locked=False):
 
 class FakeParams:
   def __init__(self):
-    self.values = {"ShowBrakeStatus": False, "LC_PID_gain_UI": 3.0, "IsOnroad": False}
+    self.values = {"ShowBrakeStatus": False, "LC_PID_gain_UI_curv": 3.0, "IsOnroad": False}
     self.onroad = False
 
   def get(self, key):
@@ -281,8 +281,8 @@ def test_events_paging(env):
 
 
 def test_params_read_write_interlock(env):
-  _, body = jcall(env, "/v1/params?keys=ShowBrakeStatus,LC_PID_gain_UI")
-  assert body["params"] == {"ShowBrakeStatus": False, "LC_PID_gain_UI": 3.0}
+  _, body = jcall(env, "/v1/params?keys=ShowBrakeStatus,LC_PID_gain_UI_curv")
+  assert body["params"] == {"ShowBrakeStatus": False, "LC_PID_gain_UI_curv": 3.0}
   assert jcall(env, "/v1/params?keys=GithubSshKeys")[0] == 400
   assert jcall(env, "/v1/params/AlphaLongitudinalEnabled", "PUT", {"value": True})[0] == 403
   status, body = jcall(env, "/v1/params/ShowBrakeStatus", "PUT", {"value": True})
@@ -352,23 +352,23 @@ def test_schema_matches_allowlist():
 
 
 def test_settings_get_and_batch_put(env):
-  env.params.values.update({"LongitudinalPersonality": 1, "custom_path_offset": 0.0, "FordPrefHybridGaugeStyle": "flat"})
+  env.params.values.update({"LongitudinalPersonality": 1, "custom_path_offset_curv": 0.0, "FordPrefGaugeStyle": 0})
   status, body = jcall(env, "/v1/settings")
   assert status == 200 and body["editable"] is True
   driving = next(g for g in body["groups"] if g["id"] == "driving")
   personality = next(s for s in driving["settings"] if s["key"] == "LongitudinalPersonality")
   assert personality["value"] == 1 and personality["options"][2] == {"value": 2, "label": "Relaxed"}
 
-  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"LongitudinalPersonality": "2", "custom_path_offset": 0.25,
-                                                               "FordPrefHybridGaugeStyle": "arched", "ShowBrakeStatus": "true"}})
+  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"LongitudinalPersonality": "2", "custom_path_offset_curv": 0.25,
+                                                               "FordPrefGaugeStyle": "1", "ShowBrakeStatus": "true"}})
   assert status == 200
-  assert env.params.values["LongitudinalPersonality"] == 2 and env.params.values["custom_path_offset"] == 0.25
-  assert env.params.values["FordPrefHybridGaugeStyle"] == "arched" and env.params.values["ShowBrakeStatus"] is True
+  assert env.params.values["LongitudinalPersonality"] == 2 and env.params.values["custom_path_offset_curv"] == 0.25
+  assert env.params.values["FordPrefGaugeStyle"] == 1 and env.params.values["ShowBrakeStatus"] is True
 
 
 def test_settings_put_validates_all_before_writing(env):
-  env.params.values["custom_path_offset"] = 0.0
-  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"ShowBrakeStatus": True, "custom_path_offset": 0.9}})
+  env.params.values["custom_path_offset_curv"] = 0.0
+  status, body = jcall(env, "/v1/settings", "PUT", {"values": {"ShowBrakeStatus": True, "custom_path_offset_curv": 0.9}})
   assert status == 400 and "between" in body["message"]
   assert env.params.values["ShowBrakeStatus"] is False  # nothing written
   assert jcall(env, "/v1/settings", "PUT", {"values": {"AlphaLongitudinalEnabled": True}})[0] == 403
@@ -418,3 +418,13 @@ def test_charging_power_gated_and_older_schema():
   v = View({"deviceState": DS_PARKED, "carStateBP": SimpleNamespace(evBattery=_ev())})  # no charging struct yet
   ev = build_snapshot(v, "gpsLocationExternal", False, None, None)["ev"]
   assert ev["socPct"] == 55.0 and "charging" not in ev
+
+
+def test_writable_keys_exist_on_this_build():
+  """Custom: every remotely writable key is a real param on this build (7.0 renamed the lateral tuning keys)."""
+  import re
+  from openpilot.common.basedir import BASEDIR
+  from bluepilot.bridge.params_allowlist import READABLE
+  with open(os.path.join(BASEDIR, "common", "params_keys.h")) as f:
+    keys = set(re.findall(r'\{"([A-Za-z0-9_]+)"', f.read()))
+  assert sorted(READABLE - keys) == []
