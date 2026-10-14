@@ -90,6 +90,12 @@ class ConsoleMainLayout(Widget):
                                                 subtitle=self._stats_page.subtitle, sub_dot=self._stats_page.sub_dot,
                                                 action=self._stats_page.action, on_action=self._stats_page.on_action,
                                                 framed=False), index=1)
+    from bluepilot.ui.console.pages.truck_data import TruckDataPage
+    self._truck_data = TruckDataPage()
+    self._truck_data.on_open_setup = self._shell.open_obd
+    self._shell.register_page(Dest.ENERGY, Page(tr("Truck data"), "gauge", self._truck_data, key="truck_data",
+                                                subtitle=self._truck_data.subtitle, sub_dot=self._truck_data.sub_dot,
+                                                framed=False), index=2)
     self._layouts = {
       MainState.STANDBY: ConsoleStandby(),
       MainState.SHELL: self._shell,

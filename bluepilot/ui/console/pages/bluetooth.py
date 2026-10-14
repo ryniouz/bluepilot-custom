@@ -324,7 +324,7 @@ class BluetoothPage(Widget):
       if y + 64 > bottom:
         break
       K.hline(x, right, y)
-      D.text(D.fit(v.name, D.LABEL, r.width * 0.55), x, y + 16, D.LABEL, Console.TEXT_MUTED)
+      D.text(D.fit(v.label or v.name, D.LABEL, r.width * 0.55), x, y + 16, D.LABEL, Console.TEXT_MUTED)
       D.text_right(fmt_value(v), right, y + 16, D.LABEL, Console.TEXT_GHOST if v.age_s > 30 else Console.TEXT_PRIMARY, semi=True)
       y += 64
     self._next_button(r, tr("Turn off OBD"), self._obd_off, primary=False)

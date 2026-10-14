@@ -100,6 +100,10 @@ SCENES: dict[str, str] = {
   "onroad_debug_panel": "Onroad with the BluePilot controls debug panel open",
   "charging_dc": "Charging screen, DC fast charge (charge fields injected; CarStateBP.ev not on this branch yet)",
   "charging_ac": "Charging screen, AC charge limited by a cold battery",
+  "charging_dc_obd": "Charging screen, DC fast charge with an OBD adapter connected (extra row)",
+  "truck_data": "Energy > Truck data: OBD adapter connected (faked obdStateBP)",
+  "truck_data_off": "Energy > Truck data: no OBD adapter set up",
+  "truck_data_asleep": "Energy > Truck data: adapter set up, truck asleep",
   # Stream C: Energy pages
   "energy_charging": "Energy > Charging in the shell while plugged in (charging screen minimized)",
   "energy_idle": "Energy > Charging when not plugged in, with the last session",
@@ -131,6 +135,7 @@ SCENES.update({
   "drive_lead_corners": "Lead speed beside the car, corner-frame marker candidate",
   "drive_lead_chevron": "Lead speed beside the car, roof-chevron marker candidate",
   "drive_plugged": "Ignition on while DC charging, charging screen minimized: power tile reads Charging",
+  "drive_obd": "Dense layout with the OBD adapter connected: OBD rows in the details card",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
@@ -138,7 +143,8 @@ SCENES.update({
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                     "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                    "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd",
+                    "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -919,7 +925,7 @@ def scene_params(name: str) -> dict:
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                 "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                "drive_lead_corners", "drive_lead_chevron", "drive_plugged")
+                "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -928,7 +934,7 @@ def drive_scene_params(name: str) -> dict:
   p = {"IsMetric": True, "SpeedLimitMode": 2}  # the truck runs Canadian units
   if name in ("drive_minimal", "drive_qc_handle", "drive_qc_drag"):
     p["BPLayoutPreset"] = 0
-  if name == "drive_dense":
+  if name in ("drive_dense", "drive_obd"):
     p["BPLayoutPreset"] = 2
   if name == "drive_signals":
     p.update({"ShowTurnSignals": True, "BlindSpot": True, "ShowBlindspotOverlay": True})
@@ -945,7 +951,9 @@ def drive_scene_params(name: str) -> dict:
 
 def setup_drive_scene(name: str, d: dict):
   d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
-  if name == "drive_dense":
+  if name == "drive_obd":
+    _fake_obd()
+  if name in ("drive_dense", "drive_obd"):
     d.update(battery=dict(soc=64.0, volts=380.0, amps=110.0), a_ego=-0.8)
     _inject_ev(dict(pack_temp_c=27.0, coolant_temp_c=24.0, tire_kpa=[285.0, 287.0, 281.0, 284.0], lv_volts=14.1,
                     outside_temp_c=4.0, trip_km=18.4, trip_used_kwh=6.2, trip_regen_kwh=1.1, wh_per_km=297.0))
@@ -1012,8 +1020,35 @@ def _inject_popup():
 # --- end stream B --------------------------------------------------------------------------
 
 
+def fake_obd(link_state: str):
+  """Fake obdStateBP for the OBD scenes: catalog short names (selfdrive/car/obd/catalog.py), metric units."""
+  from bluepilot.ui.lib import obd_link as ol
+  link = ol.obd_link()
+  link.available = lambda: True
+  def V(short, value, unit, age):
+    return ol.ObdValue(short, value, unit, age, LABELS.get(short, short))
+  LABELS = {"HvbSocD": "HV battery SOC displayed", "HvbSoc": "HV battery state of charge", "HvbEte": "HV battery energy to empty",
+            "HvbT": "HV battery temperature", "HvbCit": "HV battery coolant inlet temperature", "LvV": "12 V battery voltage",
+            "TireLF": "Tire pressure left front", "TireRF": "Tire pressure right front"}
+  values = [V("HvbSocD", 62.0, "percent", 2.0), V("HvbSoc", 64.3, "percent", 1.0), V("HvbEte", 78.6, "kWh", 3.0),
+            V("HvbT", 24.0, "degC", 4.0), V("HvbCit", 21.0, "degC", 4.0), V("HvbAvgModV", 3.912, "V", 4.0),
+            V("HvbMinModV", 3.897, "V", 4.0), V("HvbAge", 29.0, "months", 90.0), V("HvbV", 391.4, "V", 1.0),
+            V("HvbA", -238.0, "A", 1.0), V("ChgOV", 392.0, "V", 2.0), V("ChgSt", 3.0, "", 2.0), V("Evse", 4.0, "", 2.0),
+            V("LvV", 13.8, "V", 5.0), V("LvSoc", 86.0, "percent", 12.0), V("TireLF", 248.0, "kPa", 20.0),
+            V("TireRF", 251.0, "kPa", 20.0), V("TireLR", 262.0, "kPa", 20.0), V("TireRR", 259.0, "kPa", 20.0)]
+  if link_state == "setup":
+    link.available = lambda: False
+  snap = ol.ObdSnapshot(received=link_state != "setup", enabled=True, transport="wifi", link=link_state, adapter="ELM327 v1.5",
+                        protocol="ISO 15765-4 (CAN 11/500)", polling=link_state == "connected",
+                        values=values if link_state == "connected" else [])
+  link.snapshot = lambda: snap
+
+
 def run_scene(sc: Scene):
   name = sc.name
+  if name == "charging_dc_obd":
+    fake_obd("connected")
+    name = "charging_dc"
   for suffix, idx in (("_large", 2), ("_small", 0)):  # UI size variants of another scene
     if name.endswith(suffix):
       from bluepilot.ui.lib import ui_scale
@@ -1026,7 +1061,8 @@ def run_scene(sc: Scene):
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
-              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "boot_progress", "boot_error"):
+              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
+              "truck_data", "truck_data_off", "truck_data_asleep", "boot_progress", "boot_error"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1106,6 +1142,14 @@ def run_scene(sc: Scene):
     usage().month_bytes = 2_480_000_000
     sc.settle()
     sc.shot()
+  elif name == "bluetooth_obd_live":
+    fake_obd("connected")
+    sc.main._open_shell()
+    sc.main._shell.open_obd()
+    page = sc.main._shell.current_page().widget
+    page._obd_step = 3
+    sc.settle()
+    sc.shot()
   elif name in ("bluetooth", "bluetooth_obd", "bluetooth_phone", "bluetooth_obd_bt", "bluetooth_obd_live"):
     from bluepilot.ui.lib import bluetooth as bt
     from bluepilot.ui.lib import obd_link as ol
@@ -1175,6 +1219,12 @@ def run_scene(sc: Scene):
     sc.main._shell.open_panel("vehicle")
     page = sc.main._shell.current_page().widget
     page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3}.get(name, 0)
+    sc.settle()
+    sc.shot()
+  elif name.startswith("truck_data"):
+    fake_obd({"truck_data": "connected", "truck_data_asleep": "carAsleep"}.get(name, "setup"))
+    sc.main._open_shell()
+    sc.main._shell.open_panel("truck_data")
     sc.settle()
     sc.shot()
   elif name == "steering":
@@ -1321,6 +1371,16 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _fake_obd():
+  """A connected Wi-Fi adapter reading the built-in Lightning DIDs (obdStateBP is on the Lightning branch)."""
+  from bluepilot.ui.lib import obd_link as ol
+  vals = [("HvbEte", 71.4, "kWh"), ("HvbAvgModV", 3.912, "V"), ("HvbMinModV", 3.894, "V"), ("LvSoc", 82.0, "percent"),
+          ("HvbSoc", 61.8, "percent")]
+  snap = ol.ObdSnapshot(received=True, enabled=True, transport="wifi", link="connected", adapter="ELM327 v1.5",
+                        values=[ol.ObdValue(n, v, u, 1.0) for n, v, u in vals])
+  ol.ObdLink.snapshot = lambda self: snap
 
 
 def _fake_guest_mode():

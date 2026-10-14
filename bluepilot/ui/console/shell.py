@@ -176,7 +176,8 @@ class ConsoleShell(Widget):
     self.register_page(Dest.CONNECT, Page(tr("Home automations"), "home", autos, key="automations", framed=False))
     self.connectivity.on_open_automations = lambda: self.open_panel("automations")
     from bluepilot.ui.console.pages.bluetooth import BluetoothPage
-    self.register_page(Dest.CONNECT, Page(tr("Bluetooth"), "bluetooth", BluetoothPage(), key="bluetooth", framed=False))
+    self.bluetooth = BluetoothPage()
+    self.register_page(Dest.CONNECT, Page(tr("Bluetooth"), "bluetooth", self.bluetooth, key="bluetooth", framed=False))
     panel(Dest.CONNECT, tr("sunnylink"), "cloud", "SUNNYLINK", tr("Connect"))
     panel(Dest.CONNECT, tr("Firehose"), "flame", "FIREHOSE", tr("Connect"))
     panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))
@@ -193,7 +194,7 @@ class ConsoleShell(Widget):
     # This build only drives the F-150 Lightning: its own page instead of sunnypilot's all-makes vehicle panel
     from bluepilot.ui.console.pages.vehicle import VehiclePage
     vehicle = VehiclePage()
-    vehicle.on_open_obd = lambda: self.open_panel("bluetooth")
+    vehicle.on_open_obd = self.open_obd
     self.register_page(Dest.SYSTEM, Page(tr("Vehicle"), "car", vehicle, key="vehicle", framed=False))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
@@ -235,6 +236,11 @@ class ConsoleShell(Widget):
     self._dest = dest
     p = self.current_page()
     self._switch_to(p.widget if p else None)
+
+  def open_obd(self):
+    """Connect > Bluetooth on its OBD scanner tab (OBD adapters work over Wi-Fi and USB too)."""
+    if self.open_panel("bluetooth"):
+      self.bluetooth._set_tab(1)
 
   def open_panel(self, key) -> bool:
     """Open the page that hosts a settings PanelType (or a page key)."""
