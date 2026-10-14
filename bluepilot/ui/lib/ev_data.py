@@ -116,6 +116,35 @@ def _fv(obj, name: str, flag: str | None = None):
     return NAN
 
 
+SAVE_EVERY_S = 60.0
+_SAVED_FIELDS = ("soc", "range_km", "range_estimated", "pack_temp_c", "tire_kpa", "tire_low", "lv_volts", "lv_low", "outside_temp_c")
+
+
+def _load_last_good() -> EvSnapshot | None:
+  """Last known truck data, kept across reboots so the parked screens have something to show."""
+  try:
+    from openpilot.common.params import Params
+    d = Params().get("BPLastEvSnapshot")
+    if not isinstance(d, dict):
+      return None
+    s = EvSnapshot(available=True)
+    for k in _SAVED_FIELDS:
+      if k in d and d[k] is not None:
+        setattr(s, k, list(d[k]) if k == "tire_kpa" else d[k])
+    return s
+  except Exception:
+    return None
+
+
+def _save_last_good(s: EvSnapshot) -> None:
+  try:
+    from openpilot.common.params import Params
+    d = {k: (None if isinstance(getattr(s, k), float) and not math.isfinite(getattr(s, k)) else getattr(s, k)) for k in _SAVED_FIELDS}
+    Params().put_nonblocking("BPLastEvSnapshot", d)
+  except Exception:
+    pass
+
+
 class EvDataSource:
   """Collects EV values once per frame and integrates trip energy."""
 
@@ -125,6 +154,8 @@ class EvDataSource:
     self.snap = EvSnapshot()
     self._last_t: float | None = None
     self._started_frame = -1
+    self.last_good: EvSnapshot | None = _load_last_good()   # last snapshot with truck data, for parked screens
+    self._saved_t = 0.0
 
   @staticmethod
   def _read_stream_b(bp, s: EvSnapshot) -> None:
@@ -264,6 +295,11 @@ class EvDataSource:
       s.range_km = LIGHTNING_USABLE_KWH * 1000.0 * (s.soc / 100.0) / whpk
       s.range_estimated = True
 
+    if s.available:
+      self.last_good = s
+      if now - self._saved_t > SAVE_EVERY_S:
+        self._saved_t = now
+        _save_last_good(s)
     return s
 
 

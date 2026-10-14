@@ -327,6 +327,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
+    {"BPLastEvSnapshot", {PERSISTENT, JSON}},
     // Custom: end
 
     // WiFi Management

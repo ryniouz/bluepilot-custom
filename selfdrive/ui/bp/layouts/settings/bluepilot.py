@@ -508,18 +508,8 @@ class BluePilotLayout(Widget):
       SectionHeader(tr("Vehicle")),
       self._show_hands_free_ui,
       self._vbatt_pause_charging,
-      SectionHeader(tr("Console theme")),
-      self._console_mode_btn,
-      self._console_accent_btn,
-      self._layout_preset_btn,
-      self._ev_hud,
-      self._charging_screen,
-      self._charge_sleep_btn,
-      SectionHeader(tr("Data export")),
-      self._bridge_enabled,
-      self._keep_until_synced,
-      self._bridge_address,
-      self._bridge_token,
+      # Custom: Console theme, charging and data export rows live on their own Console shell pages
+      # (Screen > Theme and layout, Energy > Charging, Connect > Data export); see console_page_items()
       SectionHeader(tr("Visuals")),
       self._hide_onroad_border,
       self._show_blindspot,
@@ -764,6 +754,14 @@ class BluePilotLayout(Widget):
     except UnknownKeyName:
       pass
     ui_state.layout_preset = int(button_index)
+
+  # Custom: rows the Console shell shows on its own pages
+  def console_page_items(self) -> dict[str, list]:
+    return {
+      "theme": [self._console_mode_btn, self._console_accent_btn, self._layout_preset_btn, self._ev_hud],
+      "charging": [self._charging_screen, self._charge_sleep_btn],
+      "export": [self._bridge_enabled, self._keep_until_synced, self._bridge_address, self._bridge_token],
+    }
 
   def _set_int_param(self, key: str, value: int, ui_attr: str | None = None):
     try:

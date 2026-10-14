@@ -43,11 +43,12 @@ KPH = 1 / 3.6
 # Scenes producing several images list them; everything else produces <name>.png
 # ----------------------------------------------------------------------------------------------
 SCENES: dict[str, str] = {
-  "home": "Offroad home screen (sidebar + home layout)",
+  "standby": "Parked standby splash (offroad idle)",
+  "home": "Offroad Home dashboard in the Console shell",
   "home_alerts": "Offroad home with offroad alerts + update available",
   "settings": "Settings open on the Device panel",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
-  "sidebar": "Onroad engaged with the sidebar opened",
+  "sidebar": "Onroad engaged with the quick-controls sheet open",
   "onroad_engaged": "Onroad, engaged, lead car, 65 mph, set speed 70",
   "onroad_disengaged": "Onroad, cruise available but disengaged",
   "onroad_override": "Onroad, driver overriding (gas/steer)",
@@ -764,6 +765,8 @@ class Scene:
     return self.main_mod.MainState
 
   def settings_layout(self):
+    if hasattr(self.main, "_settings"):  # Console shell hosts the settings panels
+      return self.main._settings
     return self.main._layouts[self.MainState.SETTINGS]
 
   def panel_types(self):
@@ -813,12 +816,20 @@ def scene_params(name: str) -> dict:
 def run_scene(sc: Scene):
   name = sc.name
   d = default_drive()
-  if name in ("home", "home_alerts", "settings", "settings_panels"):
+  if name in ("standby", "home", "home_alerts", "settings", "settings_panels"):
     sc.drive = None
   else:
     sc.drive = d
 
-  if name == "home":
+  if name in ("standby", "home", "home_alerts"):
+    _inject_last_known()
+
+  if name == "standby":
+    sc.settle()
+    sc.shot()
+  elif name == "home":
+    if hasattr(sc.main, "_open_shell"):
+      sc.main._open_shell()
     sc.settle()
     sc.shot()
   elif name == "home_alerts":
@@ -827,6 +838,8 @@ def run_scene(sc: Scene):
     set_offroad_alert("Offroad_IsTakingSnapshot", True)
     sc.put("UpdateAvailable", True)
     sc.put("UpdaterNewDescription", "6.0.1 / bp-6.0 / 0a1b2c3 / Oct 20")
+    if hasattr(sc.main, "_open_shell"):
+      sc.main._open_shell()
     home = sc.main._layouts[sc.MainState.HOME]
     if hasattr(home, "last_refresh"):
       home.last_refresh = 0
@@ -873,12 +886,29 @@ def run_scene(sc: Scene):
                road_name="Interstate 94", speed_limit_mph=65, steer_torque=0.45)
     sc.settle()
     if name == "sidebar":
-      sc.main._sidebar.set_visible(True)
+      if hasattr(sc.main, "_quick"):
+        sc.main._quick.open()
+      else:
+        sc.main._sidebar.set_visible(True)
       sc.step(max(20, sc.frames // 4))
     if name == "onroad_debug_panel":
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _inject_last_known():
+  """Parked screens show the last truck data seen; seed one as if the truck had just been driven."""
+  from bluepilot.ui.lib import ev_data
+  snap = ev_data.EvSnapshot(available=True, soc=74.0, range_km=74.0 / 100 * 131000 / 300.0, pack_temp_c=22.0,
+                            tire_kpa=[262.0, 262.0, 255.0, 258.0], lv_volts=12.6)
+  orig = ev_data.EvDataSource.__init__
+
+  def init(self, *a, **kw):
+    orig(self, *a, **kw)
+    self.last_good = snap
+
+  ev_data.EvDataSource.__init__ = init
 
 
 def _inject_charge(name: str):

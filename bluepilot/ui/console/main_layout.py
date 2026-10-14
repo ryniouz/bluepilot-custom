@@ -1,0 +1,163 @@
+"""
+Console main layout for the comma 3X.
+
+  STANDBY   parked splash (clock, charge, readiness); any tap opens the shell
+  SHELL     rail navigation: Home, Drive, Energy, Screen, Connect, System
+  ONROAD    full-camera driving view; a tap opens the quick-controls sheet
+  CHARGING  charging page; takes over while the truck is plugged in
+
+Replaces the stock sidebar + home + settings arrangement. Every settings panel is still the
+original widget, hosted inside the shell's sections.
+"""
+
+from __future__ import annotations
+
+from enum import IntEnum
+
+import pyray as rl
+
+import cereal.messaging as messaging
+from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
+from openpilot.selfdrive.ui.layouts.settings import settings as _settings_mod
+from openpilot.selfdrive.ui.ui_state import device, ui_state
+from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.widgets import Widget
+
+from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP
+from openpilot.selfdrive.ui.bp.onroad.charging_view import ChargingView
+from bluepilot.ui.widgets.debug import ControlsDebugPanel
+from bluepilot.ui.console.home import ConsoleHome
+from bluepilot.ui.console.quick_controls import QuickControls
+from bluepilot.ui.console.shell import ConsoleShell, Dest
+from bluepilot.ui.console.standby import ConsoleStandby
+
+if gui_app.sunnypilot_ui():
+  from openpilot.selfdrive.ui.sunnypilot.layouts.settings.settings import SettingsLayoutSP as SettingsLayout
+else:
+  from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout
+
+
+class MainState(IntEnum):
+  STANDBY = 0
+  SHELL = 1
+  ONROAD = 2
+  CHARGING = 3
+  # Older names, kept for tools that drive the UI
+  HOME = 1
+  SETTINGS = 1
+
+
+class ConsoleMainLayout(Widget):
+  def __init__(self):
+    super().__init__()
+    self._pm = messaging.PubMaster(['bookmarkButton'])
+
+    self._settings = SettingsLayout()
+    self._home = ConsoleHome()
+    self._shell = ConsoleShell(self._settings, self._home)
+    self._layouts = {
+      MainState.STANDBY: ConsoleStandby(),
+      MainState.SHELL: self._shell,
+      MainState.ONROAD: AugmentedRoadViewBP(),
+      MainState.CHARGING: ChargingView(),
+    }
+    self._current_mode = MainState.STANDBY
+    self._prev_onroad = False
+    self._prev_charging = False
+
+    self._debug_panel = ControlsDebugPanel()
+    self._quick = QuickControls()
+    self._quick.on_bookmark = self._on_bookmark_clicked
+    self._quick.on_diagnostics = self._debug_panel.toggle_visibility
+
+    self._home.on_open_drive = lambda: self._shell.go(Dest.DRIVE, 0)
+    self._home.on_open_assist = lambda: self._shell.go(Dest.DRIVE, 0)
+    self._home.on_open_software = lambda: self.open_settings(_settings_mod.PanelType.SOFTWARE)
+
+    self._layouts[MainState.STANDBY].set_click_callback(lambda: self._open_shell(Dest.HOME))
+    self._layouts[MainState.ONROAD].set_click_callback(self._on_onroad_clicked)
+    self._layouts[MainState.CHARGING].set_click_callback(self._on_charging_clicked)
+    device.add_interactive_timeout_callback(self._on_interactive_timeout)
+
+    gui_app.push_widget(self)
+
+    self._onboarding_window = OnboardingWindow()
+    if not self._onboarding_window.completed:
+      gui_app.push_widget(self._onboarding_window)
+
+    self._set_mode_for_state()
+
+  # -- state ----------------------------------------------------------------------
+
+  def _render(self, rect):
+    self._handle_transitions()
+    self._layouts[self._current_mode].render(rect)
+    if self._current_mode == MainState.ONROAD:
+      self._quick.render(rect)
+      if self._debug_panel.is_panel_visible:
+        self._debug_panel.render(rect)
+
+  def _handle_transitions(self):
+    charging = bool(getattr(ui_state, "charging_screen", False))
+    if ui_state.started != self._prev_onroad or charging != self._prev_charging:
+      self._prev_onroad = ui_state.started
+      self._prev_charging = charging
+      if not (self._current_mode == MainState.SHELL and not ui_state.started and not charging):
+        self._set_mode_for_state()
+
+  def _set_mode_for_state(self):
+    if getattr(ui_state, "charging_screen", False):
+      self._set_current_layout(MainState.CHARGING)
+    elif ui_state.started:
+      self._quick.close()
+      self._set_current_layout(MainState.ONROAD)
+    else:
+      self._set_current_layout(MainState.STANDBY)
+
+  def _set_current_layout(self, mode: MainState):
+    if mode != self._current_mode:
+      self._layouts[self._current_mode].hide_event()
+      self._current_mode = mode
+      self._layouts[self._current_mode].show_event()
+
+  def _on_interactive_timeout(self):
+    # Parked and idle: back to the standby splash (driving and charging keep their screens)
+    if not ui_state.started and not getattr(ui_state, "charging_screen", False):
+      self._shell.go(Dest.HOME)
+      self._set_current_layout(MainState.STANDBY)
+
+  # -- navigation -----------------------------------------------------------------
+
+  def _open_shell(self, dest: Dest = Dest.HOME):
+    self._shell.go(dest)
+    self._set_current_layout(MainState.SHELL)
+
+  def open_settings(self, panel_type):
+    self._set_current_layout(MainState.SHELL)
+    if not self._shell.open_panel(panel_type):
+      self._shell.go(Dest.SYSTEM, 0)
+
+  def _on_onroad_clicked(self):
+    if self._debug_panel.is_panel_visible:
+      return
+    pos = rl.get_mouse_position()
+    if self._quick.visible:
+      self._quick.handle_tap(pos)
+    else:
+      self._quick.open()
+
+  def _on_charging_clicked(self):
+    session = getattr(ui_state, "charge_session", None)
+    if session is not None:
+      session.dismissed = True
+    ui_state.charging_screen = False
+    self._prev_charging = False
+    if ui_state.started:
+      self._set_current_layout(MainState.ONROAD)
+    else:
+      self._open_shell(Dest.HOME)
+
+  def _on_bookmark_clicked(self):
+    msg = messaging.new_message('bookmarkButton')
+    msg.valid = True
+    self._pm.send('bookmarkButton', msg)

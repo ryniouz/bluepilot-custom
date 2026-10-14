@@ -5,7 +5,7 @@ Replaces the driving view while the truck reports AC or DC charging and is stand
 (ChargeSession in bluepilot/ui/lib/ev_data.py decides when). A tap returns to the driving view
 for the rest of the session; driving off or the charge ending returns it automatically.
 
-  left   charge state, big SOC with a target marker, time to full
+  left   charge state, SOC ring with the target marked, target and time to full
   right  tiles: charging power (with session peak), energy added, elapsed time, range,
          battery temperature, 12 V
 """
@@ -21,7 +21,8 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.lib.ev_data import EvSnapshot, ChargeSession, finite, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
-from bluepilot.ui.lib.theme import Console, Radius, draw_bar, draw_panel, draw_status_dot
+from bluepilot.ui.console import draw as D
+from bluepilot.ui.lib.theme import Console, Radius, draw_panel, draw_status_dot
 
 KM_TO_MI = 0.621371
 
@@ -109,33 +110,34 @@ class ChargingView(Widget):
       warn = s.charge_inhibit_thermal or s.charge_status in WARN_STATES
       self._text(sub, r.x + 44, r.y + 76, 40, Console.WARNING if warn else Console.TEXT_MUTED)
 
-    # Big SOC
-    soc_y = r.y + 170
-    if finite(s.soc):
-      self._value_unit(r.x, soc_y, f"{s.soc:.0f}", "%", 260, 96)
-    else:
-      self._text("--", r.x, soc_y, 260, Console.TEXT_GHOST, semi=True)
-    self._text("Battery", r.x, soc_y + 292, 40, Console.TEXT_MUTED)
-
-    # SOC bar with target marker
-    bar = rl.Rectangle(r.x, soc_y + 370, r.width, 28)
+    # SOC ring with the charge target marked
+    ring_r = min(r.width * 0.5 - 20, (r.height - 360) * 0.5)
+    cx, cy = r.x + ring_r + 10, r.y + 150 + ring_r
     frac = s.soc / 100.0 if finite(s.soc) else 0.0
     fill = Console.DANGER if finite(s.soc) and s.soc < 10 else Console.SUCCESS
-    draw_bar(bar, frac, fill)
-    if finite(s.charge_target_soc) and 0 < s.charge_target_soc <= 100:
-      tx = bar.x + bar.width * s.charge_target_soc / 100.0
-      rl.draw_rectangle_rec(rl.Rectangle(tx - 3, bar.y - 12, 6, bar.height + 24), Console.TEXT_PRIMARY)
+    target = s.charge_target_soc / 100.0 if finite(s.charge_target_soc) and 0 < s.charge_target_soc <= 100 else None
+    D.ring_gauge(cx, cy, ring_r, 40, frac, fill, marker=target)
+    if finite(s.soc):
+      value, unit = f"{s.soc:.0f}", "%"
+      w = self._width(value, 200, semi=True) + 10 + self._width(unit, 72)
+      self._value_unit(cx - w / 2, cy - 130, value, unit, 200, 72)
+    else:
+      D.text_center("--", cx, cy - 130, 200, Console.TEXT_GHOST, semi=True)
+    D.text_center("Battery", cx, cy + 90, 40, Console.TEXT_MUTED)
 
-    # Target and time to full
-    row_y = bar.y + bar.height + 32
+    # Target and time to full, beside the ring
+    tx = cx + ring_r + 56
+    ty = cy - 110
     if finite(s.charge_target_soc):
-      self._text(f"Target {s.charge_target_soc:.0f} %", r.x, row_y, 44, Console.TEXT_SECONDARY)
+      self._text("Target", tx, ty, 36, Console.TEXT_MUTED)
+      self._value_unit(tx, ty + 46, f"{s.charge_target_soc:.0f}", "%", 72, 36)
+      ty += 160
     if finite(s.charge_time_to_full_min) and s.charge_time_to_full_min > 0:
-      t = f"Done in {_fmt_duration(s.charge_time_to_full_min)}"
-      self._text(t, r.x + r.width - self._width(t, 44), row_y, 44, Console.TEXT_SECONDARY)
+      self._text("Done in", tx, ty, 36, Console.TEXT_MUTED)
+      self._text(_fmt_duration(s.charge_time_to_full_min), tx, ty + 46, 60, Console.TEXT_PRIMARY, semi=True)
 
     # Footer hint
-    hint = "Tap to show the driving view"
+    hint = "Tap to show the driving view" if ui_state.started else "Tap to open Home"
     self._text(hint, r.x, r.y + r.height - 40, 36, Console.TEXT_GHOST)
 
   def _tile(self, rect: rl.Rectangle, label: str, value: str, unit: str = "", sub: str = "",
