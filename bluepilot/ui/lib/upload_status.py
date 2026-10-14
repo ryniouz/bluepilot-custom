@@ -78,27 +78,38 @@ def _athena_online() -> bool | None:
   return ping != 0 and time.monotonic_ns() - ping < ATHENA_FRESH_NS
 
 
+def comma_wifi_only(params: Params) -> bool:
+  """BPCommaConnectWifiOnly (stream C) holds every comma upload for unmetered Wi-Fi. Without it, stock
+  GsmMetered only holds the bigger files; qlogs still go over LTE."""
+  if has_param(params, "BPCommaConnectWifiOnly"):
+    return bool(_param(params, "BPCommaConnectWifiOnly", True))
+  return bool(_param(params, "GsmMetered", True))
+
+
 def comma_connect(params: Params, idx: DriveIndex) -> Service:
   nt, metered = _network()
-  online = _athena_online()
-  off = has_param(params, "BPCommaConnect") and not _param(params, "BPCommaConnect", True)
+  svc = bridge.get("services", "commaConnect")
+  svc = svc if isinstance(svc, dict) else None
+  online = bool(svc.get("connected")) if svc and "connected" in svc else _athena_online()
+  wifi_only = comma_wifi_only(params)
   rows = [
     (tr("Waiting to upload"), f"{idx.connect_pending} " + tr("files") + f" · {fmt_bytes(idx.connect_pending_bytes)}"),
     (tr("Uploaded"), f"{idx.connect_sent} " + tr("files")),
-    (tr("Uploads on"), tr("Wi-Fi only") if bool(_param(params, "GsmMetered", True)) else tr("Wi-Fi and LTE")),
+    (tr("Uploads on"), tr("Wi-Fi only") if wifi_only else tr("Wi-Fi and LTE")),
   ]
-  note = tr("Driving logs and the small road video. Full video goes only when you ask for it in comma connect.")
-  if off:
-    return Service(tr("comma connect"), tr("Turned off"), Console.TEXT_GHOST, rows, note)
+  note = tr("Logs and the small road video. Full video only when you ask for it.")
+  name = tr("comma connect")
+  if svc and str(svc.get("state")) == "off":
+    return Service(name, tr("Turned off"), Console.TEXT_GHOST, rows, note)
+  if svc and str(svc.get("pausedReason")) == "not_registered":
+    return Service(name, tr("Device not registered"), Console.WARNING, rows, note)
   if online is False or nt == "none":
-    state, color = tr("Offline"), Console.TEXT_GHOST
-  elif idx.connect_pending == 0 and idx.scanned_at:
-    state, color = tr("Everything is uploaded"), Console.SUCCESS
-  elif nt == "wifi" and not metered:
-    return Service(tr("comma connect"), tr("Uploading on Wi-Fi"), Console.ACCENT, rows, note, active=True)
-  else:
-    state, color = tr("Waiting for Wi-Fi"), Console.WARNING
-  return Service(tr("comma connect"), state, color, rows, note)
+    return Service(name, tr("Offline"), Console.TEXT_GHOST, rows, note)
+  if idx.connect_pending == 0 and idx.scanned_at:
+    return Service(name, tr("Everything is uploaded"), Console.SUCCESS, rows, note)
+  if (svc and str(svc.get("state")) == "uploading") or (nt == "wifi" and not metered) or (not wifi_only and nt != "none"):
+    return Service(name, tr("Uploading"), Console.ACCENT, rows, note, active=True)
+  return Service(name, tr("Waiting for Wi-Fi"), Console.WARNING, rows, note)
 
 
 def citadel_configured(params: Params) -> bool:
@@ -109,7 +120,9 @@ def citadel_configured(params: Params) -> bool:
 
 def citadel_live(params: Params) -> Service:
   """Live uploads while driving (Road Trip Mode), LTE allowed."""
-  rt = bridge.get("roadTrip")
+  rt = bridge.get("services", "citadel")
+  if not isinstance(rt, dict):
+    rt = bridge.get("roadTrip")
   enabled = bool(rt.get("enabled")) if isinstance(rt, dict) else \
     (has_param(params, "BPRoadTripMode") and bool(_param(params, "BPRoadTripMode", False)))
   rows: list[tuple[str, str]] = []
@@ -120,6 +133,11 @@ def citadel_live(params: Params) -> Service:
     rows.append((tr("Sent today"), f"{int(today.get('files') or 0)} " + tr("files") + f" · {fmt_bytes(int(today.get('bytes') or 0))}"))
   video = bool(rt.get("video")) if isinstance(rt, dict) else bool(_param(params, "BPRoadTripVideo", 0)) if has_param(params, "BPRoadTripVideo") else False
   rows.append((tr("Sends"), tr("Logs and low-res video") if video else tr("Logs only")))
+  if isinstance(rt, dict) and "cellular" in rt:
+    cell = bool(rt.get("cellular"))
+  else:
+    cell = bool(_param(params, "BPRoadTripCellular", True)) if has_param(params, "BPRoadTripCellular") else True
+  rows.append((tr("Uploads on"), tr("Wi-Fi and LTE") if cell else tr("Wi-Fi only")))
   note = tr("Sends while you drive, over LTE when allowed. Separate from comma connect.")
   if not citadel_configured(params):
     return Service(tr("Citadel live upload"), tr("Waiting for your server"), Console.TEXT_GHOST, rows, note)
@@ -134,7 +152,8 @@ def citadel_live(params: Params) -> Service:
     return Service(tr("Citadel live upload"), tr("Uploading") + pct, Console.ACCENT, rows, note, active=True)
   if state == "paused":
     reason = {"no_network": tr("no signal"), "no_server": tr("server not reachable"), "over_limit": tr("data limit reached"),
-              "server_error": tr("server error"), "parked": tr("parked"), "disabled": tr("turned off")}.get(str(rt.get("pausedReason")), "")
+              "server_error": tr("server error"), "parked": tr("parked"), "disabled": tr("turned off"),
+              "wifi_only": tr("waiting for Wi-Fi")}.get(str(rt.get("pausedReason")), "")
     return Service(tr("Citadel live upload"), tr("Paused") + (f": {reason}" if reason else ""), Console.WARNING, rows, note)
   if state == "waiting":
     return Service(tr("Citadel live upload"), tr("Waiting for a connection"), Console.WARNING, rows, note)

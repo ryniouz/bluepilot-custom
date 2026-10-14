@@ -4,8 +4,8 @@ Console Cellular page (Connect > Cellular), laid out like a phone's mobile-data 
   Network     carrier, signal, technology and band, SIM and modem identity
   Data usage  this month against the optional limit, today, and what the uploads used
   Settings    only controls the comma really supports:
-                Citadel uploads on LTE   BPRoadTripMode (export bridge; shown once its keys exist)
-                comma connect Wi-Fi only GsmMetered: comma's uploader holds big files off metered links
+                Citadel uploads          BPRoadTripMode, BPRoadTripCellular (export bridge; shown once its keys exist)
+                comma connect Wi-Fi only BPCommaConnectWifiOnly (bridge) or, without it, stock GsmMetered
                 Data roaming             GsmRoaming, applied to the NetworkManager LTE connection
                 Personal hotspot         Wi-Fi tethering through the Wi-Fi manager
                 APN                      GsmApn, blank means automatic
@@ -37,7 +37,7 @@ from bluepilot.ui.lib import bridge_status as bridge
 from bluepilot.ui.lib.modem_info import mask, modem_info
 from bluepilot.ui.lib.net_usage import usage
 from bluepilot.ui.lib.theme import Console
-from bluepilot.ui.lib.upload_status import citadel_configured, fmt_bytes
+from bluepilot.ui.lib.upload_status import citadel_configured, comma_wifi_only, fmt_bytes
 
 GAP = 32
 ROW = 70
@@ -191,7 +191,7 @@ class CellularPage(Widget):
       y = self._row(r, y, tr("Everything else"), fmt_bytes(max(0, month - cit)))
     else:
       y = self._row(r, y, tr("Citadel uploads"), tr("Off"), Console.TEXT_GHOST)
-    y = self._row(r, y, tr("comma connect"), tr("Logs") if bool(_param(self._params, "GsmMetered", True)) else tr("Allowed"))
+    y = self._row(r, y, tr("comma connect"), tr("Wi-Fi only") if comma_wifi_only(self._params) else tr("Allowed"))
     if not isinstance(cell, dict):
       for i, ln in enumerate(D.wrap(tr("Counted on this device. Your carrier may count differently."),
                                     D.LABEL, r.width - 2 * p, 3)):
@@ -229,15 +229,24 @@ class CellularPage(Widget):
     if has_param(self._params, "BPRoadTripMode"):
       configured = citadel_configured(self._params)
       on = bool(_param(self._params, "BPRoadTripMode", False))
-      y = self._set_row(r, y, tr("Citadel"),
-                        tr("Live uploads over LTE") if configured else tr("Needs your Citadel server"),
+      y = self._set_row(r, y, tr("Citadel uploads"),
+                        tr("Road Trip Mode") if configured else tr("Needs your Citadel server"),
                         on and configured, lambda: self._params.put_bool("BPRoadTripMode", not on), enabled=configured)
+      if has_param(self._params, "BPRoadTripCellular"):
+        cell = bool(_param(self._params, "BPRoadTripCellular", True))
+        y = self._set_row(r, y, tr("Citadel over LTE"), tr("Off: waits for Wi-Fi"), cell and on and configured,
+                          lambda: self._params.put_bool("BPRoadTripCellular", not cell), enabled=on and configured)
     else:
-      y = self._set_row(r, y, tr("Citadel"), tr("LTE uploads soon"), False, None, enabled=False)
+      y = self._set_row(r, y, tr("Citadel uploads"), tr("LTE uploads soon"), False, None, enabled=False)
 
-    metered = bool(_param(self._params, "GsmMetered", True))
-    y = self._set_row(r, y, tr("comma connect"), tr("Also upload over LTE"), not metered,
-                      lambda: self._put_gsm(metered=not metered))
+    if has_param(self._params, "BPCommaConnectWifiOnly"):
+      wo = bool(_param(self._params, "BPCommaConnectWifiOnly", True))
+      y = self._set_row(r, y, tr("comma connect"), tr("Uploads on Wi-Fi only"), wo,
+                        lambda: self._params.put_bool("BPCommaConnectWifiOnly", not wo))
+    else:
+      metered = bool(_param(self._params, "GsmMetered", True))
+      y = self._set_row(r, y, tr("comma connect"), tr("Also upload over LTE"), not metered,
+                        lambda: self._put_gsm(metered=not metered))
     roaming = bool(_param(self._params, "GsmRoaming", False))
     y = self._set_row(r, y, tr("Data roaming"), tr("Other carriers' networks"), roaming,
                       lambda: self._put_gsm(roaming=not roaming))

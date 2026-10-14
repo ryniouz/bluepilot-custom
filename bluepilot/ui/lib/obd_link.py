@@ -18,7 +18,7 @@ from openpilot.common.params import Params
 
 SERVICE = "obdStateBP"
 DEFAULT_WIFI = "192.168.0.10:35000"
-TRANSPORTS = ("wifi", "usb", "bluetooth")
+TRANSPORTS = ("wifi", "usb", "bluetooth", "simulated")
 STALE_S = 5.0
 
 
@@ -107,6 +107,13 @@ class ObdLink:
     if isinstance(v, bytes):
       v = v.decode(errors="ignore")
     return default if v is None else v
+
+  def has(self, key: str) -> bool:
+    return _has_param(self._params, key)
+
+  def put_bool(self, key: str, v: bool):
+    if self.has(key):
+      self._params.put_bool(key, v)
 
   def configure(self, transport: str, address: str):
     if not self.available():

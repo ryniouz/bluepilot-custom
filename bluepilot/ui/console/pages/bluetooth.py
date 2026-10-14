@@ -22,6 +22,7 @@ from collections.abc import Callable
 import pyray as rl
 
 from openpilot.common.params import Params
+from openpilot.system.hardware import TICI
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import DialogResult, Widget
@@ -38,7 +39,7 @@ TABS = ["Devices", "OBD scanner", "Phone"]
 OBD_STEPS = ["Plug in", "Connect", "Test", "Live data"]
 
 
-TRANSPORT_IDX = {"wifi": 0, "usb": 1, "bluetooth": 2}
+TRANSPORT_IDX = {"wifi": 0, "usb": 1, "bluetooth": 2, "simulated": 3}
 
 
 def _text(v) -> str:
@@ -146,9 +147,10 @@ class BluetoothPage(Widget):
     p = D.CARD_PAD
     x, right = r.x + p, r.x + r.width - p
     if not devices:
-      msg = st.message or (tr("Search to find devices nearby.") if st.adapter and st.tool else tr("Nothing to show without Bluetooth."))
-      D.text(msg, x, y + 8, D.BODY, Console.TEXT_MUTED)
-      return y + 64
+      usable = st.adapter and st.tool
+      msg = st.message or (tr("Search to find devices nearby.") if usable else
+                           tr("The comma's OS is built without Bluetooth, so there is nothing to search with yet."))
+      return self._para(r, x, y + 8, msg, D.BODY, Console.TEXT_MUTED, 3) + 14
     for d in devices:
       if y + DEV_ROW > r.y + r.height - p - D.CONTROL_H - 16:
         break
@@ -176,7 +178,8 @@ class BluetoothPage(Widget):
       D.button(b, tr("Search for devices"), primary=True)
       self._hits.append((b, bluetooth().scan))
     else:
-      D.button(b, tr("Search for devices"), primary=False)
+      in_dev(b.x, b.y + (D.CONTROL_H - 40) / 2)
+      D.text(tr("Needs Bluetooth in the comma's OS"), b.x + 220, b.y + (D.CONTROL_H - D.LABEL) / 2, D.LABEL, Console.TEXT_MUTED)
 
   def _devices_tab(self, r: rl.Rectangle, st):
     D.card(r)
@@ -225,7 +228,8 @@ class BluetoothPage(Widget):
 
   def _obd_connect(self, r, x, right, y, st, link, snap):
     seg = rl.Rectangle(x, y, right - x, 72)
-    for i, sr in enumerate(D.segmented(seg, [tr("Wi-Fi"), tr("USB"), tr("Bluetooth")], self._obd_kind, size=D.LABEL)):
+    kinds = [tr("Wi-Fi"), tr("USB"), tr("Bluetooth")] + ([] if TICI else [tr("Simulated")])
+    for i, sr in enumerate(D.segmented(seg, kinds, self._obd_kind, size=D.LABEL)):
       self._hits.append((sr, lambda i=i: self._set_obd_kind(i)))
     y += 72 + 28
     ready = link.available()
@@ -253,6 +257,10 @@ class BluetoothPage(Widget):
       self._para(r, x, y, tr("Plug the adapter's USB cable into the comma. It shows here a few seconds later. " +
                              "If several are found, the first one is used."), D.LABEL, Console.TEXT_MUTED, 3)
       go = lambda: self._connect(link, "usb", devs[0] if devs else "")  # noqa: E731
+    elif self._obd_kind == 3:
+      y = self._para(r, x, y, tr("A pretend adapter that answers like a parked, charging Lightning. For the PC simulator only."),
+                     D.LABEL, Console.TEXT_MUTED, 3)
+      go = lambda: self._connect(link, "simulated", "")  # noqa: E731
     else:
       if st.adapter and st.tool:
         obd = [d for d in st.devices if d.looks_like_obd] or st.devices
@@ -283,7 +291,7 @@ class BluetoothPage(Widget):
     if snap.message:
       y = self._para(r, x, y, snap.message, D.LABEL, Console.TEXT_MUTED, 2) + 8
     kind = _text(link.get("BPObdTransport", "wifi"))
-    rows = [(tr("Connection"), {"wifi": tr("Wi-Fi"), "usb": tr("USB"), "bluetooth": tr("Bluetooth")}.get(kind, kind)),
+    rows = [(tr("Connection"), {"wifi": tr("Wi-Fi"), "usb": tr("USB"), "bluetooth": tr("Bluetooth"), "simulated": tr("Simulated")}.get(kind, kind)),
             (tr("Address"), _text(link.get("BPObdAddress", "")) or tr("Automatic")),
             (tr("Adapter"), snap.adapter or "–"),
             (tr("Protocol"), snap.protocol or "–")]
@@ -299,6 +307,14 @@ class BluetoothPage(Widget):
 
   def _obd_live(self, r, x, right, y, st, link, snap):
     bottom = r.y + r.height - D.CARD_PAD - D.CONTROL_H - 24
+    if link.has("BPObdPollWhenOff"):
+      bottom -= 96
+      when_off = bool(link.get("BPObdPollWhenOff", False))
+      K.hline(x, right, bottom + 8)
+      D.text(tr("Read while the truck is off"), x, bottom + 20, D.LABEL, semi=True)
+      D.text(tr("May drain the 12 V battery"), x, bottom + 56, D.LABEL - 4, Console.TEXT_MUTED)
+      tg = D.toggle(right - 104, bottom + 26, when_off)
+      self._hits.append((tg, lambda: link.put_bool("BPObdPollWhenOff", not when_off)))
     if not snap.polling and snap.received:
       y = self._para(r, x, y, tr("Paused while the truck is off and not charging, to spare the 12 V battery."),
                      D.LABEL, Console.TEXT_MUTED, 2) + 8
@@ -321,7 +337,8 @@ class BluetoothPage(Widget):
     in_dev(right - 200, r.y + p + 2)
     y = r.y + p + 84
     phone = saved(self._params, "BPPhoneLink")
-    steps = [(tr("Pair your Android phone"), tr("Paired with") + f" {phone['name']}" if phone else tr("Choose it below"), bool(phone)),
+    pick = tr("Choose it below") if st.adapter and st.tool else tr("Needs Bluetooth in the comma's OS")
+    steps = [(tr("Pair your Android phone"), tr("Paired with") + f" {phone['name']}" if phone else pick, bool(phone)),
              (tr("Open the EV app on the phone"), tr("The app side is still to be built"), False),
              (tr("Live truck data on the phone"), tr("Charge, range, tires and trips while you drive"), False)]
     for i, (title, sub, done) in enumerate(steps):
