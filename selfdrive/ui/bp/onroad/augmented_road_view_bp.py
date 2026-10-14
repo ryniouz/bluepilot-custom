@@ -1,3 +1,4 @@
+import numpy as np
 import time
 import pyray as rl
 from cereal import log, messaging
@@ -20,11 +21,22 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
 from openpilot.selfdrive.ui.ui_state import UIStatus
-from bluepilot.ui.lib.theme import Console
+from openpilot.selfdrive.ui.onroad.augmented_road_view import DEFAULT_DEVICE_CAMERA, INF_POINT, WIDE_CAM
+from bluepilot.ui.lib.theme import Console, Onroad, with_alpha
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
 # BluePilot: Margin to keep confidence ball inside the colored border
 BALL_BORDER_MARGIN = UI_BORDER_SIZE // 2  # 15px
+
+# Custom: engagement glow (replaces the 30 px border)
+GLOW_W = 52
+GLOW_ALPHA = 0x9C
+STATE_GLOW = {
+  UIStatus.ENGAGED: Onroad.ENGAGED,
+  UIStatus.OVERRIDE: Onroad.OVERRIDE,
+  UIStatus.LAT_ONLY: Onroad.LAT_ONLY,
+  UIStatus.LONG_ONLY: Onroad.LONG_ONLY,
+}
 
 class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
   """BluePilot AugmentedRoadView with blindspot indicators, gauges, and BP renderers."""
@@ -55,6 +67,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._confidence_ball = ConsoleConfidence()
     self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
     self._param_counter = 0
+    self._guest = self._read_guest()
 
   def update_fade_out_bottom_overlay(self, _content_rect):
     """BluePilot: Skip MICI fade overlay on TICI — causes unwanted black gradient at bottom."""
@@ -70,6 +83,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._param_counter += 1
     if self._param_counter >= 60:
       self._param_counter = 0
+      self._guest = self._read_guest()
       self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
 
     self._switch_stream_if_needed(ui_state.sm)
@@ -77,24 +91,17 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # Custom: Console layout preset filters optional overlays for this frame
     preset = current_preset()
-    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL
+    show_ball = self._show_confidence_ball and preset != LayoutPreset.MINIMAL and not self._guest
+    self._hud_renderer.guest = self.alert_renderer.guest = self._guest
 
-    # Create inner content area with border padding
-    self._content_rect = rl.Rectangle(
-      rect.x + UI_BORDER_SIZE,
-      rect.y + UI_BORDER_SIZE,
-      rect.width - 2 * UI_BORDER_SIZE,
-      rect.height - 2 * UI_BORDER_SIZE,
-    )
+    # Custom: the camera fills the whole screen (no border frame); the UI keeps its inset
+    self._content_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
+    inset = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
+                         rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
 
     # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
     ball_offset = (ConsoleConfidence.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
-    ui_rect = rl.Rectangle(
-      self._content_rect.x + ball_offset,
-      self._content_rect.y,
-      self._content_rect.width - ball_offset,
-      self._content_rect.height,
-    )
+    ui_rect = rl.Rectangle(inset.x + ball_offset, inset.y, inset.width - ball_offset, inset.height)
 
     bp_ui_log.scissor("AugRoadView", "begin",
                        x=int(self._content_rect.x), y=int(self._content_rect.y),
@@ -110,7 +117,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     CameraView._render(self, rect)
 
     # Render model (uses full content rect for camera-space overlays)
-    self.model_renderer.render(self._content_rect)
+    # Custom: no path or lead marker on a Guest Mode drive (openpilot is not driving)
+    if not self._guest:
+      self.model_renderer.render(self._content_rect)
 
     # SP fade overlay
     self.update_fade_out_bottom_overlay(self._content_rect)
@@ -140,7 +149,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._hud_renderer.render(ui_rect)
 
     # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
-    lead = self.model_renderer.lead_info
+    lead = None if self._guest else self.model_renderer.lead_info
     if lead is not None and preset != LayoutPreset.MINIMAL and road_prefs.on(SHOW_LEAD_CARD):
       details = self._ev_hud.last_rect
       if details is not None:  # Dense: the details card owns the right edge; sit to its left
@@ -161,12 +170,12 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       int(self._content_rect.height)
     )
     # Custom: a prompt or critical card at the bottom covers the tile's corner; the card shows the ask
-    if not alert_blocks_dock:
+    if not alert_blocks_dock and not self._guest:
       self.driver_state_renderer.render(ui_rect)
 
     # BluePilot: stock arc torque bar when the dock (which carries the strip) is hidden.
     # Custom: the Minimal preset hides it.
-    if dock is None and preset != LayoutPreset.MINIMAL:
+    if dock is None and preset != LayoutPreset.MINIMAL and not self._guest:
       torque_rect = ui_rect
       if ui_state.developer_ui in (DeveloperUiState.BOTTOM, DeveloperUiState.BOTH):
         torque_rect = rl.Rectangle(ui_rect.x, ui_rect.y, ui_rect.width, ui_rect.height - get_bottom_dev_ui_offset())
@@ -187,9 +196,11 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     bp_ui_log.scissor("AugRoadView", "end")
     rl.end_scissor_mode()
 
-    # BluePilot: Conditionally draw border
+    # Custom: engagement glow along the screen edges replaces the border frame (BPHideOnroadBorder
+    # still turns it off)
     if not self._bp_params.get_bool("BPHideOnroadBorder"):
-      self._draw_border(rect)
+      if not self._guest:
+        self._draw_state_glow(rect)
 
     # Publish uiDebug
     msg = messaging.new_message('uiDebug')
@@ -212,6 +223,75 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
     draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x,
                         cs.leftBlindspot and cs.leftBlinker, cs.rightBlindspot and cs.rightBlinker)
+
+  def _read_guest(self) -> bool:
+    """Guest Mode drive: BPGuestModeActive is set by the Lightning control stream for the whole
+    drive (card passive, panda noOutput, factory ACC and lane keeping). False on builds that do
+    not have the key yet."""
+    try:
+      return self._bp_params.get_bool("BPGuestModeActive")
+    except UnknownKeyName:
+      return False
+
+  def _calc_frame_matrix(self, rect: rl.Rectangle) -> np.ndarray:
+    """Custom: stock framing, but the zoom never drops below what covers the whole content rect,
+    so the full-screen camera has no bars at the edges (the road camera's 1.1x falls a few
+    pixels short of the panel's width otherwise)."""
+    cache_key = (ui_state.sm.recv_frame['liveCalibration'], self._content_rect.width, self._content_rect.height, self.stream_type)
+    if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
+      return self._cached_matrix
+
+    device_camera = self.device_camera or DEFAULT_DEVICE_CAMERA
+    is_wide_camera = self.stream_type == WIDE_CAM
+    intrinsic = device_camera.ecam.intrinsics if is_wide_camera else device_camera.fcam.intrinsics
+    calibration = self.view_from_wide_calib if is_wide_camera else self.view_from_calib
+
+    x, y = self._content_rect.x, self._content_rect.y
+    w, h = self._content_rect.width, self._content_rect.height
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+    margin = 5
+    zoom = max(2.0 if is_wide_camera else 1.1, (w / 2 + margin + 1) / cx, (h / 2 + margin + 1) / cy)
+
+    calib_transform = intrinsic @ calibration
+    kep = calib_transform @ INF_POINT
+    max_x_offset = cx * zoom - w / 2 - margin
+    max_y_offset = cy * zoom - h / 2 - margin
+    try:
+      if abs(kep[2]) > 1e-6:
+        x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
+        y_offset = np.clip((kep[1] / kep[2] - cy) * zoom, -max_y_offset, max_y_offset)
+      else:
+        x_offset, y_offset = 0, 0
+    except (ZeroDivisionError, OverflowError):
+      x_offset, y_offset = 0, 0
+
+    self._matrix_cache_key = cache_key
+    self._cached_matrix = np.array([
+      [zoom * 2 * cx / w, 0, -x_offset / w * 2],
+      [0, zoom * 2 * cy / h, -y_offset / h * 2],
+      [0, 0, 1.0]
+    ])
+    video_transform = np.array([
+      [zoom, 0.0, (w / 2 + x - x_offset) - (cx * zoom)],
+      [0.0, zoom, (h / 2 + y - y_offset) - (cy * zoom)],
+      [0.0, 0.0, 1.0]
+    ])
+    self.model_renderer.set_transform(video_transform @ calib_transform)
+    return self._cached_matrix
+
+  def _draw_state_glow(self, rect: rl.Rectangle):
+    """A soft wash of the engagement colour fading in from every edge: unmistakable at the edge
+    of vision, nothing over the road when disengaged."""
+    color = STATE_GLOW.get(ui_state.status)
+    if color is None:
+      return
+    a = with_alpha(color, GLOW_ALPHA)
+    clear = with_alpha(color, 0)
+    x, y, w, h, g = int(rect.x), int(rect.y), int(rect.width), int(rect.height), GLOW_W
+    rl.draw_rectangle_gradient_v(x, y, w, g, a, clear)
+    rl.draw_rectangle_gradient_v(x, y + h - g, w, g, clear, a)
+    rl.draw_rectangle_gradient_h(x, y, g, h, a, clear)
+    rl.draw_rectangle_gradient_h(x + w - g, y, g, h, clear, a)
 
   def _draw_border(self, rect: rl.Rectangle):
     """Console: page-ground outer frame, status-coloured inner frame."""

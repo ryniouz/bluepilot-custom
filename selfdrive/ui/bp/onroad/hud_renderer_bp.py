@@ -6,7 +6,8 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, draw_panel, roundness
+from bluepilot.ui.console import draw as D
+from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -29,6 +30,7 @@ CLUSTER_LABEL = 30           # state word, MAX caption (kit CAP)
 CLUSTER_SPEED = 140          # current speed numeral
 CLUSTER_UNIT = 36
 CLUSTER_SET = 72             # set speed numeral
+STATE_BAND_H = 58         # engagement band across the top of the speed card
 CLUSTER_SET_W = 108
 NOTICE_TOP = 24              # notification cards sit level with the speed card
 
@@ -52,6 +54,7 @@ class HudRendererBP(HudRendererSP):
     self.speed_limit_renderer = CanadianSpeedLimit()
     self._signals = SignalTiles()
     self._signals_shown = False
+    self.guest = False             # set by the road view each frame (Guest Mode drive)
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -90,6 +93,17 @@ class HudRendererBP(HudRendererSP):
     preset = current_preset()
 
     self.cluster_rect = self._draw_cluster(rect)
+
+    # Custom: Guest Mode drive (BPGuestModeActive): the truck's factory assist drives and the
+    # comma only records, so nothing that suggests openpilot can engage is drawn
+    if self.guest:
+      self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
+      self._signals_shown = self._signals.render_center(rect.x + rect.width / 2, rect.y + NOTICE_TOP)
+      title, sub = tr("Factory driver assist"), tr("comma recording only")
+      band_l, band_r = self.notify_band(rect)
+      w, h = notice_size(title, sub, band_r - band_l)
+      notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, Console.DANGER, "rec")
+      return
 
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
@@ -149,6 +163,8 @@ class HudRendererBP(HudRendererSP):
     return rl.Rectangle(x, y, rect.width, rect.height)
 
   def _status(self) -> tuple[str, rl.Color]:
+    if self.guest:
+      return tr("Guest mode"), Console.TEXT_GHOST
     if not self.is_cruise_available:
       return tr("Unavailable"), Console.TEXT_GHOST
     status = ui_state.status
@@ -177,7 +193,7 @@ class HudRendererBP(HudRendererSP):
     unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, CLUSTER_UNIT).x
     speed_col = 0.0 if hide_speed else speed_w + 14 + unit_w
 
-    show_set = self.is_cruise_available
+    show_set = self.is_cruise_available and not self.guest
     set_col = CLUSTER_SET_W if show_set else 0.0
     inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
     w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
@@ -185,15 +201,24 @@ class HudRendererBP(HudRendererSP):
     card = rl.Rectangle(x, y, w, CLUSTER_H)
     draw_panel(card, Onroad.PANEL, CLUSTER_RADIUS)
 
-    # State: dot + word (Console status is always a word, never colour alone)
-    word, dot = self._status()
+    # State band: the top of the card fills with the engagement colour and names the state, so
+    # the state reads at a glance without a full-screen border (Off / Ready / Unavailable stay
+    # neutral)
+    word, color = self._status()
     if sla_active and self.is_cruise_set:
-      word, dot = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
-    rl.draw_circle(int(x + CLUSTER_PAD + 9), int(y + CLUSTER_PAD + 17), 9, dot)
-    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 30, y + CLUSTER_PAD), CLUSTER_LABEL, 0,
-                    Console.TEXT_SECONDARY)
+      word, color = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
+    active = not self.guest and (ui_state.status != UIStatus.DISENGAGED or (sla_active and self.is_cruise_set))
+    band = rl.Rectangle(x, y, w, STATE_BAND_H)
+    rl.draw_rectangle_rounded(band, roundness(band, CLUSTER_RADIUS), 10, color if active else Console.BG_RAISED)
+    rl.draw_rectangle_rec(rl.Rectangle(x, y + STATE_BAND_H - CLUSTER_RADIUS, w, CLUSTER_RADIUS), color if active else Console.BG_RAISED)
+    # day status hues are light, so the band takes dark ink there
+    ink = (Console.FRAME_INK if is_day() else Console.ON_ACCENT) if active else Console.TEXT_SECONDARY
+    icon = "gauge" if ui_state.status == UIStatus.LONG_ONLY else "wheel"
+    D.icon(icon, x + CLUSTER_PAD - 2, y + (STATE_BAND_H - 32) / 2, 32, ink)
+    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 42, y + (STATE_BAND_H - CLUSTER_LABEL) / 2 - 1),
+                    CLUSTER_LABEL, 0, ink)
 
-    body_y = y + CLUSTER_PAD + CLUSTER_LABEL + 6
+    body_y = y + STATE_BAND_H + 6
     cx = x + CLUSTER_PAD
     if not hide_speed:
       # BluePilot: speed turns red while the brake lights are on (ShowBrakeStatus)
