@@ -778,6 +778,11 @@ class BluePilotLayout(Widget):
       pass
     ui_state.layout_preset = int(button_index)
 
+  # Custom: Quick controls also set the layout preset, so the Theme page re-reads it when shown
+  def console_page_refresh(self):
+    self._layout_preset_btn.action_item.set_selected_button(self._layout_preset_idx())
+    self._console_scale_btn.action_item.set_selected_button(self._console_scale_idx())
+
   # Custom: rows the Console shell shows on its own pages
   def console_page_items(self) -> dict[str, list]:
     return {

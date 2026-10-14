@@ -9,10 +9,11 @@ ON_COLOR = Console.ACCENT_FILL
 OFF_COLOR = Console.TOGGLE_OFF
 KNOB_COLOR = Console.TOGGLE_KNOB
 DISABLED_ON_COLOR = Console.ACCENT_TINT_STRONG
-DISABLED_OFF_COLOR = Console.BG_RAISED
+DISABLED_OFF_COLOR = Console.BG_HIGH  # Custom: BG_RAISED matched night cards, hiding the track
 DISABLED_KNOB_COLOR = Console.TEXT_GHOST
 WIDTH, HEIGHT = 160, 80
 BG_HEIGHT = 60
+KNOB_PADDING = 5  # Custom: Console inset knob
 ANIMATION_SPEED = 8.0
 
 
@@ -70,9 +71,13 @@ class Toggle(Widget):
     rl.draw_rectangle_rounded(bg_rect, 1.0, 10, bg_color)
 
     # Draw knob
-    knob_x = self._rect.x + HEIGHT / 2 + (WIDTH - HEIGHT) * self._progress
-    knob_y = self._rect.y + HEIGHT / 2
-    rl.draw_circle(int(knob_x), int(knob_y), HEIGHT / 2, knob_color)
+    # Custom: Console knob sits inside the track (as ToggleSP does). The stock knob overhangs the track,
+    # so in day mode a white knob on a white card vanished and seemed to bite the track's end.
+    knob_r = BG_HEIGHT / 2 - KNOB_PADDING
+    knob_x = bg_rect.x + KNOB_PADDING + knob_r + (bg_rect.width - 2 * (KNOB_PADDING + knob_r)) * self._progress
+    knob_y = bg_rect.y + BG_HEIGHT / 2
+    rl.draw_circle(int(knob_x), int(knob_y), knob_r, knob_color)
+    # Custom: end
 
     # TODO: use click callback
     clicked = self._clicked
