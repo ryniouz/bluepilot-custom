@@ -54,6 +54,8 @@ SCENES: dict[str, str] = {
   "connectivity": "Connect > Status (Wi-Fi, LTE, server and sync, home location)",
   "updates": "System > Updates with an update available from Lucas's repo",
   "calibration": "System > Calibration with a saved calibration and steering lag half learned",
+  "calibration_setup": "System > Calibration wizard: driving step, camera 40 %",
+  "calibration_invalid": "System > Calibration wizard: mount tilted too far",
   "onboarding_welcome": "Console onboarding, welcome step",
   "onboarding_safety": "Console onboarding, safety notice",
   "onboarding_terms": "Console onboarding, terms step",
@@ -1117,7 +1119,7 @@ def run_scene(sc: Scene):
   if name in ("standby", "theme_light", "trips", "trips_empty", "charging_settings", "onroad_display", "display",
               "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
-              "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
+              "calibration", "calibration_setup", "calibration_invalid", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "vehicle_12v",
@@ -1159,13 +1161,13 @@ def run_scene(sc: Scene):
     sc.main._shell.open_panel("connectivity")
     sc.settle()
     sc.shot()
-  elif name == "calibration":
+  elif name in ("calibration", "calibration_setup", "calibration_invalid"):
     import math
     from cereal import messaging as cmsg
     ev = cmsg.new_message("liveCalibration")
-    ev.liveCalibration.calStatus = 1
-    ev.liveCalibration.calPerc = 100
-    ev.liveCalibration.rpyCalib = [0.0, math.radians(2.3), math.radians(-0.8)]
+    ev.liveCalibration.calStatus = {"calibration": 1, "calibration_setup": 0, "calibration_invalid": 2}[name]
+    ev.liveCalibration.calPerc = {"calibration": 100, "calibration_setup": 40, "calibration_invalid": 100}[name]
+    ev.liveCalibration.rpyCalib = [0.0, math.radians(11.2 if name == "calibration_invalid" else 2.3), math.radians(-0.8)]
     sc.put("CalibrationParams", ev.to_bytes())
     lag = cmsg.new_message("liveDelay")
     lag.liveDelay.calPerc = 55
