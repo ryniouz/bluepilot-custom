@@ -69,7 +69,7 @@ class DrivingScreenPage(DrivePage):
     ], note=tr("Quick controls change the road view too: swipe up on the driving screen."))
 
     extras = Section(tr("On the driving view"), "gauge", [
-      self.toggle("ShowBrakeStatus", tr("Speed turns red when braking"), tr("While the brake lights are on")),
+      self.toggle("ShowBrakeStatus", tr("Red speed when braking"), tr("While the brake lights are on")),
       self.toggle("ShowBlindspotOverlay", tr("Blind spot screen edge"), tr("Red glow on that side")),
       self.toggle("BPAnimateSteeringWheel", tr("Turning wheel icon"), tr("Follows the steering angle")),
       self.toggle("BPShowConfidenceBall", tr("Model confidence"), tr("Dot on the left edge")),
