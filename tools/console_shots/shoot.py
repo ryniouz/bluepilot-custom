@@ -72,6 +72,8 @@ SCENES: dict[str, str] = {
   "trips": "Energy > Trips with a week and all-time stats from comma connect",
   "trips_empty": "Energy > Trips before the first drive",
   "charging_settings": "Energy > Charging settings",
+  "onroad_display": "Screen > Onroad display (was sunnypilot Visuals)",
+  "display": "Screen > Display: brightness while driving at a fixed level, settings timeout",
   "home_large": "Home at UI size Large",
   "home_small": "Home at UI size Small",
   "cellular_large": "Connect > Cellular at UI size Large",
@@ -1112,7 +1114,8 @@ def run_scene(sc: Scene):
       ui_scale.set_scale_index(idx)
       name = name[:-len(suffix)]
   d = default_drive()
-  if name in ("standby", "theme_light", "trips", "trips_empty", "charging_settings", "home", "home_alerts", "home_charging", "settings", "settings_panels",
+  if name in ("standby", "theme_light", "trips", "trips_empty", "charging_settings", "onroad_display", "display",
+              "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
@@ -1369,6 +1372,18 @@ def run_scene(sc: Scene):
   elif name == "charging_settings":
     sc.main._open_shell()
     sc.main._shell.open_panel("charging")
+    sc.settle()
+    sc.shot()
+  elif name in ("onroad_display", "display"):
+    if name == "display":
+      sc.put("OnroadScreenOffBrightness", 12)
+      sc.put("OnroadScreenOffTimer", 60)
+      sc.put("InteractivityTimeout", 30)
+    else:
+      for k in ("BlindSpot", "ShowTurnSignals", "RocketFuel", "TorqueBar", "GreenLightAlert"):
+        sc.put(k, True)
+    sc.main._open_shell()
+    sc.main._shell.open_panel(name)
     sc.settle()
     sc.shot()
   elif name == "updates":

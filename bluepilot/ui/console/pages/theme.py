@@ -17,12 +17,11 @@ from collections.abc import Callable
 
 import pyray as rl
 
-from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
-from bluepilot.ui.console.pages.cards import GAP, CardPage, as_int
+from bluepilot.ui.console.form import Custom, FormPage, Note, Section, Toggle
 from bluepilot.ui.lib.layout_presets import PRESET_DESCRIPTIONS, PRESET_LABELS
 from bluepilot.ui.lib.theme import (ACCENT_LABELS, ACCENT_NAMES, ACCENTS, MODE_LABELS, MODE_NAMES, PALETTES, Console,
                                     current_accent, hex_color, is_day, roundness, set_accent)
@@ -30,16 +29,12 @@ from bluepilot.ui.lib.ui_scale import LABELS as SCALE_LABELS, set_scale_index
 
 LABEL_H = 56        # tile caption strip
 TILE_R = 20
-
-
-def _param(params: Params, key: str, default):
-  try:
-    v = params.get(key, return_default=True)
-  except Exception:
-    return default
-  if isinstance(v, bytes):
-    v = v.decode(errors="ignore")
-  return default if v is None else v
+HEAD_H = 60         # a picker's title line
+PICK_GAP = 28       # below a picker, before the next row
+THEME_TILE_H = 200
+SWATCH_H = 124
+SIZE_TILE_H = 150
+LAYOUT_TILE_H = 260
 
 
 def _pal(mode: str, key: str) -> rl.Color:
@@ -143,103 +138,38 @@ def _size_preview(r: rl.Rectangle, i: int):
   D.text_center("Aa", r.x + r.width / 2, r.y + (r.height - size) / 2 - 4, size, semi=True)
 
 
-class ThemePage(CardPage):
-  def __init__(self):
-    super().__init__()
-    self._params = Params()
+def _tiles(x: float, y: float, w: float, h: float, n: int, gap: float = 20) -> list[rl.Rectangle]:
+  tw = (w - gap * (n - 1)) / n
+  return [rl.Rectangle(x + i * (tw + gap), y, tw, h) for i in range(n)]
 
-  def _put(self, key: str, value):
-    try:
-      if isinstance(value, bool):
-        self._params.put_bool(key, value)
-      else:
-        self._params.put(key, value)
-    except Exception:
-      pass
 
-  # -- setters (same effect as the old BluePilot rows) ---------------------------------------
+def _head(r: rl.Rectangle, title: str, note: str = "") -> float:
+  """A picker's title, with a muted note on the right that says what the current choice does."""
+  D.text(title, r.x, r.y + 12, D.BODY, semi=True)
+  if note:
+    tw = D.text_w(title, D.BODY, semi=True)
+    D.text_right(D.fit(note, D.LABEL, r.width - tw - 32), r.x + r.width, r.y + 16, D.LABEL, Console.TEXT_MUTED)
+  return r.y + HEAD_H
 
-  def set_mode(self, i: int):
-    name = MODE_NAMES[i]
-    self._put("BPConsoleMode", name)
-    ui_state.console_mode_pref = name
 
-  def set_accent(self, i: int):
-    name = ACCENT_NAMES[i]
-    self._put("BPConsoleAccent", name)
-    set_accent(name)
+def tile_picker(title: str, note: str, labels: list[str], selected: int, preview: Callable[[rl.Rectangle, int], None],
+                fn: Callable[[int], None], tile_h: float) -> Custom:
+  def draw(r: rl.Rectangle):
+    y = _head(r, title, note)
+    hits = []
+    for i, tr_ in enumerate(_tiles(r.x, y, r.width, tile_h, len(labels))):
+      choice_tile(tr_, labels[i], i == selected, lambda pr, i=i: preview(pr, i))
+      hits.append((tr_, lambda i=i: fn(i)))
+    return hits
+  return Custom(HEAD_H + tile_h + PICK_GAP, draw)
 
-  def set_scale(self, i: int):
-    self._put("BPConsoleScale", i)
-    set_scale_index(i)
 
-  def set_preset(self, i: int):
-    self._put("BPLayoutPreset", i)
-    ui_state.layout_preset = i
-
-  def set_ev_hud(self, on: bool):
-    self._put("BPEvHud", on)
-    ui_state.ev_hud = on
-
-  # -- current values --------------------------------------------------------------------------
-
-  def mode_index(self) -> int:
-    m = str(getattr(ui_state, "console_mode_pref", None) or _param(self._params, "BPConsoleMode", "auto")).lower()
-    return MODE_NAMES.index(m) if m in MODE_NAMES else 0
-
-  def scale_index(self) -> int:
-    return max(0, min(2, as_int(_param(self._params, "BPConsoleScale", 1), 1)))
-
-  def preset_index(self) -> int:
-    return max(0, min(2, int(getattr(ui_state, "layout_preset", 1))))
-
-  # -- render ----------------------------------------------------------------------------------
-
-  def _render(self, rect: rl.Rectangle):
-    self._hits = []
-    left, right = K.split_cols(rect, [1.08, 1.0])
-    left.width -= GAP / 2
-    right.x += GAP / 2
-    right.width -= GAP / 2
-    self._appearance(left)
-    self._driving(right)
-
-  def _row_title(self, x: float, y: float, title: str, note: str = "", right: float = 0) -> float:
-    D.text(title, x, y, D.BODY, semi=True)
-    if note and right:
-      D.text_right(D.fit(note, D.LABEL, right - x - D.text_w(title, D.BODY, semi=True) - 32), right, y + 4, D.LABEL,
-                   Console.TEXT_MUTED)
-    return y + D.BODY + 20
-
-  def _tiles(self, x: float, y: float, w: float, h: float, n: int, gap: float = 20) -> list[rl.Rectangle]:
-    tw = (w - gap * (n - 1)) / n
-    return [rl.Rectangle(x + i * (tw + gap), y, tw, h) for i in range(n)]
-
-  def _appearance(self, r: rl.Rectangle):
-    y = self._title(r, tr("Appearance"), "palette")
-    p = D.CARD_PAD
-    x, right = r.x + p, r.x + r.width - p
-    avail = r.y + r.height - p - y
-    tile_h = max(150.0, min(250.0, avail * 0.36))
-
-    # Theme
-    mode = self.mode_index()
-    notes = [tr("Follows light and time of day"), tr("Light, for daytime"), tr("Dark, easy at night")]
-    y = self._row_title(x, y, tr("Theme"), notes[mode], right)
-    acc = current_accent()
-    previews = [lambda pr: _mini_auto(pr, acc),
-                lambda pr: _mini_page(pr, "light", _accent(acc, "light")),
-                lambda pr: _mini_page(pr, "dark", _accent(acc, "dark"))]
-    for i, tr_ in enumerate(self._tiles(x, y, right - x, tile_h, 3)):
-      choice_tile(tr_, tr(MODE_LABELS[i]), i == mode, previews[i])
-      self._hits.append((tr_, lambda i=i: self.set_mode(i)))
-    y += tile_h + 36
-
-    # Accent: swatches
-    y = self._row_title(x, y, tr("Accent"), tr("Buttons and selections"), right)
-    sw_h = 124
-    for i, sr in enumerate(self._tiles(x, y, right - x, sw_h, len(ACCENT_NAMES), 16)):
-      on = ACCENT_NAMES[i] == acc
+def accent_picker(title: str, note: str, current: str, fn: Callable[[int], None]) -> Custom:
+  def draw(r: rl.Rectangle):
+    y = _head(r, title, note)
+    hits = []
+    for i, sr in enumerate(_tiles(r.x, y, r.width, SWATCH_H, len(ACCENT_NAMES), 16)):
+      on = ACCENT_NAMES[i] == current
       rl.draw_rectangle_rounded(sr, roundness(sr, 16), 10, Console.BG_RAISED)
       rl.draw_rectangle_rounded_lines_ex(sr, roundness(sr, 16), 10, 4 if on else K.HAIR,
                                          Console.ACCENT if on else Console.BORDER_DEFAULT)
@@ -247,33 +177,74 @@ class ThemePage(CardPage):
       rl.draw_circle(int(cx), int(cy), 24, _accent(ACCENT_NAMES[i]))
       if on:
         D.icon("check", cx - 14, cy - 14, 28, Console.ON_ACCENT)
-      D.text_center(D.fit(tr(ACCENT_LABELS[i]), D.LABEL, sr.width - 16, semi=on), cx, sr.y + sw_h - D.LABEL - 14, D.LABEL,
+      D.text_center(D.fit(tr(ACCENT_LABELS[i]), D.LABEL, sr.width - 16, semi=on), cx, sr.y + SWATCH_H - D.LABEL - 14, D.LABEL,
                     Console.TEXT_PRIMARY if on else Console.TEXT_SECONDARY, semi=on)
-      self._hits.append((sr, lambda i=i: self.set_accent(i)))
-    y += sw_h + 36
+      hits.append((sr, lambda i=i: fn(i)))
+    return hits
+  return Custom(HEAD_H + SWATCH_H + PICK_GAP, draw)
 
-    # UI size
-    if y + D.BODY + 20 + 120 <= r.y + r.height - p + 4:
-      scale = self.scale_index()
-      y = self._row_title(x, y, tr("UI size"), tr("Outside the driving view"), right)
-      size_h = max(120.0, min(170.0, r.y + r.height - p - y))
-      for i, sr in enumerate(self._tiles(x, y, right - x, size_h, 3)):
-        choice_tile(sr, tr(SCALE_LABELS[i]), i == scale, lambda pr, i=i: _size_preview(pr, i))
-        self._hits.append((sr, lambda i=i: self.set_scale(i)))
 
-  def _driving(self, r: rl.Rectangle):
-    y = self._title(r, tr("Driving screen"), "wheel")
-    p = D.CARD_PAD
-    x, right = r.x + p, r.x + r.width - p
+class ThemePage(FormPage):
+  # -- setters (same effect as the old BluePilot rows) ---------------------------------------
+
+  def set_mode(self, i: int):
+    name = MODE_NAMES[i]
+    self.p.put("BPConsoleMode", name)
+    ui_state.console_mode_pref = name
+
+  def set_accent(self, i: int):
+    name = ACCENT_NAMES[i]
+    self.p.put("BPConsoleAccent", name)
+    set_accent(name)
+
+  def set_scale(self, i: int):
+    self.p.put("BPConsoleScale", i)
+    set_scale_index(i)
+
+  def set_preset(self, i: int):
+    self.p.put("BPLayoutPreset", i)
+    ui_state.layout_preset = i
+
+  def set_ev_hud(self, on: bool):
+    self.p.put("BPEvHud", on)
+    ui_state.ev_hud = on
+
+  # -- current values --------------------------------------------------------------------------
+
+  def mode_index(self) -> int:
+    m = str(getattr(ui_state, "console_mode_pref", None) or self.p.get("BPConsoleMode", "auto")).lower()
+    return MODE_NAMES.index(m) if m in MODE_NAMES else 0
+
+  def scale_index(self) -> int:
+    return max(0, min(2, self.p.int("BPConsoleScale", 1)))
+
+  def preset_index(self) -> int:
+    return max(0, min(2, int(getattr(ui_state, "layout_preset", 1))))
+
+  # -- sections --------------------------------------------------------------------------------
+
+  def sections(self) -> list[Section]:
+    acc = current_accent()
+    mode = self.mode_index()
+    previews = [lambda pr: _mini_auto(pr, acc),
+                lambda pr: _mini_page(pr, "light", _accent(acc, "light")),
+                lambda pr: _mini_page(pr, "dark", _accent(acc, "dark"))]
+    notes = [tr("Follows light and time of day"), tr("Light, for daytime"), tr("Dark, easy at night")]
+    appearance = [
+      tile_picker(tr("Theme"), notes[mode], [tr(s) for s in MODE_LABELS], mode, lambda pr, i: previews[i](pr),
+                  self.set_mode, THEME_TILE_H),
+      accent_picker(tr("Accent"), tr("Buttons and selections"), acc, self.set_accent),
+      tile_picker(tr("UI size"), tr("Outside the driving view"), [tr(s) for s in SCALE_LABELS], self.scale_index(),
+                  _size_preview, self.set_scale, SIZE_TILE_H),
+    ]
     preset = self.preset_index()
-    y = self._row_title(x, y, tr("Layout"))
-    tile_h = max(190.0, min(360.0, (r.y + r.height - p - y) * 0.56))
-    for i, tr_ in enumerate(self._tiles(x, y, right - x, tile_h, 3)):
-      choice_tile(tr_, tr(PRESET_LABELS[i]), i == preset, lambda pr, i=i: _mini_drive(pr, i))
-      self._hits.append((tr_, lambda i=i: self.set_preset(i)))
-    y += tile_h + 16
-    y = self._note(r, y, tr(PRESET_DESCRIPTIONS[preset]), 2) + 24
-
     ev = bool(getattr(ui_state, "ev_hud", True))
-    self._toggle_row(r, y, tr("EV panel"), tr("Charge, power and range"), ev,
-                     lambda: self.set_ev_hud(not ev))
+    driving = [
+      tile_picker(tr("Layout"), "", [tr(s) for s in PRESET_LABELS], preset, _mini_drive, self.set_preset, LAYOUT_TILE_H),
+      Note(tr(PRESET_DESCRIPTIONS[preset]), lines=2),
+      Toggle(tr("EV panel"), tr("Charge, power and range"), ev, lambda: self.set_ev_hud(not ev)),
+    ]
+    return [
+      Section(tr("Appearance"), "palette", appearance),
+      Section(tr("Driving screen"), "layout", driving),
+    ]
