@@ -277,7 +277,8 @@ def service_card(r: rl.Rectangle, ic: str, svc, row_h: float = 72):
       break
     K.hline(r.x + p, r.x + r.width - p, y)
     ty = y + (row_h - D.BODY) / 2 - 2
-    D.text(label, r.x + p, ty, D.BODY, Console.TEXT_MUTED)
+    vw = min(D.text_w(value, D.BODY, semi=True), r.width * 0.55)
+    D.text(D.fit(label, D.BODY, r.width - 2 * p - vw - 24), r.x + p, ty, D.BODY, Console.TEXT_MUTED)
     D.text_right(D.fit(value, D.BODY, r.width * 0.55, semi=True), r.x + r.width - p, ty, D.BODY, semi=True)
     y += row_h
   for i, ln in enumerate(note_lines):

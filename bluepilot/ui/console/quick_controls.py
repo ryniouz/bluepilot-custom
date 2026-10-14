@@ -27,7 +27,7 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console.home import PERSONALITY_LABELS, PERSONALITY_VALUES
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS
 from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
-from openpilot.selfdrive.ui.bp.onroad.road_view import OPTIONS as ROAD_OPTIONS, road_prefs
+from openpilot.selfdrive.ui.bp.onroad.road_view import LEAD_STYLE_LABELS, OPTIONS as ROAD_OPTIONS, road_prefs
 
 AUTO_CLOSE_S = 8.0
 
@@ -270,8 +270,9 @@ class QuickControls:
     self._hits.append((c, lambda: setattr(self, "_page", "road")))
 
   def _render_road_page(self, body: rl.Rectangle):
-    """What the road view shows: a 4 x 2 grid of switches."""
-    cols, rows = 4, 2
+    """What the road view shows: a grid of switches, two rows."""
+    rows = 2
+    cols = (len(ROAD_OPTIONS) + 1 + rows - 1) // rows  # + the marker style cell
     w = (body.width - CARD_GAP * (cols - 1)) / cols
     h = (body.height - CARD_GAP * (rows - 1)) / rows
     for i, (bit, label) in enumerate(ROAD_OPTIONS):
@@ -282,6 +283,16 @@ class QuickControls:
              Console.TEXT_PRIMARY if on else Console.TEXT_MUTED, semi=True)
       D.toggle(c.x + w - CARD_PAD - 104, c.y + (h - 60) / 2, on)
       self._hits.append((c, lambda b=bit: road_prefs.toggle(b)))
+
+    # Lead marker style: tap to step through floor, bracket, corners, chevron
+    i = len(ROAD_OPTIONS)
+    c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
+    rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_HIGH if self._pressed(c) else Console.BG_RAISED)
+    D.text(tr("Marker"), c.x + CARD_PAD, c.y + (h - D.BODY) / 2 - 2, D.BODY, semi=True)
+    D.icon("chevron", c.x + w - CARD_PAD - 32, c.y + (h - 32) / 2, 32, Console.TEXT_MUTED)
+    D.text_right(tr(LEAD_STYLE_LABELS[road_prefs.marker]), c.x + w - CARD_PAD - 44, c.y + (h - D.BODY) / 2 - 2, D.BODY,
+                 Console.ACCENT_TEXT, semi=True)
+    self._hits.append((c, road_prefs.next_marker))
 
   def _set_preset(self, v: int):
     try:

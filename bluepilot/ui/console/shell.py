@@ -142,6 +142,11 @@ class ConsoleShell(Widget):
     self.register_page(Dest.DRIVES, Page(tr("Previous drives"), "list", drives, key="drives", framed=False))
     offload = OffloadPage()
     self.register_page(Dest.DRIVES, Page(tr("Offloading"), "cloud", offload, key="drives_offload", framed=False))
+    from bluepilot.ui.console.pages.upload_settings import UploadSettingsPage
+    wifi = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None
+    self.register_page(Dest.DRIVES, Page(tr("Upload settings"), "sliders",
+                                         UploadSettingsPage(getattr(wifi.instance, "_wifi_manager", None) if wifi is not None else None),
+                                         key="upload_settings", framed=False))
     storage = StoragePage()
     self.register_page(Dest.DRIVES, Page(tr("Storage"), "download", storage, key="drives_storage", framed=False))
 
@@ -158,8 +163,15 @@ class ConsoleShell(Widget):
     self.connectivity.on_open_cellular = lambda: self.open_panel("cellular")
     self.register_page(Dest.CONNECT, Page(tr("Status"), "pulse", self.connectivity, key="connectivity", framed=False))
     from bluepilot.ui.console.pages.cellular import CellularPage
-    self.register_page(Dest.CONNECT, Page(tr("Cellular"), "cell", CellularPage(self.connectivity._wifi), key="cellular", framed=False))
+    cellular = CellularPage(self.connectivity._wifi)
+    cellular.on_open_uploads = lambda: self.open_panel("upload_settings")
+    self.register_page(Dest.CONNECT, Page(tr("Cellular"), "cell", cellular, key="cellular", framed=False))
     panel(Dest.CONNECT, tr("Wi-Fi"), "wifi", "NETWORK", tr("Connect"))
+    from bluepilot.ui.console.pages.automations import AutomationsPage
+    autos = AutomationsPage()
+    autos.on_open_wifi = lambda: self.open_panel(self._wifi_key)
+    self.register_page(Dest.CONNECT, Page(tr("Home automations"), "home", autos, key="automations", framed=False))
+    self.connectivity.on_open_automations = lambda: self.open_panel("automations")
     from bluepilot.ui.console.pages.bluetooth import BluetoothPage
     self.register_page(Dest.CONNECT, Page(tr("Bluetooth"), "bluetooth", BluetoothPage(), key="bluetooth", framed=False))
     panel(Dest.CONNECT, tr("sunnylink"), "cloud", "SUNNYLINK", tr("Connect"))

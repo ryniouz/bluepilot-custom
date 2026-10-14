@@ -42,8 +42,6 @@ from bluepilot.ui.lib.upload_status import citadel_configured, comma_wifi_only, 
 GAP = 32
 ROW = 70
 SET_ROW = 104
-LIMITS_MB = [0, 2000, 5000, 10000]
-LIMIT_LABELS = ["Off", "2 GB", "5 GB", "10 GB"]
 
 
 def _text(v) -> str:
@@ -59,6 +57,7 @@ class CellularPage(Widget):
     self._wifi = wifi_manager
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
     self._keyboard: Keyboard | None = None
+    self.on_open_uploads: Callable[[], None] | None = None
     self._restart_armed = 0.0
 
   def show_event(self):
@@ -78,6 +77,19 @@ class CellularPage(Widget):
     self._hits = []
     modem_info().request()
     ds = self._ds()
+    if rect.width < 1300:  # UI size Large: two columns, network over data usage
+      left, right = K.split_cols(rect, [1.0, 1.0])
+      left.width -= GAP / 2
+      right.x += GAP / 2
+      right.width -= GAP / 2
+      top, bottom = K.split_rows(left, [1, 1])
+      top.height -= GAP / 2
+      bottom.y += GAP / 2
+      bottom.height -= GAP / 2
+      self._network_card(top, ds)
+      self._usage_card(bottom)
+      self._settings_card(right)
+      return
     cols = K.split_cols(rect, [0.95, 1.0, 1.2])
     for i, c in enumerate(cols):
       if i > 0:
@@ -199,7 +211,7 @@ class CellularPage(Widget):
           D.text(ln, x, y + 20 + i * 40, D.LABEL, Console.TEXT_MUTED)
 
   def _set_row(self, r: rl.Rectangle, y: float, title: str, sub: str, on: bool | None, fn: Callable[[], None] | None,
-               enabled: bool = True) -> float:
+               enabled: bool = True, action: str = "Edit") -> float:
     p = D.CARD_PAD
     x, right = r.x + p, r.x + r.width - p
     if y + SET_ROW > r.y + r.height - p - D.CONTROL_H - 16:
@@ -213,9 +225,9 @@ class CellularPage(Widget):
       if enabled and fn is not None:
         self._hits.append((rl.Rectangle(x, y, right - x, SET_ROW), fn))
     elif fn is not None and enabled:
-      lw = D.text_w(tr("Edit"), D.LABEL, semi=True) + 48
+      lw = D.text_w(tr(action), D.LABEL, semi=True) + 48
       b = rl.Rectangle(right - lw, y + (SET_ROW - 64) / 2, lw, 64)
-      D.button(b, tr("Edit"), primary=False, size=D.LABEL)
+      D.button(b, tr(action), primary=False, size=D.LABEL)
       self._hits.append((b, fn))
     return y + SET_ROW
 
@@ -226,27 +238,8 @@ class CellularPage(Widget):
     D.text(tr("Settings"), x, y, D.H2, semi=True)
     y += 76
 
-    if has_param(self._params, "BPRoadTripMode"):
-      configured = citadel_configured(self._params)
-      on = bool(_param(self._params, "BPRoadTripMode", False))
-      y = self._set_row(r, y, tr("Citadel uploads"),
-                        tr("Road Trip Mode") if configured else tr("Needs your Citadel server"),
-                        on and configured, lambda: self._params.put_bool("BPRoadTripMode", not on), enabled=configured)
-      if has_param(self._params, "BPRoadTripCellular"):
-        cell = bool(_param(self._params, "BPRoadTripCellular", True))
-        y = self._set_row(r, y, tr("Citadel over LTE"), tr("Off: waits for Wi-Fi"), cell and on and configured,
-                          lambda: self._params.put_bool("BPRoadTripCellular", not cell), enabled=on and configured)
-    else:
-      y = self._set_row(r, y, tr("Citadel uploads"), tr("LTE uploads soon"), False, None, enabled=False)
-
-    if has_param(self._params, "BPCommaConnectWifiOnly"):
-      wo = bool(_param(self._params, "BPCommaConnectWifiOnly", True))
-      y = self._set_row(r, y, tr("comma connect"), tr("Uploads on Wi-Fi only"), wo,
-                        lambda: self._params.put_bool("BPCommaConnectWifiOnly", not wo))
-    else:
-      metered = bool(_param(self._params, "GsmMetered", True))
-      y = self._set_row(r, y, tr("comma connect"), tr("Also upload over LTE"), not metered,
-                        lambda: self._put_gsm(metered=not metered))
+    y = self._set_row(r, y, tr("Uploads over LTE"), self._uploads_summary(), None,
+                      lambda: self.on_open_uploads and self.on_open_uploads(), action="Open")
     roaming = bool(_param(self._params, "GsmRoaming", False))
     y = self._set_row(r, y, tr("Data roaming"), tr("Other carriers' networks"), roaming,
                       lambda: self._put_gsm(roaming=not roaming))
@@ -259,8 +252,6 @@ class CellularPage(Widget):
                         lambda: self._wifi.set_tethering_active(not hot))
     apn = _text(_param(self._params, "GsmApn", ""))
     y = self._set_row(r, y, tr("APN"), apn or tr("Automatic"), None, self._edit_apn)
-    if has_param(self._params, "BPCellLimitMB"):
-      self._limit_row(r, y)
 
     if TICI:
       b = rl.Rectangle(x, r.y + r.height - p - D.CONTROL_H, r.width - 2 * p, D.CONTROL_H)
@@ -268,20 +259,19 @@ class CellularPage(Widget):
       D.button(b, tr("Tap again to restart") if armed else tr("Restart modem"), primary=armed)
       self._hits.append((b, self._restart))
 
-  def _limit_row(self, r: rl.Rectangle, y: float):
-    p = D.CARD_PAD
-    if y + 56 + 72 > r.y + r.height - p - (D.CONTROL_H + 16 if TICI else 0):
-      return
-    K.hline(r.x + p, r.x + r.width - p, y)
-    D.text(tr("Monthly data limit"), r.x + p, y + 16, D.BODY, semi=True)
-    try:
-      cur = int(_text(_param(self._params, "BPCellLimitMB", "0")) or 0)
-    except ValueError:
-      cur = 0
-    sel = LIMITS_MB.index(cur) if cur in LIMITS_MB else 0
-    seg = rl.Rectangle(r.x + p, y + 64, r.width - 2 * p, 64)
-    for i, sr in enumerate(D.segmented(seg, [tr(t) for t in LIMIT_LABELS], sel)):
-      self._hits.append((sr, lambda v=LIMITS_MB[i]: self._params.put("BPCellLimitMB", v)))
+  def _uploads_summary(self) -> str:
+    parts = [tr("comma") + " " + (tr("Wi-Fi only") if comma_wifi_only(self._params) else tr("LTE on"))]
+    if has_param(self._params, "BPRoadTripMode"):
+      on = bool(_param(self._params, "BPRoadTripMode", False)) and citadel_configured(self._params)
+      parts.append(tr("Citadel") + " " + (tr("on") if on else tr("off")))
+    if has_param(self._params, "BPCellLimitMB"):
+      try:
+        mb = int(_text(_param(self._params, "BPCellLimitMB", "0")) or 0)
+      except ValueError:
+        mb = 0
+      if mb:
+        parts.append(tr("limit") + f" {mb / 1000:g} GB")
+    return " · ".join(parts)
 
   # -- actions ------------------------------------------------------------------------------
 

@@ -254,6 +254,10 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
       _line([(bx, 21), (bx, 21 - h)], x, y, s, w, color)
   elif name == "bluetooth":
     _line([(6.5, 7.5), (17, 16.5), (12, 21), (12, 3), (17, 7.5), (6.5, 16.5)], x, y, s, w, color)
+  elif name == "warning":
+    _line([(12, 3), (22, 20.5), (2, 20.5), (12, 3)], x, y, s, w, color)
+    _line([(12, 9.5), (12, 14)], x, y, s, w, color)
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 17.3 * s), w * 0.75, color)
   elif name == "check":
     _line([(4.5, 12.5), (9.5, 17.5), (19.5, 6.5)], x, y, s, w, color)
   elif name == "close":

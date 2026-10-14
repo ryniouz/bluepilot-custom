@@ -90,6 +90,10 @@ class TextWindow(Widget):
 if __name__ == "__main__":
   text = sys.argv[1] if len(sys.argv) > 1 else DEMO_TEXT
   gui_app.init_window("Text Viewer")
-  text_window = TextWindow(text)
+  # Custom: Console error screen
+  from bluepilot.ui.console.boot import ConsoleTextWindow, apply_saved_theme
+  apply_saved_theme()
+  text_window = ConsoleTextWindow(text)
+  # End Custom
   for _ in gui_app.render():
     text_window.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))

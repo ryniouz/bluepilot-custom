@@ -158,7 +158,9 @@ def tile(r: rl.Rectangle, label: str, value: str, unit: str = "", note: str = ""
   x, y = r.x + TILE_PAD, r.y + TILE_PAD
   w = r.width - 2 * TILE_PAD
   D.text(D.fit(label, LABEL, w), x, y, LABEL, Console.TEXT_MUTED)
-  D.value_unit(value, unit, x, y + LABEL + 16, BIG, BIG_UNIT, value_color)
+  need = D.text_w(value, BIG, semi=True) + (10 + D.text_w(unit, BIG_UNIT) if unit else 0)
+  k = min(1.0, w / need) if need > 0 else 1.0  # shrink the numeral rather than clip the unit (UI size Large)
+  D.value_unit(value, unit, x, y + LABEL + 16 + BIG * (1 - k) * 0.86, BIG * k, BIG_UNIT * max(k, 0.8), value_color)
   bottom = r.y + r.height - TILE_PAD
   if note:
     ny = bottom - NOTE

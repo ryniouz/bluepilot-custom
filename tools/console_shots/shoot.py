@@ -66,6 +66,18 @@ SCENES: dict[str, str] = {
   "onboarding_guide": "Console onboarding, driving guide (calibration step)",
   "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
+  "theme": "Screen > Theme and layout (theme, UI size, accent, layout)",
+  "home_large": "Home at UI size Large",
+  "home_small": "Home at UI size Small",
+  "cellular_large": "Connect > Cellular at UI size Large",
+  "theme_large": "Screen > Theme and layout at UI size Large",
+  "automations": "Connect > Home automations: at home on a home network, after joining it",
+  "automations_large": "Connect > Home automations at UI size Large",
+  "upload_settings": "Drives > Upload settings: comma connect, Citadel uploads, LTE data limit",
+  "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
+  "boot_progress": "Start-up spinner with a progress number",
+  "boot_error": "Error window (system/ui/text.py) with a build log",
+  "tap_large": "UI size Large: a tap on the rail's Connect item (screen px) must open Connect",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
   "onroad_engaged": "Onroad, engaged, lead car, 65 mph, set speed 70",
@@ -108,13 +120,18 @@ SCENES.update({
   "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
   "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band",
   "drive_off": "Disengaged: neutral state band",
+  "drive_lead_bracket": "Lead speed beside the car (Speed at car on, lead card off), bracket marker",
+  "drive_lead_floor": "Lead speed beside the car, floor-pad marker candidate",
+  "drive_lead_corners": "Lead speed beside the car, corner-frame marker candidate",
+  "drive_lead_chevron": "Lead speed beside the car, roof-chevron marker candidate",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                    "drive_guest", "drive_qc_handle", "drive_qc_drag", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
+                    "drive_lead_corners", "drive_lead_chevron", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -139,6 +156,9 @@ def resolve_scenes(spec: str | None) -> list[str]:
       continue
     names = ALIASES.get(s, [s])
     for n in names:
+      base = n[:-6] if n.endswith("_large") else n[:-6] if n.endswith("_small") else n
+      if n not in SCENES and base in SCENES:  # any scene at UI size Large or Small
+        SCENES[n] = SCENES[base] + " (UI size " + n[-5:] + ")"
       if n not in SCENES:
         raise SystemExit(f"unknown scene '{n}'. Known: {', '.join(SCENES)}; aliases: {', '.join(ALIASES)}")
       if n not in out:
@@ -891,7 +911,8 @@ def scene_params(name: str) -> dict:
 # --- Stream B (driving screen) scene setup ------------------------------------------------
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                "drive_guest", "drive_qc_handle", "drive_qc_drag")
+                "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
+                "drive_lead_corners", "drive_lead_chevron")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -908,6 +929,10 @@ def drive_scene_params(name: str) -> dict:
     p.update({"StandstillTimer": True})
   if name == "drive_lead":
     p.update({"BPRoadView": 0x17F})  # every row on
+  if name.startswith("drive_lead_"):
+    from openpilot.selfdrive.ui.bp.onroad.road_view import LEAD_STYLES, MARKER_SHIFT
+    # default with the speed tag on, the lead card off and this marker style
+    p.update({"BPRoadView": 0xF7 | (LEAD_STYLES.index(name.split("_")[-1]) << MARKER_SHIFT)})
   return p
 
 
@@ -930,6 +955,8 @@ def setup_drive_scene(name: str, d: dict):
     d.update(v_ego=0.0, lead_d=12.0)
     _inject_popup()
   elif name == "drive_lead":
+    d.update(lead_d=24.0, lead_v_rel=-4.2)
+  elif name.startswith("drive_lead_"):
     d.update(lead_d=24.0, lead_v_rel=-4.2)
   elif name == "drive_steer_only":
     d.update(enabled=False, state="disabled", mads=(True, True))
@@ -977,12 +1004,18 @@ def _inject_popup():
 
 def run_scene(sc: Scene):
   name = sc.name
+  for suffix, idx in (("_large", 2), ("_small", 0)):  # UI size variants of another scene
+    if name.endswith(suffix):
+      from bluepilot.ui.lib import ui_scale
+      sc.put("BPConsoleScale", idx)
+      ui_scale.set_scale_index(idx)
+      name = name[:-len(suffix)]
   d = default_drive()
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
-              "bluetooth_obd_bt", "bluetooth_obd_live"):
+              "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings", "boot_spinner", "boot_progress", "boot_error"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1092,6 +1125,55 @@ def run_scene(sc: Scene):
     if name.startswith("bluetooth_obd"):
       page._obd_step = 3 if name == "bluetooth_obd_live" else 1
       page._obd_kind = 2 if name == "bluetooth_obd_bt" else 0
+    sc.settle()
+    sc.shot()
+  elif name == "tap":
+    from openpilot.system.ui.lib.application import MouseEvent, MousePos, gui_app
+    sc.main._open_shell()
+    sc.settle()
+    x, y = 87.0, 756.0   # the Connect rail item as drawn at Large, in screen pixels
+    queue = [[MouseEvent(MousePos(x, y), 0, True, False, True, 0.0)], [MouseEvent(MousePos(x, y), 0, False, True, False, 0.1)]]
+    orig = gui_app._mouse.get_events
+    gui_app._mouse.get_events = lambda: queue.pop(0) if queue else orig()
+    sc.step(4)
+    sc.settle()
+    sc.shot()
+  elif name == "automations":
+    import json
+    from bluepilot.ui.lib.automations import automations
+    sc.put("BPHomeWifi", json.dumps(["Garage-5G", "Home-2G"]))
+    sc.put("BPHomeLocation", json.dumps({"lat": 45.4215, "lon": -75.6972}))
+    a = automations()
+    a.tick = lambda onroad: None
+    a.at_home, a.reason, a.last_action, a.last_action_at = True, "home Wi-Fi", "Joined Garage-5G", "18:02"
+    sc.main._open_shell()
+    sc.main._shell.open_panel("automations")
+    sc.settle()
+    sc.shot()
+  elif name == "upload_settings":
+    sc.put("BPServerUrl", "https://citadel.example.lan")
+    sc.put("BPRoadTripMode", True)
+    sc.put("BPCellLimitMB", 5000)
+    sc.main._open_shell()
+    sc.main._shell.open_panel("upload_settings")
+    sc.settle()
+    sc.shot()
+  elif name.startswith("boot_"):
+    from openpilot.system.ui.lib.application import gui_app
+    from bluepilot.ui.console import boot
+    if name == "boot_error":
+      log = "\n".join(f"[{i:4d}/1873] Compiling selfdrive/modeld/models/commonmodel.cc" for i in range(1840, 1872))
+      log += "\nselfdrive/ui/qt/offroad/settings.cc:412:7: error: use of undeclared identifier 'params'\nscons: *** [selfdrive/ui/ui] Error 1"
+      w = boot.ConsoleTextWindow("openpilot failed to build\n\n" + log)
+    else:
+      w = boot.ConsoleSpinner()
+      w.set_text("47" if name == "boot_progress" else "Installing the update. This takes a few minutes.")
+    gui_app.push_widget(w)
+    sc.settle()
+    sc.shot()
+  elif name == "theme":
+    sc.main._open_shell()
+    sc.main._shell.open_panel("theme")
     sc.settle()
     sc.shot()
   elif name == "updates":

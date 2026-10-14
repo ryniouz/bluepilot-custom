@@ -14,9 +14,9 @@ from openpilot.bluepilot.ui.lib.bp_shaders import draw_rainbow_polygon
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 # BluePilot: seasonal theme packs (colors.json overrides for road colors)
 from openpilot.selfdrive.ui.bp.lib import theme_pack
-# Custom: Console road view (lead marker, lead card data, road-view preferences)
-from openpilot.selfdrive.ui.bp.onroad.road_view import (LeadInfo, SHOW_EDGES, SHOW_LANES, SHOW_NEIGHBOURS, draw_lead_marker,
-                                                       lead_level, road_prefs)
+# Custom: Console road view (lead marker, lead speed tag, lead card data, road-view preferences)
+from openpilot.selfdrive.ui.bp.onroad.road_view import (LeadInfo, SHOW_EDGES, SHOW_LANES, SHOW_NEIGHBOURS, SHOW_SPEED_TAG,
+                                                       draw_lead_marker, draw_speed_tag, lead_level, road_prefs)
 from bluepilot.ui.lib.theme import Console, Onroad, mix, with_alpha  # Custom: Console theme
 
 # BluePilot: Lane line colors by status (upstream removed LANE_LINE_COLORS dict)
@@ -62,6 +62,8 @@ MINIMAL_VIEW_NEUTRAL_LANE_COLOR = rl.Color(185, 205, 225, 255)
 from openpilot.selfdrive.ui.bp.onroad.rad_racer_road import (  # noqa: E402
   RadRacerRoadMixin, RAD_RACER_ROAD_EDGE_WIDTH, RAD_RACER_DASH_LEN_M, RAD_RACER_GAP_LEN_M,
 )
+
+CAR_HALF_W = 0.95          # m, half a typical car width  (Custom: Console lead marker sizing)
 
 
 class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
@@ -268,6 +270,10 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
         idx = self._get_path_length_idx(path_x_array, d_rel)
         z = self._path.raw_points[idx, 2] if idx < len(self._path.raw_points) else 0.0
         point = self._map_to_screen(d_rel, -y_rel + self._camera_offset, z + self._path_offset_z)
+        # Custom: the car's real width on screen (a typical 1.9 m), so markers and the speed tag fit it
+        pl = self._map_to_screen(d_rel, -y_rel + self._camera_offset - CAR_HALF_W, z + self._path_offset_z)
+        pr = self._map_to_screen(d_rel, -y_rel + self._camera_offset + CAR_HALF_W, z + self._path_offset_z)
+        self._lead_px_w = abs(pr[0] - pl[0]) if (pl is not None and pr is not None) else None
         if point:
           self._marking = i  # Custom
           self._lead_vehicles[i] = self._update_lead_vehicle(d_rel, v_rel, point, self._rect)
@@ -297,7 +303,8 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
     g_yo = sz / 10
 
     # Custom: the Console bracket spans roughly a car's width at that distance
-    self._lead_marks[self._marking] = (float(x), float(min(point[1], rect.height - 24)), float(sz * 3.4))
+    w = self._lead_px_w if getattr(self, "_lead_px_w", None) else sz * 3.4
+    self._lead_marks[self._marking] = (float(x), float(min(point[1], rect.height - 24)), float(w))
 
     glow = [(x + (sz * 1.35) + g_xo, y + sz + g_yo), (x, y - g_yo), (x - (sz * 1.35) - g_xo, y + sz + g_yo)]
     chevron = [(x + (sz * 1.25), y + sz), (x, y), (x - (sz * 1.25), y + sz)]
@@ -719,3 +726,7 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
       info = LeadInfo(d_rel=self._lead_d_smooth[i], v_rel=self._lead_v_smooth[i], v_ego=v_ego)
       alpha = self.lead_alpha if i == 0 else 0.6
       draw_lead_marker(x, y, w, lead_level(info), alpha, vision=not self._lead_is_radar[i])
+      if i == 0 and road_prefs.on(SHOW_SPEED_TAG):
+        info.v_lead = max(0.0, v_ego + info.v_rel)
+        draw_speed_tag(x, y, w, info, ui_state.is_metric, alpha, self._rect)
+
