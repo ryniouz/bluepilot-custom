@@ -285,3 +285,13 @@ def test_citadel_wifi_only(rt):
   rt.net.update(type="wifi", metered=False)
   rt.up.step()
   assert rt.transport.calls[-1][1].endswith("/qlog.zst")
+
+
+def test_categories_from_the_uploader(rt):
+  rt.net.update(type="cell", metered=True)
+  rt.live["onroad"] = True
+  rt.up.step()   # live push, then the qlog
+  rt.up.step()
+  cats = rt.usage.state["categories"]
+  assert cats["citadel"] == 30 + 50
+  assert cats["live"] == len(b'{"onroad":true}')

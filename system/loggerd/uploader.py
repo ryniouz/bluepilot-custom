@@ -16,6 +16,7 @@ from openpilot.common.utils import get_upload_stream
 from openpilot.common.params import Params
 from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware.hw import Paths
+from bluepilot.bridge import meter as comma_meter  # Custom: comma connect's LTE byte meter
 from openpilot.system.loggerd.xattr_cache import getxattr, setxattr
 from openpilot.common.swaglog import cloudlog
 
@@ -197,6 +198,10 @@ class Uploader:
           speed = (content_length / 1e6) / dt
           cloudlog.event("upload_success", key=key, fn=fn, sz=sz, content_length=content_length,
                          network_type=network_type, metered=metered, speed=speed)
+          # Custom: meter what comma connect sends over LTE or a metered link (Connect > Cellular breakdown)
+          if metered or network_type not in (NetworkType.wifi, NetworkType.ethernet):
+            comma_meter.add(content_length or sz)
+          # End Custom
         success = True
       else:
         success = False

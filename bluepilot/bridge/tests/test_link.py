@@ -135,3 +135,11 @@ def test_commands_go_through_the_real_api(env, tmp_path):  # noqa: F811
   assert r["status"] == 409 and body_of(r)["error"] == "onroad"
   bad = local_caller(port, lambda: "wrong")
   assert run_command({"id": "3", "method": "GET", "path": "/v1/live"}, bad)["status"] == 401
+
+
+def test_link_answers_count_as_link_data(tmp_path):
+  server = FakeServer()
+  link, _, usage = make_link(tmp_path, server, network={"type": "cell", "metered": True})
+  link.step()
+  assert usage.state["categories"]["link"] > 0
+  assert usage.state["categories"]["citadel"] == 0

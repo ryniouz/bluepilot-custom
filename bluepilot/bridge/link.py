@@ -181,7 +181,7 @@ class RemoteLink(threading.Thread):
                                     {"Authorization": f"Bearer {self.token()}", "Content-Type": "application/json"}, body)
     except (OSError, http.client.HTTPException, ValueError):
       status, resp = 0, b""
-    self.usage.add_upload(len(body), cellular)
+    self.usage.add_upload(len(body), cellular, "link")
     if not 200 <= status < 300:
       with self.lock:
         self.results = results + self.results  # deliver with the next successful poll
