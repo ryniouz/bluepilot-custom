@@ -32,3 +32,18 @@ def offroad_reset(params: Params) -> bool:
     params.put_bool("BPGuestMode", False)
     return True
   return False
+
+
+# Custom: platform lock. This build is tuned for one truck; if the comma ever fingerprints a different car,
+# it records the mismatch and stays passive instead of controlling a car it was not set up for.
+LOCKED_PLATFORM_DEFAULT = "FORD_F_150_LIGHTNING_MK1"
+
+
+def platform_allowed(params: Params, fingerprint: str) -> bool:
+  """True if openpilot may control this car. MOCK (no car found) is left to upstream, which is already passive."""
+  locked = (params.get("BPLockedPlatform", return_default=True) or "").strip()
+  if not locked or fingerprint in (locked, "MOCK"):
+    params.remove("BPPlatformMismatch")
+    return True
+  params.put("BPPlatformMismatch", fingerprint)
+  return False

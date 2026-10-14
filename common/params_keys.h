@@ -329,6 +329,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPGuestModeOneTrip", {PERSISTENT | BACKUP, BOOL, "1"}},       // turn Guest Mode off again after one drive
     {"BPGuestModeActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},  // this drive is running as Guest Mode (UI)
     {"BPGuestModeUsed", {PERSISTENT, BOOL, "0"}},                    // set by card on a guest drive; cleared at the next offroad start
+    {"BPLockedPlatform", {PERSISTENT | BACKUP, STRING, "FORD_F_150_LIGHTNING_MK1"}},  // only control this platform; anything else stays passive. Empty = any car
+    {"BPPlatformMismatch", {CLEAR_ON_MANAGER_START, STRING}},       // fingerprint of a car the lock refused (for the UI)
     {"BPObdEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},             // OBD adapter link on/off (read-only PID polling)
     {"BPObdTransport", {PERSISTENT | BACKUP, STRING, "wifi"}},      // wifi, usb, bluetooth or simulated
     {"BPObdAddress", {PERSISTENT | BACKUP, STRING, ""}},            // wifi host[:port], usb /dev path, bluetooth MAC[#channel]
