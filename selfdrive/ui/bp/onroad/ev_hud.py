@@ -28,7 +28,9 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from bluepilot.ui.lib.ev_data import EvDataSource, EvSnapshot, finite, temp_range_factor, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
 from bluepilot.ui.lib.layout_presets import LayoutPreset
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness, draw_bar
+from bluepilot.ui.console import kit as K
+from bluepilot.ui.console.home import soc_color
+from bluepilot.ui.lib.theme import Console, Onroad, roundness
 
 KM_TO_MI = 0.621371
 KPA_TO_PSI = 0.145038
@@ -43,10 +45,10 @@ SMALL = 28
 BAR_H = 12
 DEV_UI_RIGHT_W = 184
 
-CARD_RADIUS = 28
+CARD_RADIUS = 24        # kit PANEL_R
 
 # Dock
-DOCK_H = 132
+DOCK_H = 148
 DOCK_MARGIN = 24        # from the inner edge of the status frame
 DOCK_PAD_X = 36
 DOCK_PAD_Y = 22
@@ -54,15 +56,11 @@ DOCK_SEG_W = 320        # one segment: value line + bar
 DOCK_GAP = 32           # between segments (a hairline sits in the middle)
 DOCK_VALUE = 50
 DOCK_UNIT = 30
-DOCK_CAPTION = 28
-DOCK_BAR_H = 16         # thick squared Console bar
-DOCK_RADIUS = 28
+DOCK_CAPTION = 30       # kit CAP
+DOCK_BAR_H = 28         # thick squared Console bar (kit K.bar)
+DOCK_RADIUS = 24        # kit PANEL_R
 
 TIRE_LOW_PSI = 30.0  # Lightning placard is 42 psi; the TPMS warning sits near 32
-
-
-def _c_to_f(c: float) -> float:
-  return c * 9.0 / 5.0 + 32.0
 
 
 class EvHudRenderer:
@@ -210,14 +208,10 @@ class EvHudRenderer:
 
   def _dock_soc(self, r: rl.Rectangle, s: EvSnapshot):
     soc = max(0.0, min(100.0, s.soc))
-    if soc < 10 or s.low_soc:
-      fill, word, wc = Console.DANGER, "Low", Console.DANGER
-    elif soc < 20:
-      fill, word, wc = Console.WARNING, "Low", Console.WARNING
-    else:
-      fill, word, wc = Console.SUCCESS, "Charge", None
-    self._dock_value(r, f"{soc:.0f}", "%", word, caption_color=wc)
-    draw_bar(self._dock_bar_rect(r), soc / 100.0, fill)
+    fill = Console.DANGER if s.low_soc else soc_color(soc)
+    low = soc < 20 or s.low_soc
+    self._dock_value(r, f"{soc:.0f}", "%", "Low" if low else "Charge", caption_color=fill if low else None)
+    K.bar(self._dock_bar_rect(r), soc / 100.0, fill)
 
   def _dock_power(self, r: rl.Rectangle, s: EvSnapshot):
     kw = s.power_kw
@@ -226,7 +220,7 @@ class EvHudRenderer:
                      caption_color=Console.SUCCESS if regen else None)
     # Center-zero meter: regen grows left in success, drive grows right in accent
     bar = self._dock_bar_rect(r)
-    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, Console.BG_TRACK)
+    rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)
     mid = bar.x + bar.width / 2
     drive_max = s.discharge_limit_kw if finite(s.discharge_limit_kw) and s.discharge_limit_kw > 50 else 300.0
     regen_max = s.charge_limit_kw if finite(s.charge_limit_kw) and s.charge_limit_kw > 20 else 150.0
@@ -237,19 +231,19 @@ class EvHudRenderer:
       w = min(1.0, -kw / regen_max) * bar.width / 2
       seg, color = rl.Rectangle(mid - w, bar.y, w, bar.height), Console.SUCCESS
     if w >= 1:
-      rl.draw_rectangle_rounded(seg, roundness(seg, Radius.XS), 4, color)
-    rl.draw_rectangle(int(mid - 1), int(bar.y - 6), 3, int(bar.height + 12), Console.TEXT_MUTED)
+      rl.draw_rectangle_rounded(seg, roundness(seg, 6), 4, color)
+    rl.draw_rectangle(int(mid - 2), int(bar.y - 8), 4, int(bar.height + 16), Console.TEXT_PRIMARY)
 
   def _dock_range(self, r: rl.Rectangle, s: EvSnapshot):
     metric = ui_state.is_metric
     rng = s.range_km if metric else s.range_km * KM_TO_MI
     self._dock_value(r, f"{rng:.0f}", "km" if metric else "mi", "Range")
     if finite(s.wh_per_km) and s.wh_per_km > 1:
-      eff = f"{s.wh_per_km:.0f} Wh/km" if metric else f"{1000.0 / (s.wh_per_km / KM_TO_MI):.1f} mi/kWh"
-      text = f"Trip {eff}"
+      eff = f"{s.wh_per_km / 10.0:.1f} kWh/100 km" if metric else f"{1000.0 / (s.wh_per_km / KM_TO_MI):.1f} mi/kWh"
+      text = eff
     else:
       text = "Estimated" if s.range_estimated else "Efficiency soon"
-    rl.draw_text_ex(self._font, text, rl.Vector2(r.x, r.y + r.height - SMALL + 4), SMALL, 0, Console.TEXT_MUTED)
+    rl.draw_text_ex(self._font, text, rl.Vector2(r.x, r.y + r.height - DOCK_BAR_H / 2 - SMALL / 2 - 2), SMALL, 0, Console.TEXT_MUTED)
 
   # -- details rows ---------------------------------------------------------
 
@@ -270,13 +264,13 @@ class EvHudRenderer:
       rl.draw_text_ex(self._font, unit, rl.Vector2(r.x + r.width - unit_w, vy + ROW_VALUE * 0.8 - SMALL * 0.8), SMALL, 0,
                       Console.TEXT_MUTED)
 
+  # Units are Canadian: temperatures always in °C and tire pressure always in psi; distance and
+  # speed follow the IsMetric setting (km and km/h on the truck).
   def _temp(self, c: float) -> str:
-    if not finite(c):
-      return "–"
-    return f"{c:.0f}°" if ui_state.is_metric else f"{_c_to_f(c):.0f}°"
+    return f"{c:.0f}°" if finite(c) else "–"
 
   def _temp_unit(self) -> str:
-    return "C" if ui_state.is_metric else "F"
+    return "C"
 
   def _row_pack(self, r: rl.Rectangle, s: EvSnapshot):
     cold, hot = s.pack_temp_c < PACK_TEMP_LOW_C, s.pack_temp_c > PACK_TEMP_HIGH_C
@@ -290,14 +284,13 @@ class EvHudRenderer:
     self._row(r, "Trip used", f"{s.trip_used_kwh:.1f}", "kWh")
 
   def _row_tires(self, r: rl.Rectangle, s: EvSnapshot):
-    metric = ui_state.is_metric
-    vals = [t if metric else t * KPA_TO_PSI for t in s.tire_kpa]
+    vals = [t * KPA_TO_PSI for t in s.tire_kpa]
     low = [(t * KPA_TO_PSI) < TIRE_LOW_PSI for t in s.tire_kpa]
     any_low = s.tire_low or any(low)
     rl.draw_circle(int(r.x + 8), int(r.y + r.height / 2), 8, Console.DANGER if any_low else Console.SUCCESS)
     rl.draw_text_ex(self._font, "Tires · Low" if any_low else "Tires", rl.Vector2(r.x + 26, r.y + (r.height - LABEL) / 2), LABEL, 0,
                     Console.TEXT_MUTED)
-    unit = "kPa" if metric else "psi"
+    unit = "psi"
     unit_w = measure_text_cached(self._font, unit, SMALL).x
     # 2x2 grid in truck layout (front row on top), right-aligned before the unit
     col_w = 76

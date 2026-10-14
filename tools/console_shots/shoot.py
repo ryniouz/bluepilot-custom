@@ -85,8 +85,13 @@ SCENES.update({
   "drive_minimal": "Driving screen, Minimal layout preset (speed card, alerts, cues only)",
   "drive_dense": "Driving screen, Dense layout preset (dock + details card), regen",
   "drive_notify": "Driving screen with an informational notification and turn signal",
+  "drive_signals": "Left signal on; right signal into a car in the blind spot (tile + edge bar)",
+  "drive_prompt": "Mid userPrompt alert (Pay Attention) as a Console card",
+  "drive_critical": "Mid critical alert as a Console card",
+  "drive_popup": "SP green-light pop-up as a notification card, with smart-cruise chips",
 })
-ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "sidebar", "alert_mid"]
+ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
+                    "drive_critical", "drive_popup", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -834,15 +839,22 @@ def scene_params(name: str) -> dict:
 
 
 # --- Stream B (driving screen) scene setup ------------------------------------------------
-DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify")
+DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup")
 
 
 def drive_scene_params(name: str) -> dict:
+  if not name.startswith("drive_"):
+    return {}
+  p = {"IsMetric": True, "SpeedLimitMode": 2}  # the truck runs Canadian units
   if name == "drive_minimal":
-    return {"BPLayoutPreset": 0}
+    p["BPLayoutPreset"] = 0
   if name == "drive_dense":
-    return {"BPLayoutPreset": 2}
-  return {}
+    p["BPLayoutPreset"] = 2
+  if name == "drive_signals":
+    p.update({"ShowTurnSignals": True, "BlindSpot": True, "ShowBlindspotOverlay": True})
+  if name == "drive_popup":
+    p.update({"StandstillTimer": True})
+  return p
 
 
 def setup_drive_scene(name: str, d: dict):
@@ -852,7 +864,17 @@ def setup_drive_scene(name: str, d: dict):
     _inject_ev(dict(pack_temp_c=27.0, coolant_temp_c=24.0, tire_kpa=[285.0, 287.0, 281.0, 284.0], lv_volts=14.1,
                     outside_temp_c=4.0, trip_km=18.4, trip_used_kwh=6.2, trip_regen_kwh=1.1, wh_per_km=297.0))
   elif name == "drive_notify":
-    d.update(alert=("small", "normal", "Lane Change Blocked", "Car Detected in Blindspot"), left_blinker=True)
+    d.update(alert=("small", "normal", "Changing Lanes", ""), left_blinker=True)
+  elif name == "drive_signals":
+    d.update(left_blinker=True, right_blinker=True, right_blindspot=True, speed_limit_mph=62.14,
+             alert=("small", "normal", "Lane Change Blocked", "Car Detected in Blindspot"))
+  elif name == "drive_prompt":
+    d.update(alert=("mid", "userPrompt", "Pay Attention", "Touch Steering Wheel"))
+  elif name == "drive_critical":
+    d.update(alert=("mid", "critical", "TAKE CONTROL", "Steering Temporarily Unavailable"))
+  elif name == "drive_popup":
+    d.update(v_ego=0.0, lead_d=12.0)
+    _inject_popup()
 
 
 def _inject_ev(fields: dict):
@@ -866,6 +888,26 @@ def _inject_ev(fields: dict):
     return snap
 
   ev_data.EvDataSource.update = update
+def _inject_popup():
+  """Force SP's green-light alert and both smart-cruise states on, as if the planner sent them."""
+  from openpilot.selfdrive.ui.sunnypilot.onroad import circular_alerts, smart_cruise_control
+  ca_update = circular_alerts.CircularAlertsRenderer.update
+
+  def update(self):
+    ca_update(self)
+    self._allow_e2e_alerts = True
+    self._green_light_alert = True
+    self._e2e_alert_display_timer = 60
+
+  circular_alerts.CircularAlertsRenderer.update = update
+  scc_update = smart_cruise_control.SmartCruiseControlRenderer.update
+
+  def scc(self):
+    scc_update(self)
+    self.vision_enabled = self.vision_active = True
+    self.map_enabled = True
+
+  smart_cruise_control.SmartCruiseControlRenderer.update = scc
 # --- end stream B --------------------------------------------------------------------------
 
 

@@ -3,55 +3,62 @@ import pyray as rl
 from cereal import log
 
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_PADDING, Alert
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, OnroadType, roundness
+from openpilot.selfdrive.ui.bp.onroad.console_cues import cue_icon, notice, notice_size
+from bluepilot.ui.console import draw as D
+from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
 from openpilot.system.ui.lib.application import gui_app, FontWeight
-from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 
 AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
 
-# Custom: informational alerts are a Console notification card at the top centre, like a phone
-# banner: squared accent bar on the leading edge, line 1 primary, line 2 muted. Prompt and
-# critical alerts keep openpilot's small/mid/full sizes, timing and sounds.
-PILL_TOP_Y = 84            # below the road-name tab
-PILL_SIDE_MARGIN = 560     # keeps clear of the speed card on the left and the button on the right
-PILL_MAX_W = 1000
-PILL_PADDING_H = 36
-PILL_BAR_SPACE = 30        # status bar + gap before the text
-PILL_PADDING_V = 22
-PILL_LINE1_FONT_SIZE = OnroadType.PILL
-PILL_LINE2_FONT_SIZE = OnroadType.PILL_SUB
-PILL_LINE_SPACING = 6
-PILL_HEIGHT_SINGLE = 100
-PILL_HEIGHT_DOUBLE = 150
+# Custom: Console alerts. openpilot decides when an alert shows, how long, its size and its
+# sound; this only decides how it looks.
+#   informational (normal, not full)  notification card at the top centre (console_cues.notice)
+#   prompt / critical, small and mid  openpilot's rect at the bottom, as a Console card: a
+#                                     square icon tile in the status colour, left-aligned title
+#                                     and subtitle, a thick status-coloured frame
+#   full screen                       a flat status ground with a large icon above the stock text
+PILL_TOP_Y = 24            # level with the speed card
+PILL_SIDE_MARGIN = 560     # fallback when the road view has not set the band
 
-# Console: pill is a raised panel with a hairline; full alerts are flat status grounds
-PILL_BACKGROUND_COLOR = Console.BG_PANEL
-PILL_OUTLINE_COLOR = Console.BORDER_DEFAULT
-ALERT_RADIUS = Radius.MD * 3  # 24 px on the 3X: Console md radius at device scale
-ALERT_STATUS_BAR_W = 12  # squared status bar on the leading edge (Console bar height)
+ALERT_RADIUS = 24          # kit PANEL_R
+FRAME_W = 6                # status frame on prompt cards
+TILE = 132                 # icon tile on bottom cards
+TILE_R = 24
+TITLE_MID = 72
+SUB_MID = 50
+TITLE_SMALL = 64
+FULL_ICON = 128
 
-CONSOLE_ALERT_COLORS = {
+# Bottom cards stay deep in both modes (white text over the camera reads the same by day)
+CARD_GROUND = {
+  AlertStatus.normal: Onroad.ALERT_NORMAL,
+  AlertStatus.userPrompt: Onroad.ALERT_NORMAL,
+  AlertStatus.critical: Onroad.ALERT_CRITICAL,
+}
+FULL_GROUND = {
   AlertStatus.normal: Onroad.ALERT_NORMAL,
   AlertStatus.userPrompt: Onroad.ALERT_PROMPT,
   AlertStatus.critical: Onroad.ALERT_CRITICAL,
 }
-CONSOLE_ALERT_BAR = {
+STATUS_COLOR = {
   AlertStatus.normal: Console.ACCENT,
   AlertStatus.userPrompt: Console.WARNING,
-  AlertStatus.critical: Console.DANGER,
+  AlertStatus.critical: Console.DANGER_FILL,
 }
+SUB_TEXT = with_alpha(Onroad.ALERT_TEXT, 0xC8)
 
 
 class AlertRendererBP(AlertRenderer):
-  """BluePilot AlertRenderer. Custom: informational alerts as a Console notification card."""
+  """BluePilot AlertRenderer. Custom: Console notification card and alert cards."""
 
   def __init__(self):
     super().__init__()
+    self._font_semi = gui_app.font(FontWeight.SEMI_BOLD)
     self._font_body = gui_app.font(FontWeight.NORMAL)
-    # Set by the road view each frame: the free band between the speed card (and sign) and the
-    # experimental button. The notification card centres in it.
+    # Set by the road view each frame: the free band between the signal tiles. The
+    # notification card centres in it.
     self.notify_band: tuple[float, float] | None = None
 
   def _render(self, rect: rl.Rectangle):
@@ -71,99 +78,85 @@ class AlertRendererBP(AlertRenderer):
     if not alert:
       return
 
-    is_informational = (alert.status == AlertStatus.normal and alert.size != AlertSize.full)
+    if alert.status == AlertStatus.normal and alert.size != AlertSize.full:
+      r = self._get_pill_rect(rect, alert)
+      if r is not None:
+        notice(r, alert.text1 or "", alert.text2 or "", Console.ACCENT, self._icon_for(alert))
+      return
 
-    if is_informational:
-      alert_rect = self._get_pill_rect(rect, alert)
-      if alert_rect:
-        self._draw_pill_background(alert_rect)
-        text_rect = rl.Rectangle(
-          alert_rect.x + PILL_PADDING_H + PILL_BAR_SPACE, alert_rect.y + PILL_PADDING_V,
-          alert_rect.width - 2 * PILL_PADDING_H - PILL_BAR_SPACE, alert_rect.height - 2 * PILL_PADDING_V
-        )
-        self._draw_pill_text(text_rect, alert)
+    alert_rect = self._get_alert_rect(rect, alert.size)
+    if alert.size == AlertSize.full:
+      self._draw_full(alert_rect, alert)
     else:
-      # Same drawing as AlertRenderer._render after brightness hook (do not call super()._render)
-      alert_rect = self._get_alert_rect(rect, alert.size)
-      self._draw_background(alert_rect, alert)
-      text_rect = rl.Rectangle(
-        alert_rect.x + ALERT_PADDING,
-        alert_rect.y + ALERT_PADDING,
-        alert_rect.width - 2 * ALERT_PADDING,
-        alert_rect.height - 2 * ALERT_PADDING
-      )
-      self._draw_text(text_rect, alert)
+      self._draw_card(alert_rect, alert)
+
+  # -- notification ------------------------------------------------------------------------
+
+  @staticmethod
+  def _icon_for(alert) -> str:
+    t = f"{alert.text1} {alert.text2}".lower()
+    if "lane change" in t or "changing lanes" in t:
+      return "lane_right" if "right" in t else "lane_left"
+    if "blindspot" in t or "blind spot" in t:
+      return "car"
+    return "bell"
 
   def _get_pill_rect(self, rect: rl.Rectangle, alert) -> Optional[rl.Rectangle]:
-    """Calculate pill-shaped notification rectangle below speed display, centered, full width."""
-    line1 = alert.text1 or ""
-    line2 = alert.text2 or ""
+    """Notification card rect: centred in the band between the signal tiles."""
+    line1, line2 = alert.text1 or "", alert.text2 or ""
     if not line1 and not line2:
       return None
-
     band_l, band_r = self.notify_band if self.notify_band else (rect.x + PILL_SIDE_MARGIN, rect.x + rect.width - PILL_SIDE_MARGIN)
-    available_width = min(PILL_MAX_W, band_r - band_l)
-    if available_width < 100:
+    if band_r - band_l < 100:
       return None
+    w, h = notice_size(line1, line2, band_r - band_l)
+    return rl.Rectangle(band_l + (band_r - band_l - w) / 2, rect.y + PILL_TOP_Y, w, h)
 
-    has_two_lines = bool(line1 and line2)
-    if has_two_lines:
-      line1_size = measure_text_cached(self.font_bold, line1, PILL_LINE1_FONT_SIZE)
-      line2_size = measure_text_cached(self.font_bold, line2, PILL_LINE2_FONT_SIZE)
-      text_width = max(line1_size.x, line2_size.x)
-      pill_height = PILL_HEIGHT_DOUBLE
-    else:
-      text = line1 or line2
-      text_size = measure_text_cached(self.font_bold, text, PILL_LINE1_FONT_SIZE)
-      text_width = text_size.x
-      pill_height = PILL_HEIGHT_SINGLE
+  # -- prompt and critical cards (small, mid) ----------------------------------------------
 
-    pill_width = min(max(text_width + 2 * PILL_PADDING_H + PILL_BAR_SPACE, 520), available_width)
-    pill_x = band_l + (band_r - band_l - pill_width) / 2
-    pill_y = rect.y + PILL_TOP_Y
-
-    return rl.Rectangle(pill_x, pill_y, pill_width, pill_height)
-
-  def _draw_pill_background(self, rect: rl.Rectangle) -> None:
+  def _draw_card(self, rect: rl.Rectangle, alert: Alert) -> None:
+    status = alert.status
+    accent = STATUS_COLOR.get(status, Console.ACCENT)
     r = roundness(rect, ALERT_RADIUS)
-    rl.draw_rectangle_rounded(rect, r, 10, PILL_BACKGROUND_COLOR)
-    rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, PILL_OUTLINE_COLOR)
-    bar = rl.Rectangle(rect.x + PILL_PADDING_H, rect.y + PILL_PADDING_V, ALERT_STATUS_BAR_W, rect.height - 2 * PILL_PADDING_V)
-    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, CONSOLE_ALERT_BAR[AlertStatus.normal])
+    rl.draw_rectangle_rounded(rect, r, 10, CARD_GROUND.get(status, Onroad.ALERT_NORMAL))
+    if status == AlertStatus.userPrompt:
+      rl.draw_rectangle_rounded_lines_ex(rect, r, 10, FRAME_W, accent)
+    elif status == AlertStatus.normal:
+      rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, Console.BORDER_DEFAULT)
 
-  def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
-    """Console alert ground: flat status colour, 24 px corners, squared status bar on the left
-    edge for normal alerts so they still read as state over a dark panel."""
-    color = CONSOLE_ALERT_COLORS.get(alert.status, CONSOLE_ALERT_COLORS[AlertStatus.normal])
-    if alert.size == AlertSize.full:
-      rl.draw_rectangle_rec(rect, color)
-      return
-    rl.draw_rectangle_rounded(rect, roundness(rect, ALERT_RADIUS), 10, color)
-    if alert.status == AlertStatus.normal:
-      rl.draw_rectangle_rounded_lines_ex(rect, roundness(rect, ALERT_RADIUS), 10, 2, Console.BORDER_DEFAULT)
-      bar = rl.Rectangle(rect.x + 28, rect.y + 28, ALERT_STATUS_BAR_W, rect.height - 56)
-      rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, CONSOLE_ALERT_BAR[AlertStatus.normal])
+    # Icon tile: status colour with a dark mark; white with a red mark on a critical card
+    tile = min(TILE, rect.height - 2 * 32)
+    t = rl.Rectangle(rect.x + 40, rect.y + (rect.height - tile) / 2, tile, tile)
+    critical = status == AlertStatus.critical
+    rl.draw_rectangle_rounded(t, roundness(t, TILE_R), 10, Onroad.ALERT_TEXT if critical else accent)
+    icon = "warning" if status != AlertStatus.normal else "bell"
+    isz = tile * 0.58
+    cue_icon(icon, t.x + (tile - isz) / 2, t.y + (tile - isz) / 2 - 2, isz, Console.DANGER_FILL if critical else Console.FRAME_INK)
 
-  def _draw_pill_text(self, rect: rl.Rectangle, alert) -> None:
-    """Draw text1 and text2 in pill (no wrapping). Line 1 primary font, line 2 slightly smaller."""
-    line1 = alert.text1 or ""
-    line2 = alert.text2 or ""
-    if not line1 and not line2:
-      return
-
-    has_two_lines = bool(line1 and line2)
-    if has_two_lines:
-      line1_size = measure_text_cached(self.font_bold, line1, PILL_LINE1_FONT_SIZE)
-      line2_size = measure_text_cached(self.font_bold, line2, PILL_LINE2_FONT_SIZE)
-      total_height = line1_size.y + PILL_LINE_SPACING + line2_size.y
-      start_y = rect.y + (rect.height - total_height) / 2
-
-      rl.draw_text_ex(self.font_bold, line1, rl.Vector2(rect.x, start_y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)
-      line2_y = start_y + line1_size.y + PILL_LINE_SPACING
-      rl.draw_text_ex(self._font_body, line2, rl.Vector2(rect.x, line2_y), PILL_LINE2_FONT_SIZE, 0, Console.TEXT_MUTED)
+    tx = t.x + tile + 40
+    max_w = rect.x + rect.width - ALERT_PADDING - tx
+    if alert.size == AlertSize.small or not alert.text2:
+      size = TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID
+      text = D.fit(alert.text1, size, max_w, semi=True)
+      rl.draw_text_ex(self._font_semi, text, rl.Vector2(tx, rect.y + (rect.height - size) / 2 - 2), size, 0, Onroad.ALERT_TEXT)
     else:
-      text = line1 or line2
-      text_size = measure_text_cached(self.font_bold, text, PILL_LINE1_FONT_SIZE)
-      x = rect.x
-      y = rect.y + (rect.height - text_size.y) / 2
-      rl.draw_text_ex(self.font_bold, text, rl.Vector2(x, y), PILL_LINE1_FONT_SIZE, 0, Console.TEXT_PRIMARY)
+      y = rect.y + (rect.height - TITLE_MID - 14 - SUB_MID) / 2 - 2
+      rl.draw_text_ex(self._font_semi, D.fit(alert.text1, TITLE_MID, max_w, semi=True), rl.Vector2(tx, y), TITLE_MID, 0,
+                      Onroad.ALERT_TEXT)
+      rl.draw_text_ex(self._font_body, D.fit(alert.text2, SUB_MID, max_w), rl.Vector2(tx, y + TITLE_MID + 14), SUB_MID, 0, SUB_TEXT)
+
+  # -- full screen ---------------------------------------------------------------------------
+
+  def _draw_full(self, rect: rl.Rectangle, alert: Alert) -> None:
+    status = alert.status
+    rl.draw_rectangle_rec(rect, FULL_GROUND.get(status, Onroad.ALERT_NORMAL))
+    if status != AlertStatus.normal:
+      cue_icon("warning", rect.x + (rect.width - FULL_ICON) / 2, rect.y + 56, FULL_ICON, Onroad.ALERT_TEXT)
+    # stock text layout untouched; the icon sits in the space above the title
+    text_rect = rl.Rectangle(rect.x + ALERT_PADDING, rect.y + ALERT_PADDING, rect.width - 2 * ALERT_PADDING, rect.height - 2 * ALERT_PADDING)
+    self._draw_text(text_rect, alert)
+
+  # kept for callers of the base API
+  def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
+    rl.draw_rectangle_rec(rect, FULL_GROUND.get(alert.status, Onroad.ALERT_NORMAL))
+
