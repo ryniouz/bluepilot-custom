@@ -62,6 +62,8 @@ DOCK_BAR_H = 28         # thick squared Console bar (kit K.bar)
 DOCK_RADIUS = 24        # kit PANEL_R
 
 OBD_HEAD_H = 48
+HEATER_SHOW_KW = 0.2
+SOH_WARN_PCT = 80.0
 CELL_SPREAD_WARN_MV = 50.0   # min module voltage this far below the average is worth a look
 
 TIRE_LOW_PSI = 30.0  # Lightning placard is 42 psi; the TPMS warning sits near 32
@@ -114,6 +116,10 @@ class EvHudRenderer:
         obd_rows = []
         if "HvbEte" in obd:
           obd_rows.append(("obd_energy", ROW_H))
+        if obd.get("HvbCHP", 0.0) > HEATER_SHOW_KW:  # only while the heater is actually drawing power
+          obd_rows.append(("obd_heater", ROW_H))
+        if "HvbSoh" in obd:
+          obd_rows.append(("obd_soh", ROW_H))
         if "HvbAvgModV" in obd and "HvbMinModV" in obd:
           obd_rows.append(("obd_cells", ROW_H))
         if "LvSoc" in obd:
@@ -361,6 +367,13 @@ class EvHudRenderer:
 
   def _row_obd_energy(self, r: rl.Rectangle, s: EvSnapshot):
     self._row(r, "Energy left", f"{self._obd['HvbEte']:.1f}", "kWh")
+
+  def _row_obd_heater(self, r: rl.Rectangle, s: EvSnapshot):
+    self._row(r, "Heater", f"{self._obd['HvbCHP']:.1f}", "kW")
+
+  def _row_obd_soh(self, r: rl.Rectangle, s: EvSnapshot):
+    soh = self._obd["HvbSoh"]
+    self._row(r, "Battery health", f"{soh:.0f}", "%", dot=Console.WARNING if soh < SOH_WARN_PCT else None)
 
   def _row_obd_cells(self, r: rl.Rectangle, s: EvSnapshot):
     spread = (self._obd["HvbAvgModV"] - self._obd["HvbMinModV"]) * 1000.0

@@ -1377,7 +1377,7 @@ def _fake_obd():
   """A connected Wi-Fi adapter reading the built-in Lightning DIDs (obdStateBP is on the Lightning branch)."""
   from bluepilot.ui.lib import obd_link as ol
   vals = [("HvbEte", 71.4, "kWh"), ("HvbAvgModV", 3.912, "V"), ("HvbMinModV", 3.894, "V"), ("LvSoc", 82.0, "percent"),
-          ("HvbSoc", 61.8, "percent")]
+          ("HvbSoc", 61.8, "percent"), ("HvbSoh", 96.0, "percent"), ("HvbCHP", 3.2, "kW")]
   snap = ol.ObdSnapshot(received=True, enabled=True, transport="wifi", link="connected", adapter="ELM327 v1.5",
                         values=[ol.ObdValue(n, v, u, 1.0) for n, v, u in vals])
   ol.ObdLink.snapshot = lambda self: snap
