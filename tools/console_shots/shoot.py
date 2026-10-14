@@ -84,6 +84,9 @@ SCENES: dict[str, str] = {
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
   "boot_progress": "Start-up spinner with a progress number",
   "about": "System > About: Citadel Auto OS name, logo and version",
+  "boot_os_prompt": "OS update screen (bluepilot/ui/console/updater.py): update needed prompt",
+  "boot_os_progress": "OS update screen: installing, Console progress bar",
+  "boot_os_failed": "OS update screen: update failed, Reboot",
   "boot_error": "Error window (system/ui/text.py) with a build log",
   "tap_large": "UI size Large: a tap on the rail's Connect item (screen px) must open Connect",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
@@ -1081,7 +1084,8 @@ def run_scene(sc: Scene):
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
-              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about"):
+              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about",
+              "boot_os_prompt", "boot_os_progress", "boot_os_failed"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1259,6 +1263,13 @@ def run_scene(sc: Scene):
       log = "\n".join(f"[{i:4d}/1873] Compiling selfdrive/modeld/models/commonmodel.cc" for i in range(1840, 1872))
       log += "\nselfdrive/ui/qt/offroad/settings.cc:412:7: error: use of undeclared identifier 'params'\nscons: *** [selfdrive/ui/ui] Error 1"
       w = boot.ConsoleTextWindow("openpilot failed to build\n\n" + log)
+    elif name.startswith("boot_os_"):
+      from bluepilot.ui.console.updater import ConsoleUpdater, Screen
+      w = ConsoleUpdater("agnos.py", "manifest.json")
+      if name != "boot_os_prompt":
+        w.set_current_screen(Screen.PROGRESS)
+        w.progress_text, w.progress_value = "Installing system", 62
+        w.show_reboot_button = name == "boot_os_failed"
     else:
       w = boot.ConsoleSpinner()
       w.set_text("47" if name == "boot_progress" else "Installing the update. This takes a few minutes.")
