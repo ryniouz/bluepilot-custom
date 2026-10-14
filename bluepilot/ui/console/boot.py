@@ -3,8 +3,10 @@ Console start-up screens that run before the UI: the loading spinner (system/ui/
 error window (system/ui/text.py). Both are separate processes; the stock files swap these in under
 '# Custom:' fences and keep their own stdin / argv handling.
 
-  ConsoleSpinner     a rotating accent arc on a thick track, "Starting up" and the latest status line;
-                     a number on stdin shows a thick squared progress bar instead.
+  ConsoleSpinner     the Citadel Auto OS logo on black (the same as the boot image AGNOS shows before it,
+                     selfdrive/assets/img_bluepilot_boot.jpg), a small rotating arc under it and any status
+                     line; a number on stdin shows a thin squared progress bar instead. No product name here:
+                     it is on System > About.
   ConsoleBuildSpinner  the same screen for BluePilot's on-device build (system/ui/bp_spinner.py): progress with
                      the current build step, and the build log with Reboot when it fails.
   ConsoleTextWindow  "Something went wrong", what to do next, the log in a scrolling card, and
@@ -12,6 +14,8 @@ error window (system/ui/text.py). Both are separate processes; the stock files s
 """
 
 from __future__ import annotations
+
+import os
 
 import pyray as rl
 
@@ -24,11 +28,13 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.lib.theme import Console, set_accent
 
-RING_R = 96
-RING_W = 18
+LOGO = os.path.join(os.path.dirname(__file__), "assets", "citadel_logo.png")
+LOGO_H = 440          # same size as on the boot image, so the hand-off from AGNOS doesn't jump
+RING_R = 26
+RING_W = 6
 ARC_DEG = 100.0
 DEG_PER_S = 300.0
-BAR_W = 900
+BAR_W = 520
 LOG_SIZE = 30
 LOG_LINE = 40
 
@@ -41,6 +47,26 @@ def apply_saved_theme():
     set_accent(v.decode() if isinstance(v, bytes) else str(v or "blue"))
   except Exception:
     pass
+
+
+_logos: dict[int, rl.Texture | None] = {}
+
+
+def logo_texture(height: int = LOGO_H) -> rl.Texture | None:
+  """The Citadel Auto OS logo (light blue on transparent) at this height; None if it can't be loaded."""
+  if height not in _logos:
+    tex = None
+    if os.path.isfile(LOGO):
+      try:
+        img = rl.load_image(LOGO)
+        rl.image_resize(img, round(img.width * height / img.height), height)
+        tex = rl.load_texture_from_image(img)
+        rl.set_texture_filter(tex, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        rl.unload_image(img)
+      except Exception:
+        tex = None
+    _logos[height] = tex
+  return _logos[height]
 
 
 class ConsoleSpinner(Widget):
@@ -60,32 +86,28 @@ class ConsoleSpinner(Widget):
       self._lines = D.wrap(text, D.BODY, gui_app.width - 400, 3)
 
   def _render(self, rect: rl.Rectangle):
-    rl.draw_rectangle_rec(rect, Console.BG_PAGE)
-    cx = rect.x + rect.width / 2
-    below = 72 + (len(self._lines) * 48 if self._lines else 0) + (96 if self._progress is not None else 0)
-    if self._progress is not None and self._lines:
-      below += 40
-    cy = rect.y + (rect.height - below) / 2 - 20
-
-    self._angle = (self._angle + DEG_PER_S * rl.get_frame_time()) % 360.0
-    c = rl.Vector2(cx, cy)
-    rl.draw_ring(c, RING_R - RING_W / 2, RING_R + RING_W / 2, 0, 360, 64, Console.BG_TRACK)
-    if self._progress is None:
-      rl.draw_ring(c, RING_R - RING_W / 2, RING_R + RING_W / 2, self._angle, self._angle + ARC_DEG, 32, Console.ACCENT)
+    rl.draw_rectangle_rec(rect, rl.BLACK)  # black like the AGNOS boot image before it
+    cx, cy = rect.x + rect.width / 2, rect.y + rect.height / 2
+    tex = logo_texture()
+    if tex is not None:
+      rl.draw_texture(tex, int(cx - tex.width / 2), int(cy - tex.height / 2), rl.WHITE)
     else:
-      rl.draw_ring(c, RING_R - RING_W / 2, RING_R + RING_W / 2, -90, -90 + 360 * self._progress / 100, 64, Console.ACCENT)
-    D.icon("bolt", cx - 36, cy - 36, 72, Console.TEXT_SECONDARY)
+      D.icon("bolt", cx - 60, cy - 60, 120, Console.TEXT_SECONDARY)
 
-    y = cy + RING_R + 56
-    D.text_center("Starting up", cx, y, D.H1, semi=True)
-    y += 100
+    y = cy + LOGO_H / 2 + 72
     if self._progress is not None:
-      bar = rl.Rectangle(cx - BAR_W / 2, y, BAR_W, K.BAR_H)
+      bar = rl.Rectangle(cx - BAR_W / 2, y, BAR_W, 16)
       K.bar(bar, self._progress / 100.0, Console.ACCENT)
-      D.text_center(f"{self._progress} %", cx, y + K.BAR_H + 20, D.LABEL, Console.TEXT_MUTED, semi=True)
-      y += K.BAR_H + 96  # the build spinner shows a status line under the bar
-    for i, ln in enumerate(self._lines):
-      D.text_center(ln, cx, y + i * 48, D.BODY, Console.TEXT_SECONDARY)
+      D.text_center(f"{self._progress} %", cx, y + 36, D.LABEL, Console.TEXT_MUTED, semi=True)
+      for i, ln in enumerate(self._lines):  # the build spinner's current step
+        D.text_center(ln, cx, y + 96 + i * 44, D.LABEL, Console.TEXT_MUTED)
+    else:
+      self._angle = (self._angle + DEG_PER_S * rl.get_frame_time()) % 360.0
+      c = rl.Vector2(cx, y + RING_R)
+      rl.draw_ring(c, RING_R - RING_W / 2, RING_R + RING_W / 2, 0, 360, 48, Console.BG_TRACK)
+      rl.draw_ring(c, RING_R - RING_W / 2, RING_R + RING_W / 2, self._angle, self._angle + ARC_DEG, 24, Console.ACCENT)
+      for i, ln in enumerate(self._lines):
+        D.text_center(ln, cx, y + 2 * RING_R + 40 + i * 44, D.LABEL, Console.TEXT_MUTED)
 
 
 class ConsoleBuildSpinner(ConsoleSpinner):

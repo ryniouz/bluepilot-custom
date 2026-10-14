@@ -198,6 +198,8 @@ class ConsoleShell(Widget):
     self.register_page(Dest.SYSTEM, Page(tr("Vehicle"), "car", vehicle, key="vehicle", framed=False))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
+    from bluepilot.ui.console.pages.about import AboutPage
+    self.register_page(Dest.SYSTEM, Page(tr("About"), "list", AboutPage(), key="about", subtitle=tr("System"), framed=False))
 
   def _hide_torque_rows(self, PT):
     """The Lightning steers by curvature: torque control, torque tuning and NNLC never apply, so hide them

@@ -40,7 +40,7 @@ class Step:
 
 def guide_steps() -> list[Step]:
   steps = [
-    Step("home", tr("Welcome"), tr("Your comma runs BluePilot, tuned for the F-150 Lightning. A few screens on how it drives with you.")),
+    Step("home", tr("Welcome"), tr("Your comma runs Citadel Auto OS, tuned for the F-150 Lightning. A few screens on how it drives with you.")),
     Step("wheel", tr("Turning it on"),
          tr("Press the cruise button on the steering wheel. Steering and speed control start together. Brake or cancel to take over.")),
     Step("eye", tr("Stay in charge"),
@@ -166,7 +166,7 @@ FLOW = [(_State.WELCOME, "Welcome"), (_State.SAFETY, "Safety"), (_State.TERMS, "
 
 SAFETY_LINES = [
   "You are always the driver. Keep your eyes on the road and your hands ready to steer.",
-  "BluePilot can make mistakes at any time, including at the worst moment.",
+  "Citadel Auto OS can make mistakes at any time, including at the worst moment.",
   "The driver camera watches that you pay attention and warns you when you don't.",
   "Use it only where you would drive yourself, and take over whenever something feels wrong.",
 ]
@@ -254,7 +254,7 @@ class ConsoleOnboarding(Widget):
     top = rect.y + 220
     if st == _State.WELCOME:
       _hero(rect, "home", tr("Welcome"),
-            tr("Your comma is about to drive with BluePilot on the F-150 Lightning. Setup takes about two minutes."), top)
+            tr("Your comma is about to drive with Citadel Auto OS on the F-150 Lightning. Setup takes about two minutes."), top)
       _, rb = _buttons(rect, None, tr("Get started"))
       self._hits.append((rb, lambda: self._go(_State.SAFETY)))
     elif st == _State.SAFETY:
@@ -271,13 +271,13 @@ class ConsoleOnboarding(Widget):
       self._hits += [(lb, lambda: self._go(_State.WELCOME)), (rb, lambda: self._go(_State.TERMS))]
     elif st == _State.TERMS:
       _hero(rect, "list", tr("Terms of Service"),
-            tr("BluePilot is built on sunnypilot and openpilot. Accept their Terms of Service to use it.") + " " +
+            tr("Citadel Auto OS is built on BluePilot, sunnypilot and openpilot. Accept their Terms of Service to use it.") + " " +
             tr("Read them at sunnypilot.ai/terms before you continue."), top)
       lb, rb = _buttons(rect, tr("Decline"), tr("Agree"))
       self._hits += [(lb, lambda: self._go(_State.DECLINE)), (rb, self._accept)]
     elif st == _State.DECLINE:
       _hero(rect, "close", tr("Terms not accepted"),
-            tr("BluePilot can't run without the Terms of Service. Go back to accept them, or uninstall it."), top)
+            tr("Citadel Auto OS can't run without the Terms of Service. Go back to accept them, or uninstall it."), top)
       lb, rb = _buttons(rect, tr("Back"), tr("Uninstall"), danger=True)
       self._hits += [(lb, lambda: self._go(_State.TERMS)), (rb, self._uninstall)]
     elif st == _State.SUNNYLINK:
