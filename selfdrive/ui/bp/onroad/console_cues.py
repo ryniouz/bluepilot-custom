@@ -2,11 +2,11 @@
 Console driving cues: one visual language for everything that pops up on the driving screen.
 
   notice()            the notification card (informational alerts, lane changes, green light,
-                      lead departing, stopped timer); a squared status bar, an icon, two lines
+                      lead departing, stopped timer); a tinted icon tile and two lines
   SignalTiles         turn signals and blind-spot warnings as two tiles flanking the
                       notification slot; a signal into an occupied lane turns its tile red
   draw_blindspot_edge squared danger bars on the screen edges (no gradient)
-  ConsoleConfidence   the model confidence indicator as a thick squared vertical bar
+  ConsoleConfidence   model confidence level (drawn inside the driver-monitor chip)
   CanadianSpeedLimit  Canadian regulatory sign (MAXIMUM / value / km/h) for SP's speed limit
   CruiseChips         SP smart-cruise (vision / map curve) state as Console chips
 
@@ -24,17 +24,18 @@ from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceB
 from openpilot.selfdrive.ui.sunnypilot.onroad.speed_limit import SpeedLimitRenderer
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness, with_alpha
+from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
 
 # -- notification card --------------------------------------------------------------------
 
 NOTICE_R = 24
 NOTICE_PAD_X = 32
 NOTICE_PAD_Y = 22
-NOTICE_BAR_W = 12
-NOTICE_ICON = 52
+NOTICE_TILE = 96         # tinted icon tile (smaller on a one-line card)
+NOTICE_TILE_R = 18
 NOTICE_TITLE = 46
 NOTICE_SUB = 36
 NOTICE_H1 = 104          # one line
@@ -46,7 +47,7 @@ def _fonts():
   return gui_app.font(FontWeight.SEMI_BOLD), gui_app.font(FontWeight.NORMAL)
 
 
-NOTICE_CHROME = NOTICE_PAD_X * 2 + NOTICE_BAR_W + 24 + NOTICE_ICON + 24
+NOTICE_CHROME = NOTICE_PAD_X * 2 + NOTICE_TILE + 28
 
 
 def _notice_sizes(title: str, sub: str, max_w: float) -> tuple[int, int]:
@@ -70,17 +71,19 @@ def notice_size(title: str, sub: str, max_w: float) -> tuple[float, float]:
 
 
 def notice(rect: rl.Rectangle, title: str, sub: str = "", bar: rl.Color | None = None, icon: str = "bell"):
-  """Notification card: panel, squared status bar, icon, title (primary) over subtitle (muted)."""
+  """Notification card, same family as the prompt card: translucent panel, a tinted icon tile in
+  the status colour, title (primary) over subtitle (muted)."""
   semi, body = _fonts()
   bar = bar if bar is not None else Console.ACCENT
   r = roundness(rect, NOTICE_R)
-  rl.draw_rectangle_rounded(rect, r, 10, Onroad.PANEL_SOLID)
+  rl.draw_rectangle_rounded(rect, r, 10, Onroad.PANEL)
   rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, Console.BORDER_DEFAULT)
-  b = rl.Rectangle(rect.x + NOTICE_PAD_X, rect.y + NOTICE_PAD_Y, NOTICE_BAR_W, rect.height - 2 * NOTICE_PAD_Y)
-  rl.draw_rectangle_rounded(b, roundness(b, Radius.XS), 4, bar)
-  ix = b.x + NOTICE_BAR_W + 24
-  cue_icon(icon, ix, rect.y + (rect.height - NOTICE_ICON) / 2, NOTICE_ICON, bar)
-  tx = ix + NOTICE_ICON + 24
+  tile = min(NOTICE_TILE, rect.height - 2 * NOTICE_PAD_Y)
+  t = rl.Rectangle(rect.x + NOTICE_PAD_X, rect.y + (rect.height - tile) / 2, tile, tile)
+  rl.draw_rectangle_rounded(t, roundness(t, NOTICE_TILE_R), 10, with_alpha(bar, 0x38))
+  isz = tile * 0.6
+  cue_icon(icon, t.x + (tile - isz) / 2, t.y + (tile - isz) / 2, isz, bar)
+  tx = t.x + tile + 28
   max_w = rect.x + rect.width - NOTICE_PAD_X - tx
   ts, ss = _notice_sizes(title, sub, rect.width)
   if title and sub:
@@ -173,7 +176,7 @@ TILE_GAP = 24             # between the two tiles at the centre
 class SignalTiles:
   """Two tiles side by side at the top centre, like a cluster's indicators.
 
-  Blinker only            panel tile, arrow in success, blinking
+  Blinker only            translucent tile, arrow in success, lit while the indicator is on
   Car in the blind spot   panel tile with a thick danger outline, car mark, "Car" (ShowBlindspot)
   Blinker into that lane  red tile with a pulsing halo, car mark, "Blocked" (lane change unsafe)
   """
@@ -216,19 +219,20 @@ class SignalTiles:
         halo = rl.Rectangle(r.x - 8, r.y - 8, TILE + 16, TILE + 16)
         rl.draw_rectangle_rounded(halo, roundness(halo, TILE_R + 8), 10, with_alpha(Console.DANGER_FILL, int(90 + 110 * pulse)))
         rl.draw_rectangle_rounded(r, rr, 10, Console.DANGER_FILL)
-        fg, word = Console.ON_ACCENT, "Blocked"
-        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 12, 72, fg)
+        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 14, 72, Console.ON_ACCENT)
+        D.text_center(tr("Blocked"), r.x + TILE / 2, r.y + TILE - 42, 28, Console.ON_ACCENT, semi=True)
       elif st == "car":
-        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL_SOLID)
-        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 5, Console.DANGER)
-        fg, word = Console.DANGER, "Car"
-        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 12, 72, fg)
+        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
+        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 4, Console.DANGER)
+        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 14, 72, Console.DANGER)
+        D.text_center(tr("Car"), r.x + TILE / 2, r.y + TILE - 42, 28, Console.DANGER, semi=True)
       else:
-        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL_SOLID)
-        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 2, Console.BORDER_DEFAULT)
-        fg, word = (Console.SUCCESS if on else Console.BG_HIGH), ("Left" if side == "left" else "Right")
-        cue_icon(f"arrow_{side}", r.x + (TILE - 60) / 2, r.y + 16, 60, fg)
-      D.text_center(word, r.x + TILE / 2, r.y + TILE - 44, 28, fg if st != "signal" else Console.TEXT_SECONDARY, semi=True)
+        # Turn signal: the arrow alone, lit tile while the indicator is on (no word, like a cluster)
+        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL)
+        if on:
+          rl.draw_rectangle_rounded(r, rr, 10, with_alpha(Console.SUCCESS, 0x30))
+        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 2, with_alpha(Console.SUCCESS, 0x90) if on else Console.BORDER_DEFAULT)
+        cue_icon(f"arrow_{side}", r.x + (TILE - 80) / 2, r.y + (TILE - 80) / 2, 80, Console.SUCCESS if on else Console.TEXT_GHOST)
     return shown
 
 
@@ -274,6 +278,19 @@ class ConsoleConfidence(ConfidenceBallTiciBP):
 
   BALL_WIDTH = 64           # strip reserved on the left (bar + margin)
   BAR_W = 28
+
+  def level(self) -> tuple[float, rl.Color | None]:
+    """Advance the filter one frame and return (fraction, zone colour or None when not engaged).
+    The driver-monitor chip draws it; the standalone strip below is no longer placed."""
+    self._update_state()
+    x = self._confidence_filter.x
+    frac = max(0.0, min(1.0, (x + 0.5) / 1.5))
+    status = ui_state.status
+    if status in (UIStatus.LAT_ONLY, UIStatus.LONG_ONLY, UIStatus.ENGAGED) or self._demo:
+      return frac, (Console.SUCCESS if x > 0.5 else (Console.WARNING if x > 0.2 else Console.DANGER))
+    if status == UIStatus.OVERRIDE:
+      return frac, Console.TEXT_PRIMARY
+    return frac, None
 
   def _render(self, _):
     r = self.rect

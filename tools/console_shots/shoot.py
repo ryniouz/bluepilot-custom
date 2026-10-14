@@ -106,13 +106,15 @@ SCENES.update({
   "drive_popup": "SP green-light pop-up as a notification card, with smart-cruise chips",
   "drive_lead": "Closing on a lead: bracket marker and lead card with every row on",
   "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
-  "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band and edge glow",
-  "drive_off": "Disengaged: neutral state band, no edge glow",
+  "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band",
+  "drive_off": "Disengaged: neutral state band",
+  "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
+  "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                    "drive_guest", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_guest", "drive_qc_handle", "drive_qc_drag", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -196,6 +198,8 @@ def run_parent(args) -> int:
       try:
         env = worker_env(repo)
         env["CONSOLE_SHOTS_THEME"] = args.theme
+        if args.sim_scale != 1.0:  # render the way the PC simulator window does
+          env["SCALE"] = str(args.sim_scale)
         rc = subprocess.call(cmd, cwd=repo, env=env, stdout=f, stderr=subprocess.STDOUT, timeout=args.timeout)
       except subprocess.TimeoutExpired:
         rc = -999
@@ -812,7 +816,19 @@ class Scene:
 
   def _save_render_texture(self, path: str):
     rl = self.rl
-    img = rl.load_image_from_texture(self.gui_app._render_texture.texture)
+    app = self.gui_app
+    if getattr(app, "_scale", 1.0) != 1.0:
+      # Composite into a window-sized target exactly as GuiApplication does for the window
+      ssaa = getattr(app, "_ssaa", 1)
+      out = rl.load_render_texture(app._scaled_width, app._scaled_height)
+      rl.begin_texture_mode(out)
+      rl.draw_texture_pro(app._render_texture.texture, rl.Rectangle(0, 0, app.width * ssaa, -app.height * ssaa),
+                          rl.Rectangle(0, 0, app._scaled_width, app._scaled_height), rl.Vector2(0, 0), 0.0, rl.WHITE)
+      rl.end_texture_mode()
+      img = rl.load_image_from_texture(out.texture)
+      rl.unload_render_texture(out)
+    else:
+      img = rl.load_image_from_texture(app._render_texture.texture)
     rl.image_flip_vertical(img)
     rl.export_image(img, path)
     rl.unload_image(img)
@@ -875,14 +891,14 @@ def scene_params(name: str) -> dict:
 # --- Stream B (driving screen) scene setup ------------------------------------------------
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
-                "drive_guest")
+                "drive_guest", "drive_qc_handle", "drive_qc_drag")
 
 
 def drive_scene_params(name: str) -> dict:
   if not name.startswith("drive_"):
     return {}
   p = {"IsMetric": True, "SpeedLimitMode": 2}  # the truck runs Canadian units
-  if name == "drive_minimal":
+  if name in ("drive_minimal", "drive_qc_handle", "drive_qc_drag"):
     p["BPLayoutPreset"] = 0
   if name == "drive_dense":
     p["BPLayoutPreset"] = 2
@@ -1186,6 +1202,11 @@ def run_scene(sc: Scene):
       sc.main._quick.open()
       sc.main._quick._page = "road"
       sc.step(max(20, sc.frames // 4))
+    if name == "drive_qc_drag":  # stream B: hold the sheet where a finger would leave it
+      q = sc.main._quick
+      q._p = q._target = 0.55
+      q._touched_t = time.monotonic()
+      sc.step(4)
     if name == "onroad_debug_panel":
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
@@ -1373,6 +1394,8 @@ def main() -> int:
   ap.add_argument("--frames", type=int, default=90, help="frames to settle before each capture (default 90 = 1.5s sim time)")
   ap.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1), help="scenes rendered in parallel")
   ap.add_argument("--timeout", type=int, default=600, help="per-scene timeout in seconds")
+  ap.add_argument("--sim-scale", type=float, default=1.0,
+                  help="capture what a PC simulator window at this SCALE shows (e.g. 0.84 on a 1080p laptop)")
   ap.add_argument("--theme", choices=["night", "day", "auto"], default="night",
                   help="Console palette (BPConsoleMode) for every scene (default night)")
   ap.add_argument("--build", action="store_true", help="run the targeted scons build in --repo first")

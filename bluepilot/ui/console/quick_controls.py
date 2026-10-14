@@ -1,11 +1,16 @@
 """
 Console quick-controls sheet for the driving view.
 
-The expanded form of the bottom dock: a tap on the camera slides up a sheet with four big
-cards (experimental mode, following distance, screen layout, road view) and two actions in its
-header (mark this moment, diagnostics). The road view card opens a second page of switches for
-what the road view and the lead card show. It closes on a tap outside it, on its close button, or after
-a few seconds without a touch, so the road stays clear.
+The expanded form of the bottom dock: a sheet with four big cards (experimental mode, following
+distance, screen layout, road view) and two actions in its header (mark this moment,
+diagnostics). The road view card opens a second page of switches for what the road view and the
+lead card show.
+
+Opening: drag the dock (or, in Minimal mode where there is no dock, the small handle bar at the
+bottom) upward and the sheet follows the finger; let go past a third of the way and it settles
+open, otherwise it drops back. A tap on the handle, the dock or the camera opens it too. Dragging
+the sheet's header down closes it, as do a tap outside it, its close button, or a few seconds
+without a touch, so the road stays clear.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console.home import PERSONALITY_LABELS, PERSONALITY_VALUES
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS
-from bluepilot.ui.lib.theme import Console, roundness
+from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
 from openpilot.selfdrive.ui.bp.onroad.road_view import OPTIONS as ROAD_OPTIONS, road_prefs
 
 AUTO_CLOSE_S = 8.0
@@ -35,14 +40,30 @@ ACTION_W = 330           # header action button (icon + word)
 CARD_GAP = 24
 CARD_RADIUS = 24         # kit PANEL_R
 CARD_PAD = 28
-SLIDE_S = 0.18           # open animation
+SPRING = 14.0            # 1/s, how fast the sheet settles toward open or closed
+DRAG_SLOP = 14           # px of travel before a press counts as a drag
+OPEN_AT = 0.3            # released past this fraction (from closed) settles open
+CLOSE_AT = 0.7           # released below this fraction (from open) settles closed
+HANDLE_W = 260           # Minimal mode's collapsed bar
+HANDLE_H = 56
+HANDLE_BOTTOM = 28
+
+
+def _chevron_up(cx: float, cy: float, half: float, color: rl.Color):
+  w = 4.0
+  pts = [(cx - half, cy + half * 0.5), (cx, cy - half * 0.5), (cx + half, cy + half * 0.5)]
+  for (x0, y0), (x1, y1) in zip(pts, pts[1:], strict=False):
+    rl.draw_line_ex(rl.Vector2(x0, y0), rl.Vector2(x1, y1), w, color)
+  rl.draw_circle_v(rl.Vector2(cx, cy - half * 0.5), w / 2, color)
 
 
 class QuickControls:
   def __init__(self):
     self._params = Params()
-    self.visible = False
-    self._opened_t = 0.0
+    self._p = 0.0            # 0 collapsed .. 1 open
+    self._target = 0.0
+    self._drag: list | None = None   # [start y, start progress, moved]
+    self._was_down = False
     self._touched_t = 0.0
     self._sheet: rl.Rectangle | None = None
     self._page = "main"      # or "road"
@@ -50,13 +71,21 @@ class QuickControls:
     self.on_bookmark: Callable[[], None] | None = None
     self.on_diagnostics: Callable[[], None] | None = None
 
+  @property
+  def visible(self) -> bool:
+    return self._p > 0.001 or self._target > 0.0 or self.in_gesture
+
+  @property
+  def in_gesture(self) -> bool:
+    """True while (and on the frame) a drag is being released, so the release is not also a tap."""
+    return self._drag is not None and self._drag[2]
+
   def open(self):
-    self.visible = True
-    self._opened_t = self._touched_t = time.monotonic()
+    self._target = 1.0
+    self._touched_t = time.monotonic()
 
   def close(self):
-    self.visible = False
-    self._page = "main"
+    self._target = 0.0
 
   def toggle(self):
     self.close() if self.visible else self.open()
@@ -70,20 +99,91 @@ class QuickControls:
   def _pressed(self, r: rl.Rectangle) -> bool:
     return rl.is_mouse_button_down(rl.MouseButton.MOUSE_BUTTON_LEFT) and rl.check_collision_point_rec(rl.get_mouse_position(), r)
 
-  def render(self, rect: rl.Rectangle):
-    if not self.visible:
-      return
-    now = time.monotonic()
-    if now - self._touched_t > AUTO_CLOSE_S:
-      self.close()
-      return
-    self._hits = []
+  # -- collapsed bar and drag ------------------------------------------------------------
 
-    # Slide up from the bottom edge (eased), so it reads as the dock expanding
-    t = min(1.0, (now - self._opened_t) / SLIDE_S)
-    ease = 1 - (1 - t) ** 3
+  def _travel(self) -> float:
+    return SHEET_H + SHEET_MARGIN
+
+  def _handle_rect(self, rect: rl.Rectangle) -> rl.Rectangle | None:
+    """Minimal mode's handle bar, or None when the dock (which is itself the handle) shows or an
+    alert owns the bottom of the screen."""
+    if getattr(ui_state, "qc_blocked", False) or getattr(ui_state, "qc_dock", None) is not None:
+      return None
+    return rl.Rectangle(rect.x + (rect.width - HANDLE_W) / 2, rect.y + rect.height - HANDLE_BOTTOM - HANDLE_H, HANDLE_W, HANDLE_H)
+
+  def _drag_zone(self, rect: rl.Rectangle) -> rl.Rectangle | None:
+    if self._p > 0.5:
+      return rl.Rectangle(self._sheet.x, self._sheet.y, self._sheet.width, SHEET_PAD + HEADER_H) if self._sheet else None
+    dock = getattr(ui_state, "qc_dock", None)
+    if dock is not None and not getattr(ui_state, "qc_blocked", False):
+      return dock
+    h = self._handle_rect(rect)
+    return rl.Rectangle(h.x - 40, h.y - 40, h.width + 80, h.height + 40 + HANDLE_BOTTOM) if h is not None else None
+
+  def _update_drag(self, rect: rl.Rectangle, now: float):
+    down = rl.is_mouse_button_down(rl.MouseButton.MOUSE_BUTTON_LEFT)
+    pos = rl.get_mouse_position()
+    if self._drag is not None and self._drag[2] and not self._was_down:
+      self._drag = None  # the release frame of a drag has passed
+    if down and not self._was_down:
+      zone = self._drag_zone(rect)
+      if zone is not None and rl.check_collision_point_rec(pos, zone):
+        self._drag = [pos.y, self._p, False]
+    elif down and self._drag is not None:
+      dy = self._drag[0] - pos.y
+      if abs(dy) > DRAG_SLOP:
+        self._drag[2] = True
+      if self._drag[2]:
+        self._p = min(1.0, max(0.0, self._drag[1] + dy / self._travel()))
+        self._touched_t = now
+    elif not down and self._drag is not None:
+      if self._drag[2]:
+        from_open = self._drag[1] > 0.5
+        self._target = 1.0 if self._p > (CLOSE_AT if from_open else OPEN_AT) else 0.0
+        self._touched_t = now
+        self._was_down = down
+        return  # keep the drag record this frame so in_gesture swallows the release tap
+      self._drag = None
+    self._was_down = down
+
+  def _render_handle(self, rect: rl.Rectangle):
+    h = self._handle_rect(rect)
+    if h is None:
+      return
+    a = max(0.0, 1.0 - self._p * 2.5)
+    if a <= 0.01:
+      return
+    pressed = self._drag is not None and self._p < 0.5
+    rl.draw_rectangle_rounded(h, 1.0, 16, with_alpha(Console.BG_HIGH if pressed else Onroad.PANEL, int(0xD9 * a)))
+    rl.draw_rectangle_rounded_lines_ex(h, 1.0, 16, 2, with_alpha(Console.BORDER_DEFAULT, int(255 * a)))
+    label = tr("Controls")
+    lw = D.text_w(label, D.LABEL, semi=True)
+    x = h.x + (h.width - lw - 34) / 2
+    ink = with_alpha(Console.TEXT_SECONDARY, int(255 * a))
+    _chevron_up(x + 11, h.y + HANDLE_H / 2, 11, ink)
+    D.text(label, x + 34, h.y + (HANDLE_H - D.LABEL) / 2 - 2, D.LABEL, ink, semi=True)
+
+  def render(self, rect: rl.Rectangle):
+    now = time.monotonic()
+    self._update_drag(rect, now)
+    if self._drag is None or not self._drag[2]:
+      if self._target > 0.0 and now - self._touched_t > AUTO_CLOSE_S:
+        self._target = 0.0
+      dt = min(0.05, rl.get_frame_time())
+      self._p += (self._target - self._p) * min(1.0, dt * SPRING)
+      if abs(self._target - self._p) < 0.002:
+        self._p = self._target
+    if self._p <= 0.0 and self._target <= 0.0:
+      self._page = "main"
+    self._render_handle(rect)
+    self._hits = []
+    if self._p <= 0.0:
+      self._sheet = None
+      return
+
+    # The sheet rises from the bottom edge, following the finger while dragged
     y_open = rect.y + rect.height - SHEET_H - SHEET_MARGIN
-    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open + (1 - ease) * (SHEET_H + SHEET_MARGIN), rect.width - 2 * SHEET_MARGIN, SHEET_H)
+    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open + (1 - self._p) * self._travel(), rect.width - 2 * SHEET_MARGIN, SHEET_H)
     self._sheet = sheet
     rl.draw_rectangle_rounded(sheet, roundness(sheet, SHEET_RADIUS), 12, Console.BG_PANEL)
     rl.draw_rectangle_rounded_lines_ex(sheet, roundness(sheet, SHEET_RADIUS), 12, 2, Console.BORDER_DEFAULT)

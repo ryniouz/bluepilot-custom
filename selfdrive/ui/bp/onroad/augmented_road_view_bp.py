@@ -22,21 +22,10 @@ from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
 from openpilot.selfdrive.ui.ui_state import UIStatus
 from openpilot.selfdrive.ui.onroad.augmented_road_view import DEFAULT_DEVICE_CAMERA, INF_POINT, WIDE_CAM
-from bluepilot.ui.lib.theme import Console, Onroad, with_alpha
+from bluepilot.ui.lib.theme import Console
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
-# BluePilot: Margin to keep confidence ball inside the colored border
-BALL_BORDER_MARGIN = UI_BORDER_SIZE // 2  # 15px
 
-# Custom: engagement glow (replaces the 30 px border)
-GLOW_W = 52
-GLOW_ALPHA = 0x9C
-STATE_GLOW = {
-  UIStatus.ENGAGED: Onroad.ENGAGED,
-  UIStatus.OVERRIDE: Onroad.OVERRIDE,
-  UIStatus.LAT_ONLY: Onroad.LAT_ONLY,
-  UIStatus.LONG_ONLY: Onroad.LONG_ONLY,
-}
 
 class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
   """BluePilot AugmentedRoadView with blindspot indicators, gauges, and BP renderers."""
@@ -99,9 +88,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     inset = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
                          rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
 
-    # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
-    ball_offset = (ConsoleConfidence.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
-    ui_rect = rl.Rectangle(inset.x + ball_offset, inset.y, inset.width - ball_offset, inset.height)
+    # Custom: confidence lives in the driver-monitor chip, so the UI no longer shifts right for it
+    ui_rect = inset
+    self.driver_state_renderer.confidence = self._confidence_ball.level if show_ball else None
 
     bp_ui_log.scissor("AugRoadView", "begin",
                        x=int(self._content_rect.x), y=int(self._content_rect.y),
@@ -123,11 +112,6 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # SP fade overlay
     self.update_fade_out_bottom_overlay(self._content_rect)
-
-    # BluePilot: Render confidence ball on left side (narrow rect = ball strip only, not full width)
-    if show_ball:
-      self._confidence_ball.render(rl.Rectangle(self._content_rect.x + BALL_BORDER_MARGIN, self._content_rect.y,
-                                                ConsoleConfidence.BALL_WIDTH, self._content_rect.height))
 
     # Custom: a prompt or critical alert owns the bottom of the screen, so the dock steps aside
     alert = self.alert_renderer.get_alert(ui_state.sm)
@@ -184,11 +168,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     # Alerts last so they are never covered by gauges or other overlays.
     # BluePilot: Full-screen alerts (e.g. reverse gear) must use content_rect so they cover
     # the confidence ball strip; otherwise the camera shows through where the ball was.
-    alert_rect = (
-      self._content_rect
-      if (alert and alert.size == log.SelfdriveState.AlertSize.full and show_ball)
-      else ui_rect
-    )
+    alert_rect = self._content_rect if (alert and alert.size == log.SelfdriveState.AlertSize.full) else ui_rect
     self.alert_renderer.notify_band = self._hud_renderer.notify_band(ui_rect)
     self.alert_renderer.notify_top = self._hud_renderer.notify_top(ui_rect)
     self.alert_renderer.render(alert_rect)
@@ -196,11 +176,10 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     bp_ui_log.scissor("AugRoadView", "end")
     rl.end_scissor_mode()
 
-    # Custom: engagement glow along the screen edges replaces the border frame (BPHideOnroadBorder
-    # still turns it off)
-    if not self._bp_params.get_bool("BPHideOnroadBorder"):
-      if not self._guest:
-        self._draw_state_glow(rect)
+    # Custom: no border or edge glow (Lucas 2026-10-14); the speed card's status band carries the
+    # engagement state. Quick controls read where the dock is so a swipe up from it opens them.
+    ui_state.qc_dock = dock
+    ui_state.qc_blocked = alert_blocks_dock or self._guest
 
     # Publish uiDebug
     msg = messaging.new_message('uiDebug')
@@ -278,20 +257,6 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     ])
     self.model_renderer.set_transform(video_transform @ calib_transform)
     return self._cached_matrix
-
-  def _draw_state_glow(self, rect: rl.Rectangle):
-    """A soft wash of the engagement colour fading in from every edge: unmistakable at the edge
-    of vision, nothing over the road when disengaged."""
-    color = STATE_GLOW.get(ui_state.status)
-    if color is None:
-      return
-    a = with_alpha(color, GLOW_ALPHA)
-    clear = with_alpha(color, 0)
-    x, y, w, h, g = int(rect.x), int(rect.y), int(rect.width), int(rect.height), GLOW_W
-    rl.draw_rectangle_gradient_v(x, y, w, g, a, clear)
-    rl.draw_rectangle_gradient_v(x, y + h - g, w, g, clear, a)
-    rl.draw_rectangle_gradient_h(x, y, g, h, a, clear)
-    rl.draw_rectangle_gradient_h(x + w - g, y, g, h, clear, a)
 
   def _draw_border(self, rect: rl.Rectangle):
     """Console: page-ground outer frame, status-coloured inner frame."""
