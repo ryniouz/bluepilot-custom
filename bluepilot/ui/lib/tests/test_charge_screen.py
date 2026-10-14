@@ -1,4 +1,4 @@
-from bluepilot.ui.lib.charge_screen import DIM, OFF, ON, ChargePolicy, fmt_minutes, occupied, step_minutes
+from bluepilot.ui.lib.charge_screen import DIM, ON, ChargePolicy, fmt_minutes, occupied, step_minutes
 from bluepilot.ui.lib.ev_data import ChargeSession, EvSnapshot
 
 
@@ -15,15 +15,14 @@ class FakeParams:
 def test_defaults_when_keys_missing():
   p = ChargePolicy.from_params(FakeParams({}))
   assert (p.on_ac_min, p.on_dc_min, p.off_ac_min, p.off_dc_min) == (0, 0, 30, 60)
-  assert (p.on_then, p.off_then, p.minimal) == (DIM, OFF, True)
+  assert (p.on_then, p.off_then, p.minimal) == (DIM, DIM, True)
 
 
 def test_mode_per_ignition_and_charge_type():
   p = ChargePolicy.from_params(FakeParams({"BPChargeOnAcMin": 5, "BPChargeOnDcMin": 0, "BPChargeSleepMin": 10,
                                            "BPChargeOffDcMin": 2, "BPChargeOnThen": 1, "BPChargeOffThen": 0}))
-  assert p.mode(True, False, 4 * 60) == ON
-  assert p.mode(True, False, 5 * 60) == OFF           # truck on, AC, then off
-  assert p.mode(True, True, 10 * 3600) == ON          # truck on, DC: always
+  assert p.mode(True, False, 5 * 60) == ON            # someone inside: never dims, whatever the old settings say
+  assert p.mode(True, True, 10 * 3600) == ON
   assert p.mode(False, False, 9 * 60) == ON
   assert p.mode(False, False, 10 * 60) == DIM         # truck off, AC, then dim
   assert p.mode(False, True, 2 * 60) == DIM           # truck off, DC uses its own window
@@ -35,7 +34,7 @@ def test_occupied_is_truck_on_or_accessory():
   assert not occupied(False, "off") and not occupied(False, "unknown") and not occupied(False, "")
   p = ChargePolicy()                          # defaults: someone inside never dims, nobody inside uses the window
   assert p.mode(occupied(False, "accessory"), False, 10 * 3600) == ON
-  assert p.mode(occupied(False, "off"), False, 30 * 60) == OFF
+  assert p.mode(occupied(False, "off"), False, 30 * 60) == DIM  # nobody inside: dims, not black
 
 
 def test_steps():

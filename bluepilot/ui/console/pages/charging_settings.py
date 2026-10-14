@@ -53,6 +53,14 @@ class ChargingSettingsPage(FormPage):
     return Choice(tr("Then"), [tr("Dim"), tr("Turn off")], max(0, min(1, self.p.int(key, default))),
                   lambda i: self._set(key, int(i)))
 
+  def _after_note(self) -> str:
+    pol = ChargePolicy.from_params(self.p._params)
+    ac, dc = pol.minutes(False, False), pol.minutes(False, True)
+    if ac <= 0 and dc <= 0:
+      return tr("It stays at full brightness.")
+    then = tr("dims") if pol.off_then == "dim" else tr("turns off")
+    return tr("It {} after {} on AC, {} on DC.").format(then, tr(fmt_minutes(ac)).lower(), tr(fmt_minutes(dc)).lower())
+
   def sections(self) -> list[Section]:
     p = self.p
     out = []
@@ -63,18 +71,17 @@ class ChargingSettingsPage(FormPage):
         Toggle(tr("Show while charging"), tr("Opens when you plug in and stop"), on, lambda: self.set_screen(not on)),
         Note(tr("A tap minimizes it. Home's Charging card brings it back.")),
       ]))
-    out.append(Section(tr("Someone inside"), "car", keep(
-      self._window("BPChargeOnAcMin", tr("AC charging"), tr("From plug-in or a tap"), 0),
-      self._window("BPChargeOnDcMin", tr("DC fast charging"), tr("From plug-in or a tap"), 0),
-      self._then("BPChargeOnThen", 0),
-    ), note=tr("Truck on or in accessory mode. The full charging screen, bright this long, then dimmed or off.")))
+    out.append(Section(tr("Someone inside"), "car", [
+      Info(tr("Charging screen"), tr("Full, never dims")),
+    ], note=tr("Truck on or in accessory mode.")))
     out.append(Section(tr("Nobody inside"), "battery", keep(
       Toggle(tr("Minimal dark screen"), tr("Charge and power only"), p.bool("BPChargeMinimal", True),
              lambda: self._set("BPChargeMinimal", not p.bool("BPChargeMinimal", True))) if p.has("BPChargeMinimal") else None,
       self._window("BPChargeSleepMin", tr("AC charging"), tr("From plug-in or a tap"), 30),
       self._window("BPChargeOffDcMin", tr("DC fast charging"), tr("From plug-in or a tap"), 60),
-      self._then("BPChargeOffThen", 1),
-    ), note=tr("Truck off. The minimal screen is grey on black and moves a little every minute, so nothing burns in.")))
+      self._then("BPChargeOffThen", 0),
+    ), note=tr("Truck off. The minimal screen is grey on black and moves a little every minute, so nothing burns in. "
+               + self._after_note())))
 
     rows = []
     if p.has("BPChargeKeepAwake"):
