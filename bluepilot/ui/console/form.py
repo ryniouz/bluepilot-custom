@@ -99,14 +99,19 @@ class ParamCache:
     return v
 
   def put(self, key: str, value) -> None:
+    """7.0's Params writes in the background unless block=True; the cache keeps the written value either way,
+    so a row shows what was tapped instead of the old value read back before the write lands."""
+    fn = self._params.put_bool if isinstance(value, bool) else self._params.put
     try:
-      if isinstance(value, bool):
-        self._params.put_bool(key, value)
-      else:
-        self._params.put(key, value)
+      fn(key, value, block=True)
+    except TypeError:
+      try:
+        fn(key, value)
+      except Exception:
+        pass
     except Exception:
       pass
-    self._vals.pop(key, None)
+    self._vals[key] = (time.monotonic(), value)
 
   def invalidate(self) -> None:
     self._vals.clear()

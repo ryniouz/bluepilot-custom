@@ -3,7 +3,7 @@ Console Developer page (System > Developer), in place of openpilot's DeveloperLa
 DeveloperLayoutSP.
 
   Access     ADB, SSH, SSH keys from a GitHub username
-  Testing    joystick and longitudinal maneuver modes (one at a time), alpha longitudinal; not on release
+  Testing    joystick, longitudinal and lateral maneuver modes (one at a time), alpha longitudinal; not on release
   Screen     UI debug overlay (touches, FPS, mouse coordinates)
   Advanced   show advanced controls, copyparty, GitHub runner, quickboot
   Error log  the last crash log, shown in place, with Delete
@@ -112,25 +112,27 @@ class DeveloperPage(FormPage):
 
   def _testing(self) -> Section:
     offroad = ui_state.is_offroad()
+    cp = ui_state.CP
     rows: list = [
       Toggle(tr("Joystick mode"), tr("Drive with a joystick for testing") if offroad else tr("Change it while parked"),
-             self.p.bool("JoystickDebugMode"), self._joystick, enabled=offroad),
+             self.p.bool("JoystickDebugMode"), self._only("JoystickDebugMode"), enabled=offroad),
     ]
-    cp = ui_state.CP
     long_ok = cp is not None and ui_state.has_longitudinal_control and offroad
-    if not long_ok and self.p.bool("LongitudinalManeuverMode"):
-      self.p.put("LongitudinalManeuverMode", False)
     rows.append(Toggle(tr("Longitudinal maneuvers"),
                        tr("Runs scripted speed tests") if long_ok else
                        (tr("Change it while parked") if not offroad else tr("Needs openpilot longitudinal control")),
-                       self.p.bool("LongitudinalManeuverMode"), self._maneuvers, enabled=long_ok))
+                       self.p.bool("LongitudinalManeuverMode"), self._only("LongitudinalManeuverMode"), enabled=long_ok))
+    if self.p.has("LateralManeuverMode"):
+      rows.append(Toggle(tr("Lateral maneuvers"), tr("Runs scripted steering tests; turns off Experimental mode"),
+                         self.p.bool("LateralManeuverMode"), self._only("LateralManeuverMode"), enabled=cp is not None))
     if cp is not None:
       if cp.alphaLongitudinalAvailable:
-        rows.append(Toggle(tr("Alpha longitudinal"), tr("openpilot controls speed; turns off AEB"),
+        rows.append(Toggle(tr("Alpha longitudinal"), tr("openpilot controls speed; may turn off AEB"),
                            self.p.bool("AlphaLongitudinalEnabled"), self._ask_alpha, enabled=not ui_state.engaged))
-      elif self.p.bool("AlphaLongitudinalEnabled"):
-        self.p.put("AlphaLongitudinalEnabled", False)
-    return Section(tr("Testing"), "sliders", rows, note=tr("Joystick and maneuver modes can't both be on."))
+      elif self.p.has("AlphaLongitudinalEnabled") and self.p.bool("AlphaLongitudinalEnabled"):
+        ui_state.params.remove("AlphaLongitudinalEnabled")
+        self.p.invalidate()
+    return Section(tr("Testing"), "sliders", rows, note=tr("Only one test mode can be on at a time."))
 
   def _screen(self) -> Section:
     return Section(tr("Screen"), "eye", [
@@ -190,13 +192,19 @@ class DeveloperPage(FormPage):
 
   # -- actions --------------------------------------------------------------------------------
 
-  def _joystick(self):
-    self.p.put("JoystickDebugMode", not self.p.bool("JoystickDebugMode"))
-    self.p.put("LongitudinalManeuverMode", False)
+  MODES = ("JoystickDebugMode", "LongitudinalManeuverMode", "LateralManeuverMode")
 
-  def _maneuvers(self):
-    self.p.put("LongitudinalManeuverMode", not self.p.bool("LongitudinalManeuverMode"))
-    self.p.put("JoystickDebugMode", False)
+  def _only(self, key: str):
+    """Joystick, longitudinal and lateral maneuver modes are one-at-a-time; lateral turns off Experimental mode."""
+    def flip():
+      on = not self.p.bool(key)
+      self.p.put(key, on)
+      for other in self.MODES:
+        if other != key and self.p.has(other):
+          self.p.put(other, False)
+      if key == "LateralManeuverMode" and on:
+        self.p.put("ExperimentalMode", False)
+    return flip
 
   def _ask_alpha(self):
     if self.p.bool("AlphaLongitudinalEnabled"):
@@ -208,7 +216,7 @@ class DeveloperPage(FormPage):
       self.p.put("AlphaLongitudinalEnabled", True)
       self.p.put("OnroadCycleRequested", True)
     self.confirm(tr("Turn on alpha longitudinal?"),
-                 tr("Longitudinal control is in alpha for this car and turns off Automatic Emergency Braking. " +
+                 tr("Longitudinal control is in alpha for this car and may turn off Automatic Emergency Braking. " +
                     "Experimental mode is recommended. The drive restarts if the truck is on."),
                  tr("Turn on"), on, danger=True)
 
