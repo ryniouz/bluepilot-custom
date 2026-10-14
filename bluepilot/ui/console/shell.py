@@ -137,8 +137,17 @@ class ConsoleShell(Widget):
     panel(Dest.DRIVE, tr("Driving model"), "cpu", "MODELS", tr("Drive"))
     panel(Dest.DRIVE, tr("BluePilot tuning"), "tune", "BLUEPILOT", drive)
 
-    item_page(Dest.ENERGY, tr("Charging settings"), "sliders", "charging", tr("Energy"))
-    panel(Dest.ENERGY, tr("Trips"), "route", "TRIPS", tr("Energy"))
+    # Energy (stream B): Console pages instead of the BluePilot rows and sunnypilot's Trips panel. sunnypilot's
+    # TripsLayout still exists inside the settings layout and keeps ApiCache_DriveStats fresh for TripsPage.
+    from bluepilot.ui.console.pages.trips import TripsPage
+    from bluepilot.ui.console.pages.charging_settings import ChargingSettingsPage
+    self.trips = TripsPage()
+    self.register_page(Dest.ENERGY, Page(tr("Trips"), "route", self.trips, key="trips", subtitle=self.trips.subtitle,
+                                         sub_dot=self.trips.sub_dot, framed=False))
+    charge_settings = ChargingSettingsPage()
+    charge_settings.on_open_power = self.open_vehicle_power
+    self.register_page(Dest.ENERGY, Page(tr("Charging settings"), "sliders", charge_settings, key="charging",
+                                         subtitle=tr("Energy"), framed=False))
 
     from bluepilot.ui.console.pages.drives import DrivesPage, OffloadPage, StoragePage
     drives = DrivesPage()
@@ -153,7 +162,9 @@ class ConsoleShell(Widget):
     storage = StoragePage()
     self.register_page(Dest.DRIVES, Page(tr("Storage"), "download", storage, key="drives_storage", framed=False))
 
-    item_page(Dest.SCREEN, tr("Theme and layout"), "palette", "theme", tr("Screen") + " | " + tr("Applies right away"))
+    from bluepilot.ui.console.pages.theme import ThemePage
+    self.register_page(Dest.SCREEN, Page(tr("Theme and layout"), "palette", ThemePage(), key="theme",
+                                         subtitle=tr("Screen") + " | " + tr("Applies right away"), framed=False))
     panel(Dest.SCREEN, tr("Visuals"), "eye", "VISUALS", tr("Screen"))
     panel(Dest.SCREEN, tr("Display"), "screen", "DISPLAY", tr("Screen"))
 
@@ -241,6 +252,13 @@ class ConsoleShell(Widget):
     self._dest = dest
     p = self.current_page()
     self._switch_to(p.widget if p else None)
+
+  def open_vehicle_power(self):
+    """System > Vehicle on its Power tab (charging keep-awake and power-down)."""
+    if self.open_panel("vehicle"):
+      page = self.current_page()
+      if page is not None and hasattr(page.widget, "_tab"):
+        page.widget._tab = 3
 
   def open_obd(self):
     """Connect > Bluetooth on its OBD scanner tab (OBD adapters work over Wi-Fi and USB too)."""
