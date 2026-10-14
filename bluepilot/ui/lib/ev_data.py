@@ -86,7 +86,7 @@ class EvSnapshot:
   charge_target_soc: float = NAN
   charge_inhibit_thermal: bool = False
   charge_conditioning: bool = False
-  # Battery thermal system: "cooling", "heating", "conditioning", "idle", or "" when the truck does not say
+  # Battery thermal system: "cooling", "heating", "conditioning", "circulating", "off", or "" (no data)
   thermal_mode: str = ""
   heater_on: bool = False
   pack_delta_temp_c: float = NAN   # spread between the warmest and coolest module
@@ -98,21 +98,22 @@ class EvSnapshot:
   wh_per_km: float = NAN           # live efficiency (smoothed, trip-based)
 
 
-THERMAL_MODES = ("cooling", "heating", "conditioning", "idle")
+THERMAL_MODES = ("cooling", "heating", "conditioning", "circulating", "off")
 
 
 def thermal_mode(c) -> str:
-  """Battery thermal mode from CarStateBP.Charging.
+  """Battery thermal mode from CarStateBP.Charging.thermalMode (stream B, PR #2).
 
-  Prefers an explicit thermalMode enum when the CAN stream publishes one; otherwise the PTC heater and
-  preconditioning flags give "heating" or "conditioning". Cooling is not decoded yet, so with neither flag
-  set the answer is "" (no data) rather than a guess.
+  Ford sends no single thermal-mode signal; stream B infers it from the PTC heater, the preconditioning
+  flag, the coolant pump / flow request and coolant vs pack temperature. "unknown" (no thermal message on
+  the bus) becomes "" so the UI shows "No data". Before that field existed, the heater and preconditioning
+  flags alone give "heating" or "conditioning".
   """
   raw = str(_f(c, "thermalMode", "") or "")
   if raw in THERMAL_MODES:
     return raw
-  if raw == "off":
-    return "idle"
+  if raw == "unknown":
+    return ""
   if bool(_f(c, "coolantHeaterOn", False)):
     return "heating"
   if bool(_f(c, "batteryConditioning", False)):
@@ -241,10 +242,9 @@ class EvDataSource:
       s.charge_conditioning = bool(_f(c, "batteryConditioning", False))
       s.heater_on = bool(_f(c, "coolantHeaterOn", False))
       s.thermal_mode = thermal_mode(c)
-      if not finite(s.soc):
+      # Charging floats read 0.0 when unavailable; the EvBattery values above are gated on dataAvailable
+      if not finite(s.soc) and _fv(c, "socPercent") > 0:
         s.soc = _fv(c, "socPercent")
-      if not finite(s.pack_temp_c):
-        s.pack_temp_c = _fv(c, "batteryTempC")
       if s.charging or s.charge_status not in ("unknown", "notReady"):
         s.available = True
 
@@ -359,6 +359,7 @@ class ChargeSession:
   def __init__(self):
     self.active = False
     self.dismissed = False      # driver tapped back to the driving view for this session
+    self.reopened = False       # driver reopened the page (shows even with BPChargingScreen off)
     self.start_t = 0.0
     self.start_soc = NAN
     self.start_range_km = NAN
@@ -418,6 +419,7 @@ class ChargeSession:
   def _begin(self, snap: EvSnapshot, now: float):
     self.active = True
     self.dismissed = False
+    self.reopened = False
     self.start_t = now
     self.start_soc = snap.soc
     self.start_range_km = snap.range_km
@@ -436,4 +438,5 @@ class ChargeSession:
     }
     self.active = False
     self.dismissed = False
+    self.reopened = False
     self._off_since = None

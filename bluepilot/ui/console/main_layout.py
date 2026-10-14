@@ -171,6 +171,7 @@ class ConsoleMainLayout(Widget):
     session = getattr(ui_state, "charge_session", None)
     if session is not None and session.active:
       session.dismissed = False
+      session.reopened = True
       ui_state.charging_screen = True
       self._prev_charging = True
       self._set_current_layout(MainState.CHARGING)
@@ -182,6 +183,7 @@ class ConsoleMainLayout(Widget):
     session = getattr(ui_state, "charge_session", None)
     if session is not None:
       session.dismissed = True
+      session.reopened = False
     ui_state.charging_screen = False
     self._prev_charging = False
     if ui_state.started:

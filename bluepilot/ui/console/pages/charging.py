@@ -69,7 +69,8 @@ THERMAL_TEXT = {
   "cooling": "Cooling",
   "heating": "Heating",
   "conditioning": "Conditioning",
-  "idle": "Idle",
+  "circulating": "Circulating",
+  "off": "Off",
   "": "No data",
 }
 
@@ -79,7 +80,8 @@ def thermal_color(mode: str) -> rl.Color:
     "cooling": Console.INFO,
     "heating": Console.WARNING,
     "conditioning": Console.PURPLE,
-    "idle": Console.TEXT_MUTED,
+    "circulating": Console.TEXT_SECONDARY,
+    "off": Console.TEXT_MUTED,
   }.get(mode, Console.TEXT_GHOST)
 
 
