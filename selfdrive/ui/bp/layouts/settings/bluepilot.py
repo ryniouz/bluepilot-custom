@@ -14,7 +14,7 @@ from openpilot.system.ui.lib.wifi_manager import WifiManager, Network
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.widgets.float_control_item import float_control_item
 from openpilot.selfdrive.ui.bp.widgets.section_header import SectionHeader
-from bluepilot.ui.lib.theme import ACCENT_NAMES, ACCENT_LABELS, set_accent  # Custom: Console theme
+from bluepilot.ui.lib.theme import ACCENT_NAMES, ACCENT_LABELS, MODE_NAMES, MODE_LABELS, set_accent  # Custom: Console theme
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS, PRESET_DESCRIPTIONS  # Custom: Console theme
 
 
@@ -408,6 +408,18 @@ class BluePilotLayout(Widget):
     if isinstance(accent, bytes):
       accent = accent.decode("utf-8", errors="ignore")
     accent_idx = ACCENT_NAMES.index(accent) if accent in ACCENT_NAMES else 0
+    mode = str(self._safe_get(self._params, "BPConsoleMode", "auto") or "auto")
+    if isinstance(mode, bytes):
+      mode = mode.decode("utf-8", errors="ignore")
+    self._console_mode_btn = multiple_button_item(
+      lambda: tr("Theme"),
+      lambda: tr("Day uses the light Console palette, Night the dark one. Auto follows the light level while driving and the time of day when parked."),
+      buttons=[lambda n=n: tr(n) for n in MODE_LABELS],
+      button_width=200,
+      callback=self._set_console_mode,
+      selected_index=MODE_NAMES.index(mode) if mode in MODE_NAMES else 0,
+      icon="settings.png"
+    )
     self._console_accent_btn = multiple_button_item(
       lambda: tr("Accent"),
       lambda: tr("Console accent colour for buttons, selections and the driving path. Status colours never change."),
@@ -497,6 +509,7 @@ class BluePilotLayout(Widget):
       self._show_hands_free_ui,
       self._vbatt_pause_charging,
       SectionHeader(tr("Console theme")),
+      self._console_mode_btn,
       self._console_accent_btn,
       self._layout_preset_btn,
       self._ev_hud,
@@ -730,6 +743,14 @@ class BluePilotLayout(Widget):
     except UnknownKeyName:
       pass
     set_accent(name)
+
+  def _set_console_mode(self, button_index: int):
+    name = MODE_NAMES[button_index] if 0 <= button_index < len(MODE_NAMES) else "auto"
+    try:
+      self._params.put("BPConsoleMode", name)
+    except UnknownKeyName:
+      pass
+    ui_state.console_mode_pref = name
 
   def _layout_preset_idx(self) -> int:
     try:

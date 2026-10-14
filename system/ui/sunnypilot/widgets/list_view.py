@@ -179,6 +179,8 @@ class MultipleButtonActionSP(MultipleButtonAction):
       # Check individual button enabled state
       is_button_enabled = self.enabled and (self.enabled_buttons is None or i in self.enabled_buttons)
       current_text_color = text_color if is_button_enabled else style.MBC_DISABLED
+      if is_button_enabled and i == self.selected_button:  # Custom: Console text on the accent fill
+        current_text_color = Console.ON_ACCENT
 
       rl.draw_text_ex(self._font, text, rl.Vector2(text_x, text_y), 40, 0, current_text_color)
 

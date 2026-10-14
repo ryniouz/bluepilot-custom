@@ -9,7 +9,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import Label
-from bluepilot.ui.lib.theme import Console, Onroad  # Custom: Console theme
+from bluepilot.ui.lib.theme import Onroad  # Custom: Console theme
 
 AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
@@ -78,9 +78,9 @@ class AlertRenderer(Widget):
 
     # font size is set dynamically
     self._full_text1_label = Label("", font_size=0, font_weight=FontWeight.BOLD, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP, text_color=Onroad.ALERT_TEXT)
     self._full_text2_label = Label("", font_size=ALERT_FONT_BIG, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP, text_color=Onroad.ALERT_TEXT)
 
   def get_alert(self, sm: messaging.SubMaster) -> Alert | None:
     """Generate the current alert based on selfdrive state."""
@@ -176,7 +176,7 @@ class AlertRenderer(Widget):
       self._full_text2_label.set_text(alert.text2)
       self._full_text2_label.render(subtitle_rect)
 
-  def _draw_centered(self, text, rect, font, font_size, center_y=True, color=Console.TEXT_PRIMARY) -> None:
+  def _draw_centered(self, text, rect, font, font_size, center_y=True, color=Onroad.ALERT_TEXT) -> None:
     text_size = measure_text_cached(font, text, font_size)
     x = rect.x + (rect.width - text_size.x) / 2
     y = rect.y + ((rect.height - text_size.y) / 2 if center_y else 0)

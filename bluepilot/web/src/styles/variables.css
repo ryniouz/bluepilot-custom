@@ -162,3 +162,81 @@
   --accent-tint: #3a2010;
   --accent-tint-strong: #7c2d12;
 }
+
+/* Day (light) palette. The app sets data-mode="light" from the device's BPConsoleMode param
+ * (day, or auto when the viewing device prefers a light scheme). */
+:root[data-mode='light'] {
+  --bg-page: #f4f5f6;
+  --bg-panel: #ffffff;
+  --bg-raised: #f9fafa;
+  --bg-high: #eef0f1;
+  --bg-track: rgba(33, 35, 39, 0.08);
+
+  --border-subtle: #eef0f1;
+  --border-default: #dee0e3;
+  --border-strong: #c2c6cb;
+
+  --text-primary: #212327;
+  --text-secondary: #50565e;
+  --text-muted: #676f79;
+  --text-ghost: #808893;
+  --ink-rgb: 33, 35, 39;
+
+  --accent: #006fff;
+  --accent-rgb: 0, 111, 255;
+  --accent-text: #005ed9;
+  --accent-fill: #006fff;
+  --accent-fill-hover: #005ed9;
+  --accent-tint: #e6f1ff;
+  --accent-tint-strong: #cce2ff;
+
+  --success: #38cc65;
+  --success-rgb: 56, 204, 101;
+  --warning: #f5a524;
+  --warning-rgb: 245, 165, 36;
+  --danger: #f0383b;
+  --danger-rgb: 240, 56, 59;
+  --danger-fill: #f0383b;
+  --info: #6bd2fd;
+  --info-rgb: 107, 210, 253;
+  --purple: #a354e3;
+  --purple-rgb: 163, 84, 227;
+  --scrim: rgba(33, 35, 39, 0.4);
+
+  /* Light theme: card edges come from a hairline, floating surfaces from a soft shadow */
+  --panel-card-shadow: 0 0 0 1px var(--border-default);
+  --shadow-sm: 0 0 0 1px var(--border-default);
+  --shadow-md: 0 4px 12px 0 rgba(33, 35, 39, 0.12), 0 0 0 1px var(--border-default);
+  --shadow-lg: 0 12px 48px 0 rgba(33, 35, 39, 0.18), 0 0 0 1px var(--border-default);
+  color-scheme: light;
+}
+
+:root[data-mode='light'][data-theme='teal'] {
+  --accent: #0d9488;
+  --accent-rgb: 13, 148, 136;
+  --accent-text: #0f766e;
+  --accent-fill: #0f766e;
+  --accent-fill-hover: #115e59;
+  --accent-tint: #e6f7f5;
+  --accent-tint-strong: #b9ebe4;
+}
+
+:root[data-mode='light'][data-theme='violet'] {
+  --accent: #7c3aed;
+  --accent-rgb: 124, 58, 237;
+  --accent-text: #6d28d9;
+  --accent-fill: #7c3aed;
+  --accent-fill-hover: #6d28d9;
+  --accent-tint: #f1ecfe;
+  --accent-tint-strong: #ddd2fc;
+}
+
+:root[data-mode='light'][data-theme='ember'] {
+  --accent: #ea580c;
+  --accent-rgb: 234, 88, 12;
+  --accent-text: #c2410c;
+  --accent-fill: #c2410c;
+  --accent-fill-hover: #9a3412;
+  --accent-tint: #fff1e8;
+  --accent-tint-strong: #fed7bd;
+}

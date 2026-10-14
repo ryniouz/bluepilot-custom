@@ -149,7 +149,9 @@ def run_parent(args) -> int:
     cmd = [sys.executable, str(Path(__file__).resolve()), "--_worker", scene, "--out", str(out), "--frames", str(args.frames)]
     with open(log, "w") as f:
       try:
-        rc = subprocess.call(cmd, cwd=repo, env=worker_env(repo), stdout=f, stderr=subprocess.STDOUT, timeout=args.timeout)
+        env = worker_env(repo)
+        env["CONSOLE_SHOTS_THEME"] = args.theme
+        rc = subprocess.call(cmd, cwd=repo, env=env, stdout=f, stderr=subprocess.STDOUT, timeout=args.timeout)
       except subprocess.TimeoutExpired:
         rc = -999
     return scene, rc, time.monotonic() - t0, log
@@ -409,6 +411,7 @@ class Scene:
 
   def _setup_base_params(self):
     from cereal import car
+    self.put("BPConsoleMode", os.environ.get("CONSOLE_SHOTS_THEME", "night"))
     try:
       from openpilot.system.version import terms_version, training_version
       self.put("HasAcceptedTerms", terms_version)
@@ -944,6 +947,8 @@ def main() -> int:
   ap.add_argument("--frames", type=int, default=90, help="frames to settle before each capture (default 90 = 1.5s sim time)")
   ap.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1), help="scenes rendered in parallel")
   ap.add_argument("--timeout", type=int, default=600, help="per-scene timeout in seconds")
+  ap.add_argument("--theme", choices=["night", "day", "auto"], default="night",
+                  help="Console palette (BPConsoleMode) for every scene (default night)")
   ap.add_argument("--build", action="store_true", help="run the targeted scons build in --repo first")
   ap.add_argument("--no-xvfb", action="store_true", help="do not wrap in xvfb-run even if $DISPLAY is unset")
   ap.add_argument("--_worker", help=argparse.SUPPRESS)

@@ -6,8 +6,8 @@ from openpilot.system.ui.widgets import Widget
 
 # Custom: Console toggle - accent track when on, bg-high when off
 ON_COLOR = Console.ACCENT_FILL
-OFF_COLOR = Console.BG_HIGH
-KNOB_COLOR = Console.TEXT_PRIMARY
+OFF_COLOR = Console.TOGGLE_OFF
+KNOB_COLOR = Console.TOGGLE_KNOB
 DISABLED_ON_COLOR = Console.ACCENT_TINT_STRONG
 DISABLED_OFF_COLOR = Console.BG_RAISED
 DISABLED_KNOB_COLOR = Console.TEXT_GHOST

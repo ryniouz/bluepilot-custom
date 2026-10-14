@@ -13,7 +13,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
 
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
-from bluepilot.ui.lib.theme import set_accent as set_console_accent  # Custom: Console theme
+from bluepilot.ui.lib.theme import set_accent as set_console_accent, set_mode as set_console_mode, freeze_derived  # Custom: Console theme
 from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
@@ -122,6 +122,42 @@ class UIState(UIStateSP):
     device.update()
     UIStateSP.update(self)
     self._update_ev()
+    self._update_console_mode()
+
+  # Custom: Console day/night. Auto follows the road camera's light level while driving
+  # (with hysteresis so tunnels and overpasses do not flip it) and the clock when parked.
+  DAY_LIGHT_ON, DAY_LIGHT_OFF, MODE_HOLD_S = 70.0, 45.0, 10.0
+
+  def _update_console_mode(self) -> None:
+    freeze_derived()
+    pref = getattr(self, "console_mode_pref", "auto")
+    cur = getattr(self, "console_mode", None)
+    if pref in ("day", "night"):
+      target = "light" if pref == "day" else "dark"
+      hold = 0.0
+    else:
+      target = cur or "dark"
+      if self.started and self.light_sensor >= 0:
+        if self.light_sensor > self.DAY_LIGHT_ON:
+          target = "light"
+        elif self.light_sensor < self.DAY_LIGHT_OFF:
+          target = "dark"
+      else:
+        target = "light" if 7 <= time.localtime().tm_hour < 19 else "dark"
+      hold = 0.0 if cur is None else self.MODE_HOLD_S
+
+    now = time.monotonic()
+    if target == cur:
+      self._mode_pending_since = None
+      return
+    since = getattr(self, "_mode_pending_since", None)
+    if since is None:
+      self._mode_pending_since = since = now
+    if now - since >= hold:
+      self.console_mode = target
+      self._mode_pending_since = None
+      set_console_mode(target)
+  # Custom: end
 
   # Custom: EV data shared by the EV panel and the charging screen
   def _update_ev(self) -> None:
@@ -213,6 +249,10 @@ class UIState(UIStateSP):
     if isinstance(self.console_accent, bytes):
       self.console_accent = self.console_accent.decode("utf-8", errors="ignore")
     set_console_accent(str(self.console_accent))
+    mode_pref = self.params.get("BPConsoleMode", return_default=True) or "auto"
+    if isinstance(mode_pref, bytes):
+      mode_pref = mode_pref.decode("utf-8", errors="ignore")
+    self.console_mode_pref = str(mode_pref).strip().lower()
     try:
       self.layout_preset = int(self.params.get("BPLayoutPreset", return_default=True) or 1)
     except (TypeError, ValueError):
