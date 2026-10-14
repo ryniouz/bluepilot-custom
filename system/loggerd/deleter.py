@@ -19,6 +19,34 @@ PRESERVE_ATTR_NAME = 'user.preserve'
 PRESERVE_ATTR_VALUE = b'1'
 PRESERVE_COUNT = 5
 
+# Custom: keep-until-synced (bluepilot/bridge). Unsynced segments are only
+# deleted below this hard floor, so the device can never fill up.
+HARD_MIN_BYTES = 2 * 1024 * 1024 * 1024
+HARD_MIN_PERCENT = 5
+
+
+def keep_until_synced() -> bool:
+  try:
+    from openpilot.common.params import Params
+    params = Params()
+    return params.get_bool("BPBridgeEnabled") and params.get_bool("BPKeepUntilSynced")
+  except Exception:
+    return False
+
+
+def load_synced_segments() -> set[str]:
+  try:
+    from bluepilot.bridge.store import load_synced
+    return set(load_synced())
+  except Exception:
+    return set()
+
+
+def is_segment_dir(d: str) -> bool:
+  route, sep, n = d.rpartition("--")
+  return bool(sep and route and n.isdigit())
+# End Custom
+
 
 def has_preserve_xattr(d: str) -> bool:
   return getxattr(os.path.join(Paths.log_root(), d), PRESERVE_ATTR_NAME) == PRESERVE_ATTR_VALUE
@@ -56,12 +84,28 @@ def deleter_thread(exit_event: threading.Event):
       dirs = listdir_by_creation(Paths.log_root())
       preserved_dirs = get_preserved_segments(dirs)
 
+      # Custom: keep-until-synced. Synced segments go first; unsynced ones wait
+      # until free space drops below the hard floor.
+      keep = keep_until_synced()
+      synced = load_synced_segments() if keep else set()
+      critical = (get_available_bytes(default=HARD_MIN_BYTES + 1) < HARD_MIN_BYTES or
+                  get_available_percent(default=HARD_MIN_PERCENT + 1) < HARD_MIN_PERCENT)
+      unsynced = {d for d in dirs if keep and is_segment_dir(d) and d not in synced}
+      deleted = False
+      # End Custom
+
       # remove the earliest directory we can
-      for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
+      for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs, d in unsynced)):
         delete_path = os.path.join(Paths.log_root(), delete_dir)
 
         if any(name.endswith(".lock") for name in os.listdir(delete_path)):
           continue
+
+        # Custom: keep-until-synced
+        if delete_dir in unsynced and not critical:
+          continue
+        deleted = True
+        # End Custom
 
         if Path(Paths.log_root_external()).is_mount():
           out_of_bytes_external = get_available_bytes(default=MIN_BYTES + 1, path_type="external") < MIN_BYTES
@@ -104,7 +148,8 @@ def deleter_thread(exit_event: threading.Event):
           break
         except OSError:
           cloudlog.exception(f"issue deleting {delete_path}")
-      exit_event.wait(.1)
+      # Custom: nothing deletable yet (all unsynced or locked); don't spin
+      exit_event.wait(.1 if deleted else 5)
     else:
       exit_event.wait(30)
 

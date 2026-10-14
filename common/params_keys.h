@@ -321,4 +321,12 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // WiFi Management
     {"WifiFavoriteSSID", {PERSISTENT | BACKUP, STRING}},
+
+    // Custom: data export bridge (bluepilot/bridge)
+    {"BPBridgeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPBridgePort", {PERSISTENT | BACKUP, INT, "8090"}},
+    {"BPBridgeToken", {PERSISTENT, STRING}},
+    {"BPBridgeNotifyUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPKeepUntilSynced", {PERSISTENT | BACKUP, BOOL, "1"}},
+    // End Custom
 };
