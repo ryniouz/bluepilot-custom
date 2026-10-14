@@ -930,7 +930,9 @@ def drive_scene_params(name: str) -> dict:
   if name == "drive_lead":
     p.update({"BPRoadView": 0x17F})  # every row on
   if name.startswith("drive_lead_"):
-    p.update({"BPRoadView": 0xF7})  # default with the speed tag on and the lead card off
+    from openpilot.selfdrive.ui.bp.onroad.road_view import LEAD_STYLES, MARKER_SHIFT
+    # default with the speed tag on, the lead card off and this marker style
+    p.update({"BPRoadView": 0xF7 | (LEAD_STYLES.index(name.split("_")[-1]) << MARKER_SHIFT)})
   return p
 
 
@@ -955,8 +957,6 @@ def setup_drive_scene(name: str, d: dict):
   elif name == "drive_lead":
     d.update(lead_d=24.0, lead_v_rel=-4.2)
   elif name.startswith("drive_lead_"):
-    from openpilot.selfdrive.ui.bp.onroad import road_view
-    road_view.LEAD_STYLE = name.split("_")[-1]
     d.update(lead_d=24.0, lead_v_rel=-4.2)
   elif name == "drive_steer_only":
     d.update(enabled=False, state="disabled", mads=(True, True))
