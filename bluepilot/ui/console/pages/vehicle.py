@@ -8,7 +8,10 @@ platform list is gone and the page groups the Lightning's own settings.
             Driving     Lightning tune, follow the drive mode, towing, one-pedal
             Alerts      low and critical battery %, low tire pressure (stored in kPa, shown in PSI), low 12 V
             Guest Mode  factory driver assist for the next drive, and whether it stays on
-            Power       stay on while charging, power down after charging
+            Charging    stay on while charging, power down after charging
+            12 V        the 12 V battery's charge, and how the comma treats it while parked: power saver,
+                        power down below a charge, ignore the truck's own 12 V top-up wakes (stream B,
+                        lightning-12v.md)
 
 Keys come from the Lightning control branch (stream B); each row shows only once its key exists.
 """
@@ -26,11 +29,14 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import _param, has_param
 from bluepilot.ui.console.pages.cards import GAP, CardPage, as_float, as_int
+from bluepilot.ui.lib.obd_link import live_values
 from bluepilot.ui.lib.theme import Console
 
 LIGHTNING = "FORD_F_150_LIGHTNING_MK1"
 KPA_PER_PSI = 6.89476
-TABS = ["Driving", "Alerts", "Guest", "Power"]
+TABS = ["Drive", "Alerts", "Guest", "Charge", "12 V"]
+SOC_STEPS = [0, 40, 50, 60, 70, 80]
+SAVER_MIN_STEPS = [5, 10, 15, 30, 60]
 
 
 def platform_name(fp: str) -> str:
@@ -71,7 +77,7 @@ class VehiclePage(CardPage):
     for i, r in enumerate(rects):
       self._hits.append((r, lambda i=i: setattr(self, "_tab", i)))
     body = rl.Rectangle(right.x, right.y + 72 + 24, right.width, right.height - 72 - 24)
-    [self._driving_card, self._alerts_card, self._guest_card, self._power_card][self._tab](body)
+    [self._driving_card, self._alerts_card, self._guest_card, self._power_card, self._lv_card][self._tab](body)
 
   # -- truck --------------------------------------------------------------------------------
 
@@ -184,7 +190,7 @@ class VehiclePage(CardPage):
                         "truck's factory systems take over. Recording still works."), 3)
 
   def _power_card(self, r: rl.Rectangle):
-    y = self._title(r, tr("Power"), "battery")
+    y = self._title(r, tr("Charging"), "plug")
     if not has_param(self._params, "BPChargeKeepAwake"):
       return self._missing(r, y)
     awake = bool(self._get("BPChargeKeepAwake", True))
@@ -200,3 +206,83 @@ class VehiclePage(CardPage):
                          lambda: self._put("BPChargeSleepDelayMin", steps[min(len(steps) - 1, i + 1)]),
                          sub=tr("Once charging ends"))
     self._note(r, y + 4, tr("Default uses the comma's own power-off timer. The screen itself sleeps per Energy > Charging settings."), 2)
+
+  # -- 12 V -----------------------------------------------------------------------------------
+
+  def _lv_reading(self) -> tuple[float | None, float | None, str]:
+    """(SOC %, volts, where from): the offroad monitor's chargingStateBP.lowVoltBattery first, then the OBD
+    adapter, then the harness voltage the comma sees."""
+    soc = volts = None
+    note = ""
+    try:
+      sm = ui_state.sm
+      if "chargingStateBP" in sm.data and sm.recv_frame["chargingStateBP"] > 0:
+        cs = sm["chargingStateBP"]
+        lv = getattr(cs, "lowVoltBattery", None)
+        soc = getattr(lv, "soc", None) if lv is not None else None
+        volts = getattr(lv, "voltage", None) if lv is not None else None
+        note = str(getattr(cs, "shutdownReason", "") or "")
+    except Exception:
+      pass
+    obd = live_values()
+    if soc is None and "LvSoc" in obd:
+      soc = obd["LvSoc"].value
+    if volts is None and "LvV" in obd:
+      volts = obd["LvV"].value
+    if volts is None:
+      try:
+        ps = ui_state.sm["peripheralState"]
+        volts = ps.voltage / 1000.0 if ps.voltage > 0 else None
+      except Exception:
+        pass
+    return (soc if soc and soc > 0 else None), (volts if volts and volts > 0 else None), note
+
+  def _lv_card(self, r: rl.Rectangle):
+    y = self._title(r, tr("12 V battery"), "bolt")
+    p = D.CARD_PAD
+    x, right = r.x + p, r.x + r.width - p
+    soc, volts, note = self._lv_reading()
+    # the reading: charge as a thick bar when known, voltage beside it
+    if soc is not None:
+      D.text(f"{soc:.0f} %", x, y, D.H1, semi=True)
+      if volts is not None:
+        D.text_right(f"{volts:.1f} V", right, y + 8, D.H2, Console.TEXT_SECONDARY, semi=True)
+      low = as_int(self._get("BPLvShutdownSoc", 0), 0) if has_param(self._params, "BPLvShutdownSoc") else 0
+      K.bar(rl.Rectangle(x, y + 80, right - x, 28), soc / 100.0,
+            Console.SUCCESS if soc >= 60 else (Console.WARNING if soc >= 40 else Console.DANGER),
+            target=low / 100.0 if low else None)
+      y += 136
+    elif volts is not None:
+      D.text(f"{volts:.1f} V", x, y, D.H1, semi=True)
+      D.text_right(D.fit(tr("Charge shows with the truck data"), D.LABEL, right - x - 260), right, y + 22, D.LABEL,
+                   Console.TEXT_MUTED)
+      y += 96
+    if note:
+      y = self._note(r, y - 12, note, 1) + 12
+
+    if not has_param(self._params, "BPLvSaver"):
+      return self._missing(r, y)
+    saver = bool(self._get("BPLvSaver", False))
+    mins = max(1, as_int(self._get("BPLvSaverOffroadMin", 10), 10))
+    y = self._toggle_row(r, y, tr("12 V power saver"),
+                         tr("Sleeps") + f" {mins} min " + tr("after parking"), saver,
+                         lambda: self._put("BPLvSaver", not saver))
+    if saver and has_param(self._params, "BPLvSaverOffroadMin"):
+      i = min(range(len(SAVER_MIN_STEPS)), key=lambda k: abs(SAVER_MIN_STEPS[k] - mins))
+      y = self._step_row(r, y, tr("Sleep after"), f"{mins} min",
+                         lambda: self._put("BPLvSaverOffroadMin", SAVER_MIN_STEPS[max(0, i - 1)]),
+                         lambda: self._put("BPLvSaverOffroadMin", SAVER_MIN_STEPS[min(len(SAVER_MIN_STEPS) - 1, i + 1)]),
+                         sub=tr("Power saver"))
+    if has_param(self._params, "BPLvShutdownSoc"):
+      pct = max(0, as_int(self._get("BPLvShutdownSoc", 0), 0))
+      i = min(range(len(SOC_STEPS)), key=lambda k: abs(SOC_STEPS[k] - pct))
+      y = self._step_row(r, y, tr("Sleep below"), tr("Off") if pct == 0 else f"{pct} %",
+                         lambda: self._put("BPLvShutdownSoc", SOC_STEPS[max(0, i - 1)]),
+                         lambda: self._put("BPLvShutdownSoc", SOC_STEPS[min(len(SOC_STEPS) - 1, i + 1)]),
+                         sub=tr("12 V charge"))
+    if has_param(self._params, "BPLvWakeFilter"):
+      wf = bool(self._get("BPLvWakeFilter", True))
+      y = self._toggle_row(r, y, tr("Ignore 12 V top-ups"), tr("Not a drive"),
+                           wf, lambda: self._put("BPLvWakeFilter", not wf))
+    self._note(r, y, tr("Parked, the truck wakes now and then to top up its 12 V from the big battery. " +
+                        "The comma sleeps through it."), 3)
