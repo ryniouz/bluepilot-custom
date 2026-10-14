@@ -383,11 +383,38 @@ def test_settings_refused_onroad(env):
   assert status == 409 and body["error"] == "onroad"
 
 
+def _ev(**kw):
+  base = dict(dataAvailable=True, socPercent=55.0, packVoltage=390.0, packCurrent=-30.0, powerKw=-11.5, rangeKm=250.0,
+              packTempC=22.0, coolantTempC=20.0)
+  base.update(kw)
+  return SimpleNamespace(**base)
+
+
+def _charging(**kw):
+  base = dict(charging=True, chargeType="dc", state="charging", powerKw=150.0, powerAvailable=True,
+              timeToFullHours=0.5, timeToFullAvailable=True)
+  base.update(kw)
+  return SimpleNamespace(**base)
+
+
+DS_PARKED = SimpleNamespace(maxTempC=40.0, freeSpacePercent=50.0, memoryUsagePercent=30, networkType="wifi")
+
+
 def test_offroad_charging_reports_battery():
-  v = View({"deviceState": SimpleNamespace(maxTempC=40.0, freeSpacePercent=50.0, memoryUsagePercent=30, networkType="wifi"),
-            "carStateBP": SimpleNamespace(hybridBattery=None, evBattery=SimpleNamespace(
-              dataAvailable=True, socPercent=55.0, packVoltage=390.0, packCurrent=-30.0, powerKw=-11.5, rangeKm=250.0,
-              packTempC=22.0, coolantTempC=20.0, charging=True, chargeMode="ac", chargePowerKw=11.5))})
+  v = View({"deviceState": DS_PARKED,
+            "chargingStateBP": SimpleNamespace(evBattery=_ev(), charging=_charging(), sleepInSeconds=1200)})
   snap = build_snapshot(v, "gpsLocationExternal", False, None, None)
   assert snap["onroad"] is False and snap["car"] is None
-  assert snap["ev"]["socPct"] == 55.0 and snap["ev"]["charging"] is True and snap["ev"]["chargeMode"] == "ac"
+  ev = snap["ev"]
+  assert ev["socPct"] == 55.0 and ev["charging"] is True and ev["chargeMode"] == "dc"
+  assert ev["chargePowerKw"] == 150.0 and ev["chargeState"] == "charging" and ev["timeToFullH"] == 0.5 and ev["sleepInS"] == 1200
+
+
+def test_charging_power_gated_and_older_schema():
+  v = View({"deviceState": DS_PARKED,
+            "carStateBP": SimpleNamespace(evBattery=_ev(), charging=_charging(chargeType="none", powerAvailable=False))})
+  ev = build_snapshot(v, "gpsLocationExternal", False, None, None)["ev"]
+  assert ev["chargeMode"] is None and ev["chargePowerKw"] is None and "sleepInS" not in ev
+  v = View({"deviceState": DS_PARKED, "carStateBP": SimpleNamespace(evBattery=_ev())})  # no charging struct yet
+  ev = build_snapshot(v, "gpsLocationExternal", False, None, None)["ev"]
+  assert ev["socPct"] == 55.0 and "charging" not in ev

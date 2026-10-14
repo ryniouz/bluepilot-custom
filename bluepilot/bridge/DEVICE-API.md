@@ -20,7 +20,7 @@ Runs on the comma 3X as BluePilot process `bp_bridge` (source `bluepilot/bridge/
 ```
 
 ### `GET /v1/live`
-Latest snapshot. Offroad: `device`, `onroad:false`, and `ev` while the car still publishes battery data (for example while charging with the comma awake); everything else null. When stream B's charging mode lands, `ev` also carries `charging`, `chargeMode` (`ac`/`dc`) and `chargePowerKw`.
+Latest snapshot. Offroad: `device`, `onroad:false`, and `ev` while the car still publishes battery data (from `chargingStateBP` when the build has it, else a fresh `carStateBP`); everything else null. When the build has stream B's `charging` struct, `ev` also carries `charging` (bool), `chargeMode` (`ac`/`dc`/`other`/null), `chargeState` (e.g. `charging`, `targetReached`, `evsePaused`, `fault`), `chargePowerKw` (≥ 0 into the pack, null when unknown), `timeToFullH`, and offroad `sleepInS` (seconds until the comma sleeps). Fields are absent on builds without it.
 ```json
 { "t": "...", "onroad": true, "route": "00000123--a1b2c3d4e5", "segment": 7,
   "gps": { "lat": 49.28, "lon": -123.12, "alt": 54.1, "speed": 12.3, "bearing": 181.0, "acc": 3.0, "fix": true, "t": "..." },

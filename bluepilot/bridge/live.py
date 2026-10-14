@@ -8,6 +8,8 @@ from bluepilot.bridge import segments as seg_index
 
 LIVE_SERVICES = ["carState", "carStateBP", "selfdriveState", "carControl", "deviceState",
                  "gpsLocationExternal", "gpsLocation", "userBookmark", "thumbnail"]
+# Subscribed only when this build's cereal has them (stream B's offroad charging monitor).
+OPTIONAL_SERVICES = ["chargingStateBP"]
 
 
 def _num(v, digits: int = 3):
@@ -53,8 +55,10 @@ def build_snapshot(sm, gps_service: str, onroad: bool, route: str | None, segmen
   snap = {"t": iso_now(), "onroad": onroad, "route": route if onroad else None, "segment": segment if onroad else None,
           "gps": None, "car": None, "ev": None, "engaged": None, "latActive": None, "experimental": None, "device": device}
   if not onroad:
-    # Parked but awake (e.g. charging): still report the battery if the car is publishing it.
-    if seen("carStateBP"):
+    # Parked but awake (e.g. charging): chargingStateBP is the offroad source; carStateBP may still be fresh.
+    if seen("chargingStateBP"):
+      snap["ev"] = _ev_snapshot(get("chargingStateBP"))
+    elif seen("carStateBP"):
       snap["ev"] = _ev_snapshot(get("carStateBP"))
     return snap
 
@@ -102,19 +106,36 @@ def _ev_snapshot(bp) -> dict:
            "packA": _num(ev.packCurrent, 2), "powerKw": _num(ev.powerKw, 2)}
     for src, dst, d in (("rangeKm", "rangeKm", 1), ("packTempC", "packTempC", 1), ("coolantTempC", "coolantTempC", 1)):
       out[dst] = _num(getattr(ev, src, None), d)
-    for src in ("charging", "chargeMode", "chargePowerKw"):  # present once charging mode lands
-      try:
-        val = getattr(ev, src)
-      except (AttributeError, KeyError):
-        continue
-      out[src] = _num(val, 2) if src == "chargePowerKw" else (_enum_name(val) if src == "chargeMode" else bool(val))
+    out.update(_charging_fields(bp))
     return out
-  hb = bp.hybridBattery
-  if not bool(hb.dataAvailable):
+  hb = getattr(bp, "hybridBattery", None)
+  if hb is None or not bool(hb.dataAvailable):
     return {"available": False, "socPct": None, "packV": None, "packA": None, "powerKw": None}
   v, a = _num(hb.voltActual, 1), _num(hb.ampsActual, 2)
   return {"available": True, "socPct": _num(hb.socActual, 2), "packV": v, "packA": a,
           "powerKw": round(v * a / 1000.0, 2) if v is not None and a is not None else None}
+
+
+CHARGE_TYPES = {"ac": "ac", "dc": "dc", "other": "other"}
+
+
+def _charging_fields(bp) -> dict:
+  """Stream B's `charging` struct (on carStateBP and chargingStateBP), when this build has it."""
+  try:
+    ch = bp.charging
+  except (AttributeError, KeyError):
+    return {}
+  if ch is None:
+    return {}
+  charging = bool(getattr(ch, "charging", False))
+  out = {"charging": charging, "chargeMode": CHARGE_TYPES.get(_enum_name(getattr(ch, "chargeType", None)) or ""),
+         "chargeState": _enum_name(getattr(ch, "state", None)),
+         "chargePowerKw": _num(getattr(ch, "powerKw", None), 2) if getattr(ch, "powerAvailable", False) else None,
+         "timeToFullH": _num(getattr(ch, "timeToFullHours", None), 2) if getattr(ch, "timeToFullAvailable", False) else None}
+  sleep_s = getattr(bp, "sleepInSeconds", None)  # chargingStateBP only
+  if sleep_s is not None:
+    out["sleepInS"] = _num(sleep_s, 0)
+  return out
 
 
 class _View(dict):
@@ -181,14 +202,16 @@ class LiveMonitor(threading.Thread):
   def run(self) -> None:
     import cereal.messaging as messaging  # device-only import
 
-    sm = messaging.SubMaster(LIVE_SERVICES)
+    from cereal.services import SERVICE_LIST
+    services = LIVE_SERVICES + [s for s in OPTIONAL_SERVICES if s in SERVICE_LIST]
+    sm = messaging.SubMaster(services)
     last_update: dict[str, float] = {}
 
     last_scan = 0.0
     while not self.stop_event.is_set():
       sm.update(200)
       now = time.monotonic()
-      for name in LIVE_SERVICES:
+      for name in services:
         if sm.updated[name]:
           last_update[name] = now
       seen = {name for name, t in last_update.items() if now - t < 5.0}
@@ -200,7 +223,7 @@ class LiveMonitor(threading.Thread):
       self.tracker.update_onroad(onroad)
       if sm.updated["userBookmark"]:
         self.tracker.bookmark()
-      view = _View({name: sm[name] for name in LIVE_SERVICES}, seen)
+      view = _View({name: sm[name] for name in services}, seen)
       snap = build_snapshot(view, self.gps_service, onroad, self.tracker.current_route, self.tracker.current_segment)
       thumb = None
       if sm.updated["thumbnail"] and _enum_name(sm["thumbnail"].encoding) == "jpeg":
