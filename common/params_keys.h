@@ -347,6 +347,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPAutoSetSpeed", {PERSISTENT | BACKUP, BOOL, "0"}},  // Custom: Resume/Set uses the preferred speed for the detected limit
     {"BPAutoSetTable", {PERSISTENT | BACKUP, STRING, "{\"50\":65,\"60\":75,\"80\":90,\"90\":110,\"100\":120}"}},  // Custom: limit km/h -> set km/h
+    {"BPAutoSetActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION | CLEAR_ON_OFFROAD_TRANSITION, INT, "0"}},  // Custom: km/h Auto set put the cruise on, 0 = not holding one (selfdrive/car/auto_set.py)
     {"BPRoadView", {PERSISTENT | BACKUP, INT, "8567"}},  // Custom: road view preset Standard (bits 13-15) + the old default switches
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     // BluePilot: No static defaults; the first active UI persists its matching device styles (C4=0, C3X=1).
