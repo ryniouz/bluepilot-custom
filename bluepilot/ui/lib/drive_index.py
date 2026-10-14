@@ -25,6 +25,9 @@ PRESERVE_ATTR = "user.preserve"
 REFRESH_S = 30.0
 SEGMENT_S = 60.0
 CAMERA_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc", "qcamera.ts")
+VIDEO_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc")
+LOW_RES_FILES = ("qcamera.ts",)
+LOG_FILES = ("rlog", "rlog.zst", "rlog.bz2", "qlog", "qlog.zst", "qlog.bz2")
 
 
 @dataclass
@@ -58,6 +61,9 @@ class DriveIndex:
   drive_bytes: int = 0
   unsynced_bytes: int = 0
   bookmarked_bytes: int = 0
+  video_bytes: int = 0          # full-res cameras
+  low_res_bytes: int = 0        # qcamera
+  log_bytes: int = 0            # rlog / qlog
   sync_known: bool = False     # the export bridge has written synced.json on this device
   scanned_at: float = 0.0      # monotonic; 0 = never
 
@@ -120,6 +126,7 @@ def scan(log_root: str | None = None) -> DriveIndex:
       continue
     size = cam = 0
     locked = False
+    cats = [0, 0, 0]
     try:
       with os.scandir(path) as it:
         for e in it:
@@ -130,9 +137,18 @@ def scan(log_root: str | None = None) -> DriveIndex:
             size += sz
             if e.name in CAMERA_FILES:
               cam += sz
+            if e.name in VIDEO_FILES:
+              cats[0] += sz
+            elif e.name in LOW_RES_FILES:
+              cats[1] += sz
+            elif e.name in LOG_FILES:
+              cats[2] += sz
       mtime = os.path.getmtime(path)
     except OSError:
       continue
+    idx.video_bytes += cats[0]
+    idx.low_res_bytes += cats[1]
+    idx.log_bytes += cats[2]
     by_route.setdefault(parsed[0], []).append((parsed[1], name, mtime, size, cam, locked, _has_preserve(path)))
 
   for route, segs in by_route.items():

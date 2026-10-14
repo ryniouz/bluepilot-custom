@@ -18,7 +18,6 @@ import pyray as rl
 
 import cereal.messaging as messaging
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
-from openpilot.selfdrive.ui.layouts.settings import settings as _settings_mod
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr
@@ -32,6 +31,8 @@ from bluepilot.ui.console.pages.stats import StatsPage
 from bluepilot.ui.console.quick_controls import QuickControls
 from bluepilot.ui.console.shell import ConsoleShell, Dest, Page
 from bluepilot.ui.console.standby import ConsoleStandby
+from bluepilot.ui.lib.home_location import home_location
+from bluepilot.ui.lib.net_usage import usage
 
 if gui_app.sunnypilot_ui():
   from openpilot.selfdrive.ui.sunnypilot.layouts.settings.settings import SettingsLayoutSP as SettingsLayout
@@ -104,7 +105,10 @@ class ConsoleMainLayout(Widget):
 
     self._home.on_open_drive = lambda: self._shell.go(Dest.DRIVE, 0)
     self._home.on_open_assist = lambda: self._shell.go(Dest.DRIVE, 0)
-    self._home.on_open_software = lambda: self.open_settings(_settings_mod.PanelType.SOFTWARE)
+    self._home.on_open_software = lambda: self._shell.open_panel("updates")
+    self._home.on_open_connectivity = lambda: self._shell.open_panel("connectivity")
+    self._home.on_open_storage = lambda: self._shell.open_panel("drives_storage")
+    self._home.wifi_ssid = self._shell.connectivity._connected_ssid
     self._home.on_open_charging = self.open_charging
     self._home.on_open_alerts = lambda: self._shell.open_panel("alerts")
 
@@ -125,6 +129,9 @@ class ConsoleMainLayout(Widget):
 
   def _render(self, rect):
     self._handle_transitions()
+    home_location().tick(ui_state.sm)
+    if ui_state.sm.updated["deviceState"]:
+      usage().tick(ui_state.sm["deviceState"])
     self._layouts[self._current_mode].render(rect)
     if self._current_mode == MainState.ONROAD:
       self._quick.render(rect)

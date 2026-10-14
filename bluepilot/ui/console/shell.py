@@ -97,7 +97,7 @@ class ConsoleShell(Widget):
     self._chip_rects: list[tuple[rl.Rectangle, str]] = []
     self._params = Params()
     self._wifi_key = getattr(PT, "NETWORK", None)
-    self._software_key = getattr(PT, "SOFTWARE", None)
+    self._software_key = "updates"
     self._action_rect: rl.Rectangle | None = None
     self._current: Widget | None = None
     self.alert_count: Callable[[], int] = lambda: 0
@@ -145,14 +145,22 @@ class ConsoleShell(Widget):
     panel(Dest.SCREEN, tr("Visuals"), "eye", "VISUALS", tr("Screen"))
     panel(Dest.SCREEN, tr("Display"), "screen", "DISPLAY", tr("Screen"))
 
+    from bluepilot.ui.console.pages.connectivity import ConnectivityPage
+    net = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None
+    self.connectivity = ConnectivityPage(getattr(net.instance, "_wifi_manager", None) if net is not None else None)
+    self.connectivity.on_open_wifi = lambda: self.open_panel(self._wifi_key)
+    self.connectivity.on_open_export = lambda: self.open_panel("export")
+    self.register_page(Dest.CONNECT, Page(tr("Status"), "pulse", self.connectivity, key="connectivity", framed=False))
     panel(Dest.CONNECT, tr("Wi-Fi"), "wifi", "NETWORK", tr("Connect"))
     panel(Dest.CONNECT, tr("sunnylink"), "cloud", "SUNNYLINK", tr("Connect"))
     panel(Dest.CONNECT, tr("Firehose"), "flame", "FIREHOSE", tr("Connect"))
     panel(Dest.CONNECT, tr("BluePilot Portal"), "phone", "BP_PORTAL", tr("Connect"))
     item_page(Dest.CONNECT, tr("Data export"), "export", "export", tr("Connect"))
 
+    from bluepilot.ui.console.pages.updates import UpdatesPage
+    self.register_page(Dest.SYSTEM, Page(tr("Updates"), "download", UpdatesPage(), key="updates", framed=False))
     panel(Dest.SYSTEM, tr("Device"), "cpu", "DEVICE", tr("System"))
-    panel(Dest.SYSTEM, tr("Software"), "download", "SOFTWARE", tr("System"))
+    panel(Dest.SYSTEM, tr("Software"), "tune", "SOFTWARE", tr("System"))
     panel(Dest.SYSTEM, tr("Vehicle"), "car", "VEHICLE", tr("System"))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
@@ -252,12 +260,8 @@ class ConsoleShell(Widget):
     rl.draw_rectangle_rec(r, Console.BG_PANEL)
     if is_day():
       rl.draw_rectangle_rec(rl.Rectangle(r.x + r.width - 2, r.y, 2, r.height), Console.BORDER_DEFAULT)
-    brand = rl.Rectangle(r.x + (r.width - 80) / 2, r.y + 28, 80, 80)
-    rl.draw_rectangle_rounded(brand, roundness(brand, 16), 8, Console.ACCENT_FILL)
-    D.text_center("BP", brand.x + 40, brand.y + 22, 32, Console.ON_ACCENT, semi=True)
-
     self._tab_rects = []
-    y = r.y + 128
+    y = r.y + 32
     for dest, label, ic in SECTIONS:
       item = rl.Rectangle(r.x + 16, y, r.width - 32, 108)
       self._tab_rects.append(item)

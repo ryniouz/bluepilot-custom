@@ -2,10 +2,11 @@
 Console Home: a few big cards, phone-app style, for the small 3X screen.
 
   Battery     charge with a thick squared bar, range, tires, 12 V, pack temperature
-  Assist      experimental mode, following distance, Lightning profile, one-pedal
+  Assist      experimental mode, following distance, Guest Mode, Lightning profile, one-pedal
   Charging    while plugged in: power and a tap target that reopens the charging page
-  Device      storage, temperature, truck link (in place of Charging when unplugged)
-  Updates     update state, or the active alerts
+  Connection  Wi-Fi, LTE and server/sync (in place of Charging when unplugged)
+  Recording   recording now, the storage bar, drives waiting to sync, uploads in progress
+Updates live on System > Updates and alerts behind the header chip, so neither takes a card here.
 Also the Alerts page (active offroad alerts).
 """
 
@@ -22,7 +23,7 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.lib.ev_data import finite
-from bluepilot.ui.lib.theme import Console, roundness
+from bluepilot.ui.lib.theme import Console, roundness, with_alpha
 
 KM_TO_MI = 0.621371
 KPA_TO_PSI = 0.145038
@@ -123,6 +124,9 @@ class ConsoleHome(Widget):
     self.on_open_assist: Callable[[], None] | None = None
     self.on_open_charging: Callable[[], None] | None = None
     self.on_open_alerts: Callable[[], None] | None = None
+    self.on_open_connectivity: Callable[[], None] | None = None
+    self.on_open_storage: Callable[[], None] | None = None
+    self.wifi_ssid: Callable[[], str] = lambda: ""
 
   # -- header (the shell draws it) --------------------------------------------------------
 
@@ -146,8 +150,12 @@ class ConsoleHome(Widget):
   def _render(self, rect: rl.Rectangle):
     self._hits = []
     gap = 32
+    if self.guest_armed():
+      banner = rl.Rectangle(rect.x, rect.y, rect.width, 76)
+      self._guest_banner(banner)
+      rect = rl.Rectangle(rect.x, rect.y + 76 + 24, rect.width, rect.height - 76 - 24)
     avail = rect.width - gap * 2
-    w1, w2 = avail * 0.38, avail * 0.32
+    w1, w2 = avail * 0.36, avail * 0.32
     w3 = avail - w1 - w2
     x, y, h = rect.x, rect.y, rect.height
     s, live = truck_snapshot()
@@ -155,13 +163,35 @@ class ConsoleHome(Widget):
     x += w1 + gap
     self._assist(rl.Rectangle(x, y, w2, h))
     x += w2 + gap
-    top_h = (h - gap) * 0.5
+    top_h = (h - gap) * 0.53
     top = rl.Rectangle(x, y, w3, top_h)
     if _plugged_in():
       self._charging(top, getattr(ui_state, "ev", None))
     else:
-      self._device(top)
-    self._updates(rl.Rectangle(x, y + top_h + gap, w3, h - top_h - gap))
+      self._connection(top)
+    self._recording(rl.Rectangle(x, y + top_h + gap, w3, h - top_h - gap))
+
+  # -- Guest Mode (keys come from the Lightning control branch; hidden until they exist) ----
+
+  def guest_available(self) -> bool:
+    return has_param(self._params, "BPGuestMode")
+
+  def guest_armed(self) -> bool:
+    return self.guest_available() and bool(_param(self._params, "BPGuestMode", False))
+
+  def guest_active(self) -> bool:
+    return has_param(self._params, "BPGuestModeActive") and bool(_param(self._params, "BPGuestModeActive", False))
+
+  def _guest_banner(self, r: rl.Rectangle):
+    rl.draw_rectangle_rounded(r, roundness(r, 20), 8, with_alpha(Console.WARNING, 0x2E))
+    D.icon("person", r.x + 28, r.y + (r.height - 40) / 2, 40, Console.WARNING)
+    msg = tr("Guest Mode: factory driver assist for this drive") if self.guest_active() else \
+      tr("Guest Mode: factory driver assist at next start")
+    D.text(D.fit(msg, D.BODY, r.width - 420, semi=True), r.x + 92, r.y + (r.height - D.BODY) / 2 - 2, D.BODY,
+           Console.WARNING, semi=True)
+    one_trip = bool(_param(self._params, "BPGuestModeOneTrip", True))
+    note = tr("Turns off after one drive") if one_trip else tr("Stays on until turned off")
+    D.text_right(note, r.x + r.width - 28, r.y + (r.height - D.LABEL) / 2 - 2, D.LABEL, Console.WARNING)
 
   def _battery(self, r: rl.Rectangle, s, live: bool):
     D.card(r)
@@ -232,8 +262,12 @@ class ConsoleHome(Widget):
     for i, sr in enumerate(D.segmented(rl.Rectangle(x, y, r.width - 2 * p, D.CONTROL_H), [tr(t) for t in PERSONALITY_LABELS], sel)):
       self._hits.append((sr, lambda v=PERSONALITY_VALUES[i]: self._put("LongitudinalPersonality", v)))
     y += D.CONTROL_H + 36
+    link_y = r.y + r.height - p - 44
 
-    if has_param(self._params, "BPTowProfile"):
+    if self.guest_available():
+      y = self._guest_rows(r, y)
+
+    if has_param(self._params, "BPTowProfile") and y + 56 + D.CONTROL_H < link_y - 24:
       D.text(tr("Lightning profile"), x, y, D.BODY, semi=True)
       y += 56
       try:
@@ -245,7 +279,6 @@ class ConsoleHome(Widget):
         self._hits.append((sr, lambda v=i: self._put("BPTowProfile", v)))
       y += D.CONTROL_H + 36
 
-    link_y = r.y + r.height - p - 44
     if has_param(self._params, "BPOnePedalMode") and y + 100 < link_y - 24:
       K.hline(x, right, y - 4)
       y += 28
@@ -262,6 +295,34 @@ class ConsoleHome(Widget):
     lr = rl.Rectangle(x - 16, link_y - 16, D.text_w(link, D.BODY, semi=True) + 32, 76)
     D.text(link, x, link_y, D.BODY, Console.ACCENT_TEXT, semi=True)
     self._hits.append((lr, lambda: self.on_open_drive and self.on_open_drive()))
+
+  def _guest_rows(self, r: rl.Rectangle, y: float) -> float:
+    p = D.CARD_PAD
+    x, right = r.x + p, r.x + r.width - p
+    armed = self.guest_armed()
+    locked = ui_state.started
+    K.hline(x, right, y - 4)
+    y += 28
+    D.text(tr("Guest Mode"), x, y + 2, D.BODY, semi=True)
+    if locked:
+      sub = tr("Applies at next start")
+    elif armed:
+      sub = tr("Factory assist at next start")
+    else:
+      sub = tr("Factory cruise and lane keeping")
+    D.text(D.fit(sub, D.LABEL, r.width - 2 * p - 130), x, y + 48, D.LABEL, Console.WARNING if armed else Console.TEXT_MUTED)
+    tg = D.toggle(right - 104, y + 14, armed, enabled=not locked)
+    if not locked:
+      self._hits.append((tg, lambda: self._put("BPGuestMode", not armed)))
+    y += 112
+    if armed and has_param(self._params, "BPGuestModeOneTrip"):
+      one_trip = bool(_param(self._params, "BPGuestModeOneTrip", True))
+      opts = [tr("One drive"), tr("Keep on")]
+      for i, sr in enumerate(D.segmented(rl.Rectangle(x, y, r.width - 2 * p, D.CONTROL_H), opts, 0 if one_trip else 1)):
+        if not locked:
+          self._hits.append((sr, lambda v=(i == 0): self._put("BPGuestModeOneTrip", v)))
+      y += D.CONTROL_H + 36
+    return y
 
   def _charging(self, r: rl.Rectangle, s):
     """Plugged in: the way back to the charging page after it was minimized."""
@@ -281,55 +342,99 @@ class ConsoleHome(Widget):
     D.button(br, tr("Open charging"), primary=True)
     self._hits.append((r, lambda: self.on_open_charging and self.on_open_charging()))
 
-  def _device(self, r: rl.Rectangle):
+  def _connection(self, r: rl.Rectangle):
+    from bluepilot.ui.console.pages.connectivity import ConnectivityPage
     D.card(r)
     p = D.CARD_PAD
     x, y, right = r.x + p, r.y + p, r.x + r.width - p
-    D.text(tr("Device"), x, y, D.H2, semi=True)
-    D.text_right(tr("comma 3X"), right, y + 6, D.LABEL, Console.TEXT_MUTED)
-    y += 92
-    rows = []
-    ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
-    rows.append((tr("Truck link"), tr("Connected") if ready else tr("Waiting")))
+    D.text(tr("Connection"), x, y, D.H2, semi=True)
+    y += 84
     try:
       ds = ui_state.sm["deviceState"]
-      rows.append((tr("Storage free"), f"{ds.freeSpacePercent:.0f} %"))
-      rows.append((tr("Temperature"), f"{ds.maxTempC:.0f} °C"))
+      nt, level = str(ds.networkType), STRENGTH.get(str(ds.networkStrength), 0)
+      info = ds.networkInfo
     except Exception:
-      pass
-    for label, val in rows:
-      if y + D.BODY > r.y + r.height - p:
+      nt, level, info = "none", 0, None
+    ssid = self.wifi_ssid()
+    rows: list[tuple[str, int | None, str, rl.Color]] = []
+    if nt == "wifi":
+      rows.append((tr("Wi-Fi"), level, ssid or tr("Connected"), Console.WARNING if level <= 1 else Console.SUCCESS))
+    else:
+      rows.append((tr("Wi-Fi"), 0, tr("Not connected"), Console.TEXT_GHOST))
+    if nt.startswith("cell"):
+      op = str(getattr(info, "operator", "") or "") if info is not None else ""
+      rows.append((tr("LTE"), level, op or NETWORK_NAMES.get(nt, nt), Console.WARNING if level <= 1 else Console.SUCCESS))
+    else:
+      rows.append((tr("LTE"), 0, tr("Standby") if nt == "wifi" else tr("No signal"), Console.TEXT_GHOST))
+    status, color, _ = ConnectivityPage.server_state(self)
+    short = {tr("Your own server isn't set up yet"): tr("Not set up"), tr("Server connected"): tr("Connected"),
+             tr("Server not reachable"): tr("Not reachable"), tr("Server set, uploader off"): tr("Uploader off")}
+    rows.append((tr("Server"), None, short.get(status, status), color))
+    for label, lvl, value, color in rows:
+      if y + 22 + D.BODY > r.y + r.height - p:
         break
+      K.hline(x, right, y)
+      y += 22
       D.text(label, x, y, D.BODY, Console.TEXT_MUTED)
-      D.text_right(val, right, y, D.BODY, semi=True)
-      y += 64
+      vw = D.text_w(D.fit(value, D.BODY, r.width * 0.5, semi=True), D.BODY, semi=True)
+      D.text_right(D.fit(value, D.BODY, r.width * 0.5, semi=True), right, y, D.BODY, semi=True)
+      if lvl is not None:
+        K.signal_bars(right - vw - 56, y + D.BODY - 2, 28, lvl, color)
+      else:
+        D.dot(right - vw - 24, y + D.BODY / 2 + 2, 9, color)
+      y += 72
+    self._hits.append((r, lambda: self.on_open_connectivity and self.on_open_connectivity()))
 
-  def _updates(self, r: rl.Rectangle):
-    alerts = active_alerts(self._params)
+  def _recording(self, r: rl.Rectangle):
+    from bluepilot.ui.console.pages.drives import fmt_bytes, storage_bar, storage_breakdown
+    from bluepilot.ui.lib import bridge_status as bridge
+    from bluepilot.ui.lib.drive_index import indexer
+    indexer().request()
     D.card(r)
     p = D.CARD_PAD
-    x, y = r.x + p, r.y + p
-    if alerts:
-      D.dot(x + 10, y + D.H2 / 2 + 2, 10, Console.DANGER if alerts[0][1] > 0 else Console.WARNING)
-      D.text(tr("1 alert") if len(alerts) == 1 else f"{len(alerts)} " + tr("alerts"), x + 36, y, D.H2, semi=True)
-      y += 76
-      for ln in D.wrap(alerts[0][0], D.LABEL, r.width - 2 * p, 2):
-        D.text(ln, x, y, D.LABEL, Console.TEXT_SECONDARY)
-        y += 40
-      br = rl.Rectangle(x, r.y + r.height - p - D.CONTROL_H, r.width - 2 * p, D.CONTROL_H)
-      D.button(br, tr("View alerts"), primary=False)
-      self._hits.append((br, lambda: self.on_open_alerts and self.on_open_alerts()))
-      return
-    available = bool(_param(self._params, "UpdateAvailable", False))
-    D.dot(x + 10, y + D.H2 / 2 + 2, 10, Console.ACCENT if available else Console.SUCCESS)
-    D.text(tr("Update ready") if available else tr("Up to date"), x + 36, y, D.H2, semi=True)
-    y += 76
-    desc = str(_param(self._params, "UpdaterNewDescription", "") or "") if available else ""
-    idle = tr("Installs while parked") if available else tr("Checks for updates on Wi-Fi")
-    D.text(D.fit(desc.split(" / ")[0] if desc else idle, D.LABEL, r.width - 2 * p), x, y, D.LABEL, Console.TEXT_SECONDARY)
-    br = rl.Rectangle(x, r.y + r.height - p - D.CONTROL_H, r.width - 2 * p, D.CONTROL_H)
-    D.button(br, tr("Open software"), primary=available)
-    self._hits.append((br, lambda: self.on_open_software and self.on_open_software()))
+    x, y, right = r.x + p, r.y + p, r.x + r.width - p
+    D.text(tr("Recording"), x, y, D.H2, semi=True)
+    if ui_state.started:
+      D.dot(right - D.text_w(tr("Recording now"), D.LABEL, semi=True) - 24, y + 22, 9, Console.DANGER)
+      D.text_right(tr("Recording now"), right, y + 6, D.LABEL, semi=True)
+    else:
+      try:
+        D.text_right(f"comma 3X · {ui_state.sm['deviceState'].maxTempC:.0f} °C", right, y + 6, D.LABEL, Console.TEXT_MUTED)
+      except Exception:
+        pass
+    y += 84
+    st = storage_breakdown()
+    if st is not None and st.total:
+      fv, fu = fmt_bytes(st.free)
+      tv, tu = fmt_bytes(st.total)
+      D.text(f"{fv} {fu} " + tr("free of") + f" {tv} {tu}", x, y, D.BODY, Console.TEXT_SECONDARY)
+      y += 56
+      storage_bar(rl.Rectangle(x, y, r.width - 2 * p, K.BAR_H), st)
+      y += K.BAR_H + 32
+    idx = indexer().index
+    rt = bridge.get("roadTrip")
+    lines: list[tuple[rl.Color, str]] = []
+    if isinstance(rt, dict) and rt.get("state") == "uploading":
+      cur = rt.get("current") or {}
+      q = rt.get("queue") or {}
+      lines.append((Console.ACCENT, tr("Uploading") + f" {int(q.get('files') or 0)} " + tr("files")
+                    + (f", {int(cur.get('pct') or 0)} %" if cur else "")))
+    waiting = sum(1 for d in idx.drives if not d.synced and not d.recording)
+    if idx.sync_known:
+      lines.append((Console.SUCCESS, tr("All drives synced")) if waiting == 0 else
+                   (Console.WARNING, f"{waiting} " + (tr("drive waiting to sync") if waiting == 1 else tr("drives waiting to sync"))))
+    elif idx.scanned_at:
+      n = len(idx.drives)
+      lines.append((Console.TEXT_GHOST, f"{n} " + (tr("drive on the comma") if n == 1 else tr("drives on the comma"))))
+    for color, text in lines:
+      if y + 22 + D.BODY > r.y + r.height - p:
+        break
+      K.hline(x, right, y)
+      y += 22
+      D.dot(x + 9, y + D.BODY / 2 + 2, 9, color)
+      D.text(D.fit(text, D.BODY, r.width - 2 * p - 36), x + 32, y, D.BODY)
+      y += 72
+    self._hits.append((r, lambda: self.on_open_storage and self.on_open_storage()))
 
   # -- input ------------------------------------------------------------------------------
 

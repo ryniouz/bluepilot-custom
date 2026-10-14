@@ -19,7 +19,7 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, _plugged_in, network_status, soc_color, temp, truck_snapshot
 from bluepilot.ui.lib.ev_data import finite
-from bluepilot.ui.lib.theme import Console, roundness
+from bluepilot.ui.lib.theme import Console
 
 MARGIN = 80
 
@@ -34,13 +34,9 @@ class ConsoleStandby(Widget):
     left, right = rect.x + MARGIN, rect.x + rect.width - MARGIN
     s, live = truck_snapshot()
 
-    # Brand line and status
+    # Truck name and status
     mark = rl.Rectangle(left, rect.y + 56, 60, 60)
-    rl.draw_rectangle_rounded(mark, roundness(mark, 14), 8, Console.ACCENT_FILL)
-    D.text_center("BP", mark.x + 30, mark.y + 16, 24, Console.ON_ACCENT, semi=True)
-    x = mark.x + 60 + 20
-    x += D.text("BLUEPILOT", x, mark.y + 15, 28, semi=True) + 20
-    D.text(tr("F-150 Lightning"), x, mark.y + 15, 28, Console.TEXT_MUTED)
+    D.text(tr("F-150 Lightning"), left, mark.y + 13, 32, semi=True)
     cx = right
     net = network_status()
     if net is not None:
@@ -103,5 +99,4 @@ class ConsoleStandby(Widget):
     K.stat_strip(rl.Rectangle(left, rect.y + rect.height - 120 - K.STRIP_H, right - left, K.STRIP_H), cells)
 
     by = rect.y + rect.height - 76
-    D.text("BluePilot 6.0 · bp-6.0 · Lightning", left, by, K.CAP, Console.TEXT_MUTED)
     D.text_right(tr("Tap anywhere to open Home"), right, by, K.CAP, Console.TEXT_MUTED)

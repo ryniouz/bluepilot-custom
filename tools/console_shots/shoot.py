@@ -50,6 +50,9 @@ SCENES: dict[str, str] = {
   "drives": "Drives > Previous drives (fake log root, some synced)",
   "drives_offload": "Drives > Offloading (comma connect queue + Citadel sync)",
   "drives_storage": "Drives > Storage",
+  "connectivity": "Connect > Status (Wi-Fi, LTE, server and sync, home location)",
+  "updates": "System > Updates with an update available from Lucas's repo",
+  "home_guest": "Home with Guest Mode armed (banner + toggle), keys faked when the branch lacks them",
   "settings": "Settings open on the Device panel",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
@@ -922,20 +925,50 @@ def run_scene(sc: Scene):
   name = sc.name
   d = default_drive()
   if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
-              "drives", "drives_offload", "drives_storage"):
+              "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest"):
     sc.drive = None
   else:
     sc.drive = d
 
-  if name in ("standby", "home", "home_alerts", "home_charging"):
+  if name in ("standby", "home", "home_alerts", "home_charging", "home_guest"):
     _inject_last_known()
 
   if name == "standby":
     sc.settle()
     sc.shot()
-  elif name == "home":
+  elif name in ("home", "home_guest"):
+    _seed_drives(sc)
+    if name == "home_guest":
+      _fake_guest_mode()
+    sc.main._home.wifi_ssid = lambda: "Garage-5G"
     if hasattr(sc.main, "_open_shell"):
       sc.main._open_shell()
+    sc.settle()
+    sc.shot()
+  elif name == "connectivity":
+    import json
+    from bluepilot.ui.lib.home_location import home_location
+    from bluepilot.ui.lib.net_usage import usage
+    _seed_drives(sc)
+    sc.main._shell.connectivity._connected_ssid = lambda: "Garage-5G"
+    sc.put("BPHomeWifi", json.dumps(["Garage-5G"]))
+    sc.put("WifiFavoriteSSID", "Garage-5G")
+    h = home_location()
+    h.last = {"lat": 49.2488, "lon": -122.9805, "t": "2026-10-14T07:52:10"}
+    h.home = {"lat": 49.2489, "lon": -122.9807}
+    usage().month_bytes, usage().boot_bytes = 2_480_000_000, 61_000_000
+    sc.main._open_shell()
+    sc.main._shell.open_panel("connectivity")
+    sc.settle()
+    sc.shot()
+  elif name == "updates":
+    sc.put("UpdaterFetchAvailable", True)
+    sc.put("UpdaterCurrentDescription", "6.0.0 / console-ui / a58335b / Oct 14")
+    sc.put("UpdaterNewDescription", "6.0.1 / console-ui / 4c1d9e2 / Oct 14")
+    sc.put("UpdaterAvailableBranches", "lightning-console,console-ui,console-driving,console-energy")
+    sc.put("BPUpdateBranch", "console-ui")
+    sc.main._open_shell()
+    sc.main._shell.open_panel("updates")
     sc.settle()
     sc.shot()
   elif name in ("drives", "drives_offload", "drives_storage"):
@@ -1040,6 +1073,15 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _fake_guest_mode():
+  """Guest Mode keys live on the Lightning control branch; answer for them here when this build lacks them."""
+  from bluepilot.ui.console import home
+  fake = {"BPGuestMode": True, "BPGuestModeOneTrip": True, "BPGuestModeActive": False}
+  has, get = home.has_param, home._param
+  home.has_param = lambda params, key: key in fake or has(params, key)
+  home._param = lambda params, key, default=None: fake[key] if key in fake else get(params, key, default)
 
 
 def _seed_drives(sc):

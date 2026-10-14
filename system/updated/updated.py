@@ -94,6 +94,25 @@ def parse_release_notes(basedir: str) -> bytes:
     cloudlog.exception("failed to parse release notes")
   return b""
 
+# Custom: pull updates from Lucas's own repository (BPUpdateRepo) instead of upstream
+def use_update_repo(params: Params, cwd: str) -> None:
+  url = params.get("BPUpdateRepo")
+  if not url:
+    return
+  url = str(url).strip()
+  if not url.startswith("https://"):
+    cloudlog.warning(f"ignoring BPUpdateRepo, not an https url: {url}")
+    return
+  try:
+    current = run(["git", "remote", "get-url", "origin"], cwd).strip()
+  except subprocess.CalledProcessError:
+    current = ""
+  if current != url:
+    cloudlog.info(f"update remote: {current} -> {url}")
+    run(["git", "remote", "set-url", "origin", url], cwd)
+# End Custom
+
+
 def setup_git_options(cwd: str) -> None:
   # We sync FS object atimes (which NEOS doesn't use) and mtimes, but ctimes
   # are outside user control. Make sure Git is set up to ignore system ctimes,
@@ -229,6 +248,11 @@ class Updater:
 
   @property
   def target_branch(self) -> str:
+    # Custom: the Console Updates page keeps its branch choice across restarts
+    pinned = self.params.get("BPUpdateBranch")
+    if pinned:
+      return str(pinned)
+    # End Custom
     b: str | None = self.params.get("UpdaterTargetBranch")
     if b is None:
       b = self.get_branch(BASEDIR)
@@ -334,6 +358,8 @@ class Updater:
 
     excluded_branches = ('release2', 'release2-staging')
 
+    use_update_repo(self.params, OVERLAY_MERGED)  # Custom: updates come from BPUpdateRepo
+
     try:
       run(["git", "ls-remote", "origin", "HEAD"], OVERLAY_MERGED)
       self._has_internet = True
@@ -369,6 +395,7 @@ class Updater:
     self.params.put_bool("UpdateAvailable", False)
 
     setup_git_options(OVERLAY_MERGED)
+    use_update_repo(self.params, OVERLAY_MERGED)  # Custom: updates come from BPUpdateRepo
 
     run(["git", "config", "--replace-all", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], OVERLAY_MERGED)
 

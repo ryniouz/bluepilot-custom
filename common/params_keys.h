@@ -329,7 +329,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
     {"BPLastEvSnapshot", {PERSISTENT, JSON}},
-    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},
+    {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
+    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},
+    {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
+    {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
+    {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
+    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home  // pinned update branch; empty = UpdaterTargetBranch / current  // one-time switch of IsMetric to km for this build
     // Custom: end
 
     // WiFi Management

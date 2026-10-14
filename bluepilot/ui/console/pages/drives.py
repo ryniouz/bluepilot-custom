@@ -12,6 +12,7 @@ All three read bluepilot.ui.lib.drive_index, which scans the disk on a backgroun
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 
 import pyray as rl
 
@@ -23,6 +24,7 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import _param, has_param, network_status
+from bluepilot.ui.lib import bridge_status
 from bluepilot.ui.lib.drive_index import Drive, DriveIndex, indexer
 from bluepilot.ui.lib.theme import Console, roundness
 
@@ -327,79 +329,111 @@ class OffloadPage(Widget):
                       (tr("Keep until synced"), tr("On") if keep else tr("Off"))])
 
 
-class StoragePage(Widget):
-  def __init__(self):
-    super().__init__()
-    self._params = Params()
+@dataclass
+class Slice:
+  label: str
+  bytes: int
+  color: rl.Color
 
+
+@dataclass
+class Storage:
+  total: int
+  free: int
+  slices: list[Slice]           # left to right on the bar; free is the empty track after them
+  unsynced: int                 # overlaps the drive slices: drawn as a marker, not a slice
+  from_bridge: bool
+
+
+def storage_breakdown() -> Storage | None:
+  """Disk use by kind, from the export bridge when it is running, else from the comma's own scan."""
+  b = bridge_status.get("storage")
+  if isinstance(b, dict) and b.get("totalBytes"):
+    c = b.get("categories") or {}
+    slices = [Slice(tr("Video"), int(c.get("video", 0)), Console.ACCENT),
+              Slice(tr("Low-res video"), int(c.get("videoLowRes", 0)), Console.INFO),
+              Slice(tr("Logs"), int(c.get("logs", 0)), Console.PURPLE),
+              Slice(tr("System, maps and caches"), int(c.get("system", 0)), Console.TEXT_GHOST)]
+    return Storage(int(b["totalBytes"]), int(b.get("freeBytes", 0)), slices, int(c.get("unsynced", 0)), True)
+  idx = indexer().index
+  if not idx.disk_total:
+    return None
+  other_drive = max(0, idx.drive_bytes - idx.video_bytes - idx.low_res_bytes - idx.log_bytes)
+  slices = [Slice(tr("Video"), idx.video_bytes, Console.ACCENT),
+            Slice(tr("Low-res video"), idx.low_res_bytes, Console.INFO),
+            Slice(tr("Logs"), idx.log_bytes + other_drive, Console.PURPLE),
+            Slice(tr("System, maps and caches"), idx.other_bytes, Console.TEXT_GHOST)]
+  return Storage(idx.disk_total, idx.disk_free, slices, idx.unsynced_bytes if idx.sync_known else 0, False)
+
+
+def storage_bar(r: rl.Rectangle, st: Storage):
+  """One thick squared bar, a colour per kind, free space as the empty track."""
+  rl.draw_rectangle_rounded(r, roundness(r, 6), 4, Console.BG_TRACK)
+  x = r.x
+  rl.begin_scissor_mode(int(r.x), int(r.y), int(r.width), int(r.height))
+  for sl in st.slices:
+    w = r.width * sl.bytes / st.total if st.total else 0
+    if w >= 1:
+      rl.draw_rectangle_rec(rl.Rectangle(x, r.y, w, r.height), sl.color)
+      x += w
+      rl.draw_rectangle_rec(rl.Rectangle(x - 2, r.y, 2, r.height), Console.BG_PANEL)
+  rl.end_scissor_mode()
+  if st.unsynced > 0 and st.total:
+    # Unsynced recordings: a warning underline under the drive part of the bar
+    drive_w = r.width * sum(s.bytes for s in st.slices[:3]) / st.total
+    uw = max(6.0, r.width * st.unsynced / st.total)
+    rl.draw_rectangle_rec(rl.Rectangle(r.x + max(0.0, drive_w - uw), r.y + r.height + 6, min(uw, drive_w), 6), Console.WARNING)
+
+
+class StoragePage(Widget):
   def show_event(self):
     super().show_event()
     indexer().request(force=True)
 
   def _render(self, rect: rl.Rectangle):
     indexer().request()
-    idx = indexer().index
+    st = storage_breakdown()
     D.card(rect)
     p = 48
     x, y, w = rect.x + p, rect.y + p, rect.width - 2 * p
-    if not idx.disk_total:
+    if st is None:
       D.text(tr("Reading storage…"), x, y, D.BODY, Console.TEXT_MUTED)
       return
-    used = idx.disk_total - idx.disk_free
+    used = st.total - st.free
     uv, uu = fmt_bytes(used)
-    tv, tu = fmt_bytes(idx.disk_total)
+    tv, tu = fmt_bytes(st.total)
     D.text(tr("Storage"), x, y, D.H2, semi=True)
-    pct = 100.0 * idx.disk_free / idx.disk_total
+    pct = 100.0 * st.free / st.total
     D.text_right(f"{pct:.0f} % " + tr("free"), x + w, y + 4, D.BODY, Console.WARNING if pct < 10 else Console.TEXT_MUTED, semi=True)
     y += 76
     D.value_unit(uv, uu, x, y, 96, 40)
     vw = D.text_w(uv, 96, semi=True) + 12 + D.text_w(uu, 40)
     D.text(tr("used of") + f" {tv} {tu}", x + vw + 20, y + 50, D.BODY, Console.TEXT_MUTED)
-    y += 140
-
-    # One thick stacked bar: drives | everything else | free
-    bar = rl.Rectangle(x, y, w, 48)
-    rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)
-    segs = [(idx.drive_bytes, Console.ACCENT), (idx.other_bytes, Console.TEXT_GHOST)]
-    bx = bar.x
-    for n, color in segs:
-      sw = bar.width * n / idx.disk_total
-      if sw >= 2:
-        rl.draw_rectangle_rounded(rl.Rectangle(bx, bar.y, sw, bar.height), roundness(bar, 6), 4, color)
-        bx += sw
+    y += 136
+    storage_bar(rl.Rectangle(x, y, w, 48), st)
     y += 48 + 40
 
-    dv, du = fmt_bytes(idx.drive_bytes)
-    ov, ou = fmt_bytes(idx.other_bytes)
-    fv, fu = fmt_bytes(idx.disk_free)
-    rows = [(Console.ACCENT, tr("Drives"), f"{dv} {du}", f"{len(idx.drives)} " + tr("drives"))]
-    if idx.sync_known:
-      nv, nu = fmt_bytes(idx.unsynced_bytes)
-      rows.append((None, tr("Not synced to Citadel"), f"{nv} {nu}", ""))
-    if idx.bookmarked_bytes:
-      bv, bu = fmt_bytes(idx.bookmarked_bytes)
-      rows.append((None, tr("Bookmarked drives"), f"{bv} {bu}", ""))
-    rows += [(Console.TEXT_GHOST, tr("System, models and maps"), f"{ov} {ou}", ""),
-             (Console.BG_TRACK, tr("Free"), f"{fv} {fu}", "")]
-    for color, label, value, note in rows:
-      if y + 80 > rect.y + rect.height - p - 60:
-        break
-      K.hline(x, x + w, y)
-      lx = x
-      if color is not None:
-        sw = rl.Rectangle(x, y + 30, 28, 28)
-        rl.draw_rectangle_rounded(sw, roundness(sw, 6), 4, color)
-        lx += 48
-      else:
-        lx += 48
-        D.text("–", x + 4, y + 22, D.BODY, Console.TEXT_MUTED)
-      D.text(label, lx, y + 22, D.BODY, Console.TEXT_SECONDARY if color is None else None)
-      vr = D.text_right(value, x + w, y + 22, D.BODY, semi=True)
-      if note:
-        D.text_right(note, x + w - vr - 40, y + 26, D.LABEL, Console.TEXT_MUTED)
-      y += 88
+    rows = [(sl.color, sl.label, sl.bytes) for sl in st.slices] + [(Console.BG_TRACK, tr("Free"), st.free)]
+    cols = 2
+    cw = (w - 48) / cols
+    for i, (color, label, n) in enumerate(rows):
+      cx = x + (i % cols) * (cw + 48)
+      cy = y + (i // cols) * 88
+      sw = rl.Rectangle(cx, cy + 26, 28, 28)
+      rl.draw_rectangle_rounded(sw, roundness(sw, 6), 4, color)
+      D.text(D.fit(label, D.BODY, cw - 220), cx + 48, cy + 20, D.BODY)
+      v, u = fmt_bytes(n)
+      D.text_right(f"{v} {u}", cx + cw, cy + 20, D.BODY, semi=True)
+    y += ((len(rows) + 1) // cols) * 88 + 8
 
-    keep = keep_until_synced(self._params)
+    if st.unsynced > 0:
+      K.hline(x, x + w, y)
+      rl.draw_rectangle_rec(rl.Rectangle(x, y + 38, 28, 6), Console.WARNING)
+      D.text(tr("Not synced to Citadel yet"), x + 48, y + 22, D.BODY, Console.TEXT_SECONDARY)
+      v, u = fmt_bytes(st.unsynced)
+      D.text_right(f"{v} {u}", x + w, y + 22, D.BODY, semi=True)
+
+    keep = keep_until_synced(Params())
     note = (tr("Drives Citadel hasn't synced are kept until free space drops to 5 %.") if keep else
             tr("When free space drops below 10 %, the oldest drives are deleted first."))
     D.text(D.fit(note, D.LABEL, w), x, rect.y + rect.height - p - D.LABEL, D.LABEL, Console.TEXT_MUTED)
