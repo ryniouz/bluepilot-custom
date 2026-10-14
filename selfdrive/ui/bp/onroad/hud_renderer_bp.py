@@ -6,7 +6,8 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, draw_panel, roundness
+from bluepilot.ui.console import draw as D
+from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
@@ -29,6 +30,7 @@ CLUSTER_LABEL = 30           # state word, MAX caption (kit CAP)
 CLUSTER_SPEED = 140          # current speed numeral
 CLUSTER_UNIT = 36
 CLUSTER_SET = 72             # set speed numeral
+STATE_BAND_H = 58         # engagement band across the top of the speed card
 CLUSTER_SET_W = 108
 NOTICE_TOP = 24              # notification cards sit level with the speed card
 
@@ -185,15 +187,24 @@ class HudRendererBP(HudRendererSP):
     card = rl.Rectangle(x, y, w, CLUSTER_H)
     draw_panel(card, Onroad.PANEL, CLUSTER_RADIUS)
 
-    # State: dot + word (Console status is always a word, never colour alone)
-    word, dot = self._status()
+    # State band: the top of the card fills with the engagement colour and names the state, so
+    # the state reads at a glance without a full-screen border (Off / Ready / Unavailable stay
+    # neutral)
+    word, color = self._status()
     if sla_active and self.is_cruise_set:
-      word, dot = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
-    rl.draw_circle(int(x + CLUSTER_PAD + 9), int(y + CLUSTER_PAD + 17), 9, dot)
-    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 30, y + CLUSTER_PAD), CLUSTER_LABEL, 0,
-                    Console.TEXT_SECONDARY)
+      word, color = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
+    active = ui_state.status != UIStatus.DISENGAGED or (sla_active and self.is_cruise_set)
+    band = rl.Rectangle(x, y, w, STATE_BAND_H)
+    rl.draw_rectangle_rounded(band, roundness(band, CLUSTER_RADIUS), 10, color if active else Console.BG_RAISED)
+    rl.draw_rectangle_rec(rl.Rectangle(x, y + STATE_BAND_H - CLUSTER_RADIUS, w, CLUSTER_RADIUS), color if active else Console.BG_RAISED)
+    # day status hues are light, so the band takes dark ink there
+    ink = (Console.FRAME_INK if is_day() else Console.ON_ACCENT) if active else Console.TEXT_SECONDARY
+    icon = "gauge" if ui_state.status == UIStatus.LONG_ONLY else "wheel"
+    D.icon(icon, x + CLUSTER_PAD - 2, y + (STATE_BAND_H - 32) / 2, 32, ink)
+    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 42, y + (STATE_BAND_H - CLUSTER_LABEL) / 2 - 1),
+                    CLUSTER_LABEL, 0, ink)
 
-    body_y = y + CLUSTER_PAD + CLUSTER_LABEL + 6
+    body_y = y + STATE_BAND_H + 6
     cx = x + CLUSTER_PAD
     if not hide_speed:
       # BluePilot: speed turns red while the brake lights are on (ShowBrakeStatus)

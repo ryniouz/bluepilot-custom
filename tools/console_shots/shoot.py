@@ -91,9 +91,11 @@ SCENES.update({
   "drive_popup": "SP green-light pop-up as a notification card, with smart-cruise chips",
   "drive_lead": "Closing on a lead: bracket marker and lead card with every row on",
   "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
+  "drive_steer_only": "Steering only (MADS lateral without cruise): blue state band and edge glow",
+  "drive_off": "Disengaged: neutral state band, no edge glow",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
-                    "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -549,6 +551,8 @@ class Scene:
 
     if "selfdriveStateSP" in self.pm.sock:
       sp = m.new_message("selfdriveStateSP", valid=True)
+      if d.get("mads"):  # stream B: (available, enabled) for steering-only scenes
+        sp.selfdriveStateSP.mads.available, sp.selfdriveStateSP.mads.enabled = d["mads"]
       self.pm.send("selfdriveStateSP", sp)
 
     # carState
@@ -842,7 +846,7 @@ def scene_params(name: str) -> dict:
 
 # --- Stream B (driving screen) scene setup ------------------------------------------------
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
-                "drive_lead", "drive_road_settings")
+                "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -882,6 +886,10 @@ def setup_drive_scene(name: str, d: dict):
     _inject_popup()
   elif name == "drive_lead":
     d.update(lead_d=24.0, lead_v_rel=-4.2)
+  elif name == "drive_steer_only":
+    d.update(enabled=False, state="disabled", mads=(True, True))
+  elif name == "drive_off":
+    d.update(enabled=False, state="disabled")
 
 
 def _inject_ev(fields: dict):
