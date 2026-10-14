@@ -359,6 +359,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPDisableLaneLineStatusColor", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPUIDebugLog", {PERSISTENT, BOOL, "0"}},
     {"BPSettingsMode", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPBluetoothEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPBluetoothStatus", {CLEAR_ON_MANAGER_START, STRING}},
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlinkerPauseLaneChange", {PERSISTENT | BACKUP, BOOL, "0"}},
 

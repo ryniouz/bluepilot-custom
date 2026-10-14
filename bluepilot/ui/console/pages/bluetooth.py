@@ -7,16 +7,18 @@ Console Bluetooth page (Connect > Bluetooth).
             OBD scanner  a four-step wizard: plug in, connect (Wi-Fi, USB or Bluetooth), test, live data
             Phone        the planned Android link (pair now; live data later)
 
-AGNOS is built with CONFIG_BT=n, so on a stock comma there is no adapter and the page says so. The OBD
+Stock AGNOS is built with CONFIG_BT=n, so there is no adapter and the page says so. With the Citadel Bluetooth
+boot image, the on/off switch (BPBluetoothEnabled) has bp_btd install BlueZ and bring the adapter up. The OBD
 wizard therefore leads with Wi-Fi and USB ELM327 adapters, which PR #2's bp_obdd reads (obdStateBP).
 
 Built:     adapter check, search, pair and forget through bluetoothctl (when the OS has an adapter),
            OBD setup over Wi-Fi/USB (BPObdTransport, BPObdAddress, BPObdEnabled) with live link status and values.
-Not built: Bluetooth in AGNOS and any data link to the phone. Those carry an "In development" tag.
+Not built: any data link to the phone. Those carry an "In development" tag.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import pyray as rl
@@ -46,6 +48,25 @@ def _text(v) -> str:
   if isinstance(v, bytes):
     v = v.decode(errors="ignore")
   return str(v or "").strip()
+
+
+BTD_TEXT = {
+  "off": ("Off", lambda: Console.TEXT_GHOST),
+  "installing": ("Installing Bluetooth tools", lambda: Console.ACCENT),
+  "starting": ("Starting", lambda: Console.ACCENT),
+  "waiting": ("Finishes setting up when parked", lambda: Console.WARNING),
+  "error": ("Couldn't start", lambda: Console.DANGER),
+}
+
+
+def btd_status(params: Params) -> dict:
+  """BPBluetoothStatus from bp_btd: state, message, kernel, bluez, adapter."""
+  try:
+    raw = params.get("BPBluetoothStatus")
+    data = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
+    return data if isinstance(data, dict) else {}
+  except Exception:
+    return {}
 
 
 def dev_tag(x: float, y: float, label: str, color: rl.Color) -> float:
@@ -101,12 +122,20 @@ class BluetoothPage(Widget):
     x, y, right = r.x + p, r.y + p, r.x + r.width - p
     D.text(tr("Bluetooth"), x, y, D.H2, semi=True)
     usable = st.adapter and st.tool
-    if usable:
-      tg = D.toggle(right - 104, y - 8, st.powered)
-      self._hits.append((tg, lambda: bluetooth().power(not st.powered)))
+    # Custom: the on/off setting; bp_btd installs BlueZ and brings the adapter up (bluepilot/system/bluetooth)
+    btd = btd_status(self._params)
+    enabled = self._params.get_bool("BPBluetoothEnabled")
+    if btd.get("kernel") or usable:
+      tg = D.toggle(right - 104, y - 8, enabled)
+      self._hits.append((tg, lambda: self._set_enabled(not enabled)))
     y += 84
-    if not st.checked_at:
+    state = str(btd.get("state") or "")
+    if not st.checked_at and not state:
       status, color = tr("Checking…"), Console.TEXT_GHOST
+    elif state == "no_kernel" or (not btd and not st.adapter):
+      status, color = tr("Needs the Bluetooth OS update"), Console.WARNING
+    elif state in BTD_TEXT:
+      status, color = tr(BTD_TEXT[state][0]), BTD_TEXT[state][1]()
     elif not st.adapter:
       status, color = tr("No Bluetooth adapter"), Console.WARNING
     elif not st.tool:
@@ -132,13 +161,29 @@ class BluetoothPage(Widget):
       D.text(label, x, y + 20, D.LABEL, Console.TEXT_MUTED)
       D.text_right(D.fit(value, D.LABEL, r.width * 0.55, semi=True), right, y + 20, D.LABEL, semi=True)
       y += 70
-    if st.checked_at and not usable:
-      note = tr("This comma's system image doesn't offer Bluetooth. Turning it on needs a change to AGNOS, the comma's OS.") \
-        if not st.adapter else tr("The OS has an adapter but not the BlueZ tools needed to pair.")
+    if state == "error" and btd.get("message"):
+      note = str(btd["message"])
+    elif state == "waiting":
+      note = tr("Bluetooth finishes setting up the next time the truck is parked.")
+    elif state in ("installing", "starting"):
+      note = tr("Setting up Bluetooth. The first time takes about a minute.")
+    elif btd.get("kernel") and not usable and not enabled:
+      note = tr("Turn Bluetooth on to finish setting it up. The first time takes about a minute and only runs while parked.")
+    else:
+      note = tr("This comma's OS doesn't have Bluetooth yet. It needs the Citadel Bluetooth OS update (a new boot image).")
+    if st.checked_at and not usable and (state != "on"):
       y += 16
       for ln in D.wrap(note, D.LABEL, r.width - 2 * p, 6):
         D.text(ln, x, y, D.LABEL, Console.TEXT_SECONDARY)
         y += 40
+
+  def _set_enabled(self, on: bool):
+    try:
+      self._params.put_bool("BPBluetoothEnabled", on)
+    except Exception:
+      pass
+    if bluetooth().state.adapter and bluetooth().state.tool:
+      bluetooth().power(on)
 
   # -- tabs ---------------------------------------------------------------------------------
 
@@ -149,6 +194,7 @@ class BluetoothPage(Widget):
     if not devices:
       usable = st.adapter and st.tool
       msg = st.message or (tr("Search to find devices nearby.") if usable else
+                           tr("Turn Bluetooth on to search for devices.") if btd_status(self._params).get("kernel") else
                            tr("The comma's OS is built without Bluetooth, so there is nothing to search with yet."))
       return self._para(r, x, y + 8, msg, D.BODY, Console.TEXT_MUTED, 3) + 14
     for d in devices:

@@ -210,6 +210,8 @@ if is_bluepilot():
     PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", _bp_route_preprocessor_enabled),
     # Custom: data export bridge (drives, live state, keep-until-synced, Citadel uploads)
     PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
+    # Custom: Bluetooth on/off (BPBluetoothEnabled), BlueZ install and adapter bring-up; idles on stock AGNOS
+    PythonProcess("bp_btd", "bluepilot.system.bluetooth.btd", always_run),
   ]
 
 if os.path.exists("./github_runner.sh"):
