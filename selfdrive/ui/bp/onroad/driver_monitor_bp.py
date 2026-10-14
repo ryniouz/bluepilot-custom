@@ -18,6 +18,8 @@ from collections.abc import Callable
 import numpy as np
 import pyray as rl
 
+from cereal import log
+
 from openpilot.selfdrive.ui.sunnypilot.onroad.driver_state import DriverStateRendererSP
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
@@ -32,6 +34,22 @@ LABEL = 30
 DIVIDER_GAP = 22
 CONF_W = 96                # confidence bar
 CONF_H = 20
+
+
+def _awareness() -> float:
+  """Awareness 0..1 from the active DM policy. openpilot 0.11 dropped awarenessStatus (the 6.0 field,
+  which getattr() silently defaulted to 1.0, so the chip always read Attentive): the percent now lives
+  in the vision or wheel-touch policy state, whichever is active. No message yet reads as attentive."""
+  sm = ui_state.sm
+  if sm.recv_frame["driverMonitoringState"] == 0:
+    return 1.0
+  dm = sm["driverMonitoringState"]
+  try:
+    vision = dm.activePolicy == log.DriverMonitoringState.MonitoringPolicy.vision
+    pct = (dm.visionPolicyState if vision else dm.wheeltouchPolicyState).awarenessPercent
+  except (AttributeError, KeyError, ValueError):
+    return 1.0
+  return float(np.clip(pct / 100.0, 0.0, 1.0))
 
 
 def _status(awareness: float) -> tuple[str, rl.Color]:
@@ -51,8 +69,7 @@ class DriverMonitorBP(DriverStateRendererSP):
     self.confidence: Callable[[], tuple[float, rl.Color | None]] | None = None
 
   def _render(self, rect):
-    dm = ui_state.sm["driverMonitoringState"]
-    awareness = float(np.clip(getattr(dm, "awarenessStatus", 1.0), 0.0, 1.0))
+    awareness = _awareness()
     word, color = _status(awareness)
 
     word_w = D.text_w(word, LABEL, semi=True)
