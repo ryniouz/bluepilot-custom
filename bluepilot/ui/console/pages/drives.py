@@ -12,7 +12,6 @@ All three read bluepilot.ui.lib.drive_index, which scans the disk on a backgroun
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import pyray as rl
@@ -216,74 +215,6 @@ class DrivesPage(Widget):
       self._scroll.dragging = False
       return True
     return False
-
-
-class OffloadPage(Widget):
-  """comma connect on the left; Citadel's live upload and home sync on the right. Each has its own status."""
-
-  def __init__(self):
-    super().__init__()
-    self._params = Params()
-    self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
-
-  def show_event(self):
-    super().show_event()
-    indexer().request(force=True)
-
-  def _render(self, rect: rl.Rectangle):
-    from bluepilot.ui.lib import upload_status as us
-    self._hits = []
-    indexer().request()
-    idx = indexer().index
-    left, right = K.split_cols(rect, [1, 1])
-    left.width -= GAP / 2
-    right.x += GAP / 2
-    right.width -= GAP / 2
-    rt, rb = K.split_rows(right, [1, 1])
-    rt.height -= GAP / 2
-    rb.y += GAP / 2
-    rb.height -= GAP / 2
-    service_card(left, "cloud", us.comma_connect(self._params, idx), row_h=92)
-    live = us.citadel_live(self._params)
-    service_card(rt, "pulse", live)
-    if has_param(self._params, "BPRoadTripMode") and us.citadel_configured(self._params):
-      on = bool(_param(self._params, "BPRoadTripMode", False))
-      tg = D.toggle(rt.x + rt.width - D.CARD_PAD - 104, rt.y + D.CARD_PAD - 8, on)
-      self._hits.append((tg, lambda: self._params.put_bool("BPRoadTripMode", not on)))
-    service_card(rb, "export", us.citadel_sync(self._params, idx))
-
-  def _handle_mouse_release(self, pos) -> bool:
-    for r, fn in self._hits:
-      if D.hit(r, pos):
-        fn()
-        return True
-    return False
-
-
-def service_card(r: rl.Rectangle, ic: str, svc, row_h: float = 72):
-  """One upload service: icon and name, a status line, its rows, and a note at the bottom when there is room."""
-  D.card(r)
-  p = D.CARD_PAD
-  D.icon(ic, r.x + p, r.y + p - 2, 44, Console.TEXT_SECONDARY)
-  D.text(svc.name, r.x + p + 64, r.y + p, D.H2, semi=True)
-  y = r.y + p + 76
-  D.dot(r.x + p + 10, y + D.BODY / 2 + 2, 10, svc.color)
-  D.text(D.fit(svc.state, D.BODY, r.width - 2 * p - 36, semi=True), r.x + p + 36, y, D.BODY, semi=True)
-  y += 64
-  note_lines = D.wrap(svc.note, D.LABEL, r.width - 2 * p, 2) if svc.note else []
-  bottom = r.y + r.height - p - len(note_lines) * 40 - (16 if note_lines else 0)
-  for label, value in svc.rows:
-    if y + row_h > bottom + 8:
-      break
-    K.hline(r.x + p, r.x + r.width - p, y)
-    ty = y + (row_h - D.BODY) / 2 - 2
-    vw = min(D.text_w(value, D.BODY, semi=True), r.width * 0.55)
-    D.text(D.fit(label, D.BODY, r.width - 2 * p - vw - 24), r.x + p, ty, D.BODY, Console.TEXT_MUTED)
-    D.text_right(D.fit(value, D.BODY, r.width * 0.55, semi=True), r.x + r.width - p, ty, D.BODY, semi=True)
-    y += row_h
-  for i, ln in enumerate(note_lines):
-    if y + 16 + i * 40 + D.LABEL <= r.y + r.height - p:
-      D.text(ln, r.x + p, r.y + r.height - p - (len(note_lines) - i) * 40 + 6, D.LABEL, Console.TEXT_MUTED)
 
 
 @dataclass
