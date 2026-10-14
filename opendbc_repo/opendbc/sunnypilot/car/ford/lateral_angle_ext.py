@@ -39,6 +39,7 @@ from opendbc.car import DT_CTRL
 from opendbc.car.lateral import apply_std_steer_angle_limits
 from opendbc.car.ford.values import CAR, CarControllerParams
 from opendbc.sunnypilot.car.ford.lateral_curv_ext import LateralResult
+from opendbc.sunnypilot.car.ford.lateral_curv_ext import MAX_LATERAL_ACCEL, _tune  # Custom
 from opendbc.sunnypilot.car.ford.human_turn import HumanTurnDetector
 from opendbc.sunnypilot.car.ford.lane_center_trim import LaneCenterTrim
 from opendbc.sunnypilot.car.ford.values_ext import BP_ANGLE_LIMITS
@@ -461,6 +462,7 @@ class LateralAngleExt:
     lane_change_factor = interp(
       v_ego, self.lane_change_factor_bp, [self.lane_change_factor_low, self.lane_change_factor_high_ang]
     )
+    lane_change_factor *= min(_tune(self).lane_change_factor_scale, 1.0)  # Custom: profile
     if self.lane_change and self.model is not None:
       if self.model.meta.laneChangeDirection == 1 and requested_curvature < 0:
         requested_curvature *= lane_change_factor
@@ -492,6 +494,12 @@ class LateralAngleExt:
     # routinely, not just on genuine pothole/override divergence. Curvature mode has always clipped
     # here; this brings angle mode's actual steering intent in line with that proven behavior rather
     # than only clipping the value reported to panda (which would make the check a no-op).
+    # Custom: profiles may lower the lateral-accel cap in angle mode too (no cap added at stock scale)
+    lat_accel_scale = min(_tune(self).lat_accel_scale, 1.0)
+    if lat_accel_scale < 1.0:
+      kappa_limit = MAX_LATERAL_ACCEL * lat_accel_scale / (max(v_ego, 1) ** 2)
+      kappa_cmd = float(clip(kappa_cmd, -kappa_limit, kappa_limit))
+    # Custom: end
     current_curvature = self.get_current_curvature(CS)
     self.bp_curvature_deviation_limited = False
     if v_ego > 9:

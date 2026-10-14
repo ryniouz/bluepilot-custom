@@ -15,6 +15,9 @@ from opendbc.sunnypilot.car.ford.longitudinal_ext import LongitudinalExt
 from opendbc.sunnypilot.car.ford.hud_ext import HudExt
 from opendbc.sunnypilot.car.ford import fordcan_ext
 from opendbc.sunnypilot.car.ford.icbm import IntelligentCruiseButtonManagementInterface
+# Custom: Lightning tune, tow and drive-mode profiles
+from opendbc.sunnypilot.car.ford.lightning import STOCK_TUNE, TuneBlender, TuneSettings, select_profile
+# Custom: end
 
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -40,7 +43,8 @@ def anti_overshoot(apply_curvature, apply_curvature_last, v_ego):
   return float(np.interp(v_ego, [5, 10], [apply_curvature, output_curvature]))
 
 
-def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_curvature, v_ego_raw, steering_angle, lat_active, CP):
+def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_curvature, v_ego_raw, steering_angle, lat_active, CP,
+                                lat_accel_scale=1.0):  # Custom: lat_accel_scale (<= 1, profile)
   # No blending at low speed due to lack of torque wind-up and inaccurate current curvature
   if v_ego_raw > 9:
     apply_curvature = np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
@@ -53,14 +57,15 @@ def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_c
   # Safety is not aware of the road roll so we subtract a conservative amount at all times
   if CP.flags & FordFlags.CANFD:
     # Limit curvature to conservative max lateral acceleration
-    curvature_accel_limit = MAX_LATERAL_ACCEL / (max(v_ego_raw, 1) ** 2)
+    # Custom: profiles may only lower the cap
+    curvature_accel_limit = MAX_LATERAL_ACCEL * min(lat_accel_scale, 1.0) / (max(v_ego_raw, 1) ** 2)
     apply_curvature = float(np.clip(apply_curvature, -curvature_accel_limit, curvature_accel_limit))
 
   return apply_curvature
 
 
-def apply_creep_compensation(accel: float, v_ego: float) -> float:
-  creep_accel = np.interp(v_ego, [1., 3.], [0.6, 0.])
+def apply_creep_compensation(accel: float, v_ego: float, creep_max: float = 0.6) -> float:  # Custom: creep_max
+  creep_accel = np.interp(v_ego, [1., 3.], [creep_max, 0.])
   creep_accel = np.interp(accel, [0., 0.2], [creep_accel, 0.])
   accel -= creep_accel
   return float(accel)
@@ -92,8 +97,42 @@ class CarController(CarControllerBase, LateralCurvExt, LateralAngleExt, Longitud
     self.accel = 0.0
     self.gas = 0.0
     self.last_button_frame = 0  # BluePilot: ICBM button press tracking
+
+    # Custom: Lightning tune profile, selected by fingerprint; tow/drive-mode profiles blend in over 3 s
+    self.tune_settings = TuneSettings()
+    self.tune_blender = TuneBlender()
+    self.tune = STOCK_TUNE
+    self._update_tune_params()
+    # Custom: end
     # Note: main_on_last, lkas_enabled_last, steer_alert_last, lead_distance_bars_last,
     # distance_bar_frame are initialized by HudExt.__init__() above
+
+  # Custom: tune settings are read once a second
+  def _update_tune_params(self):
+    try:
+      self.tune_settings = TuneSettings(
+        lightning_tune=bool(self.params.get("BPLightningTune", return_default=True)),
+        tow_profile=int(self.params.get("BPTowProfile", return_default=True)),
+        drive_mode_tune=bool(self.params.get("BPDriveModeTune", return_default=True)),
+      )
+    except (TypeError, ValueError):
+      self.tune_settings = TuneSettings()
+
+  def _update_tune(self, CS):
+    # Runs after LongitudinalExt.update_long_params so the profile's follow/brake values win
+    if self.frame % 100 == 0:
+      self._update_tune_params()
+    profile = select_profile(self.CP.carFingerprint, self.tune_settings,
+                             getattr(CS, "bp_drive_mode", "unknown"), getattr(CS, "bp_trailer_connected", False))
+    self.tune = self.tune_blender.update(profile, DT_CTRL)
+    t = self.tune
+    self.following_accel_ROC = t.following_accel_roc
+    self.brake_actuate_target = t.brake_actuate_target
+    self.brake_actuate_release = t.brake_actuate_release
+    self.precharge_actuate_target = t.precharge_actuate_target
+    self.precharge_actuate_release = t.precharge_actuate_release
+    CS.bp_tune_state = (profile != "stock", profile, float(t.accel_max_scale), float(t.lat_accel_scale))
+  # Custom: end
 
   def update(self, CC, CC_SP, CS, now_nanos):
     can_sends = []
@@ -106,6 +145,7 @@ class CarController(CarControllerBase, LateralCurvExt, LateralAngleExt, Longitud
     LateralAngleExt.update_angle_params(self, self.params)
     self.disable_BP_lat_UI = self.params.get_bool("disable_BP_lat_UI")
     LongitudinalExt.update_long_params(self, self.params)
+    self._update_tune(CS)  # Custom
     HudExt.update_hud_params(self, self.params, self.CP)
 
     actuators = CC.actuators
@@ -152,7 +192,7 @@ class CarController(CarControllerBase, LateralCurvExt, LateralAngleExt, Longitud
 
         self.apply_curvature_last = apply_ford_curvature_limits(
           apply_curvature, self.apply_curvature_last, current_curvature,
-          CS.out.vEgoRaw, 0., CC.latActive, self.CP)
+          CS.out.vEgoRaw, 0., CC.latActive, self.CP, self.tune.lat_accel_scale)  # Custom
         if self.CP.flags & FordFlags.CANFD:
           mode = 1 if CC.latActive else 0
           counter = (self.frame // CarControllerParams.STEER_STEP) % 0x10
@@ -234,11 +274,15 @@ class CarController(CarControllerBase, LateralCurvExt, LateralAngleExt, Longitud
       op_gas = op_accel
 
       if CC.longActive:
-        op_accel = apply_creep_compensation(op_accel, CS.out.vEgo)
+        # Custom: Lightning creep amount; no creep compensation with One-Pedal Drive (the truck does not creep)
+        creep_max = 0.0 if getattr(CS, "bp_one_pedal", False) else self.tune.creep_comp_max
+        op_accel = apply_creep_compensation(op_accel, CS.out.vEgo, creep_max)
         op_accel = max(op_accel, self.accel - (3.5 * CarControllerParams.ACC_CONTROL_STEP * DT_CTRL))
 
-      op_accel = float(np.clip(op_accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
-      op_gas = float(np.clip(op_gas, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+      # Custom: profiles may lower the positive limit (tow, off-road, slippery), never raise it
+      accel_max = CarControllerParams.ACCEL_MAX * float(np.clip(self.tune.accel_max_scale, 0.1, 1.0))
+      op_accel = float(np.clip(op_accel, CarControllerParams.ACCEL_MIN, accel_max))
+      op_gas = float(np.clip(op_gas, CarControllerParams.ACCEL_MIN, accel_max))
 
       if not CC.longActive or op_gas < CarControllerParams.MIN_GAS:
         op_gas = CarControllerParams.INACTIVE_GAS

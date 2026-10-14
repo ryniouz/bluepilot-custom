@@ -136,6 +136,10 @@ procs = [
   PythonProcess("soundd", "selfdrive.ui.bp.soundd_bp" if is_bluepilot() else "selfdrive.ui.soundd", driverview),
   # End BluePilot
   PythonProcess("locationd", "selfdrive.locationd.locationd", only_onroad),
+  # Custom: offroad charging monitor and OBD adapter link (Lightning control and CAN)
+  PythonProcess("bp_charging_monitor", "selfdrive.car.charging_monitor", only_offroad),
+  PythonProcess("bp_obdd", "selfdrive.car.obd.obdd", always_run),  # idles unless BPObdEnabled
+  # Custom: end
   NativeProcess("_pandad", "selfdrive/pandad", ["./pandad"], always_run, enabled=False),
   PythonProcess("calibrationd", "selfdrive.locationd.calibrationd", only_onroad),
   PythonProcess("torqued", "selfdrive.locationd.torqued", only_onroad),

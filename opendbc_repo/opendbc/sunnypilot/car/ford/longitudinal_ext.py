@@ -20,6 +20,7 @@ import numpy as np
 from numpy import clip
 
 from opendbc.car.ford.values import CarControllerParams
+from opendbc.sunnypilot.car.ford.lightning import STOCK_TUNE  # Custom: Lightning tune profile
 
 
 # Result namedtuple returned by LongitudinalExt.update()
@@ -169,7 +170,7 @@ class LongitudinalExt:
 
       # Gas/accel limits per state
       if gaining:
-        if lead_time_sec < 1.5:
+        if lead_time_sec < getattr(self, "tune", STOCK_TUNE).lead_gas_cut_s:  # Custom: profile (stock 1.5 s)
           max_follow_gas = 0.0  # within 1.5s and gaining — no gas
           min_follow_gas = 0.0
         else:
@@ -249,9 +250,11 @@ class LongitudinalExt:
       gas = CarControllerParams.INACTIVE_GAS
 
     # Clip to ford.h ACCDATA safety limits
-    accel = float(clip(accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+    # Custom: profiles may lower the positive limit (tow, off-road, slippery), never raise it
+    accel_max = CarControllerParams.ACCEL_MAX * float(np.clip(getattr(self, "tune", STOCK_TUNE).accel_max_scale, 0.1, 1.0))
+    accel = float(clip(accel, CarControllerParams.ACCEL_MIN, accel_max))
     if gas != CarControllerParams.INACTIVE_GAS:
-      gas = float(clip(gas, CarControllerParams.MIN_GAS, CarControllerParams.ACCEL_MAX))
+      gas = float(clip(gas, CarControllerParams.MIN_GAS, accel_max))  # Custom
     accel_pred_send = CarControllerParams.INACTIVE_GAS
 
     self._bp_long_active_last = bp_long_used
