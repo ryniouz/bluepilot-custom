@@ -935,11 +935,32 @@ def scene_params(name: str) -> dict:
 
 
 # --- Stream B (driving screen) scene setup ------------------------------------------------
+# Alert audit samples: real openpilot/sunnypilot texts (selfdrive/selfdrived/events.py), one per look
+ALERT_SAMPLES = {
+  "can_lost": ("full", "critical", "TAKE CONTROL IMMEDIATELY", "CAN Bus Disconnected"),
+  "distracted": ("full", "critical", "DISENGAGE IMMEDIATELY", "Driver Distracted"),
+  "fcw": ("full", "critical", "BRAKE!", "Risk of Collision"),
+  "cruise_fault": ("full", "critical", "TAKE CONTROL IMMEDIATELY", "Cruise Fault: Restart the Car"),
+  "unresponsive_ui": ("full", "critical", "TAKE CONTROL IMMEDIATELY", "System Unresponsive"),
+  "soft_steer": ("full", "userPrompt", "TAKE CONTROL IMMEDIATELY", "Steering Assist Temporarily Unavailable"),
+  "soft_overheat": ("full", "userPrompt", "TAKE CONTROL IMMEDIATELY", "System Overheated"),
+  "door": ("full", "userPrompt", "openpilot will disengage", "Door Open"),
+  "touch_wheel": ("mid", "userPrompt", "Touch Steering Wheel", "Driver Unresponsive"),
+  "steer_limit": ("mid", "userPrompt", "Take Control", "Turn Exceeds Steering Limit"),
+  "ldw": ("small", "userPrompt", "Lane Departure Detected", ""),
+  "no_entry_calib": ("mid", "normal", "openpilot Unavailable", "Calibration Invalid: Remount Device & Recalibrate"),
+  "no_entry_lkas": ("mid", "normal", "openpilot Unavailable", "LKAS Fault: Restart the Car"),
+  "startup": ("mid", "normal", "Be ready to take over at any time", "Always keep hands on wheel and eyes on road"),
+  "lane_prompt": ("small", "normal", "Steer Left to Start Lane Change Once Safe", ""),
+  "reverse": ("full", "normal", "Reverse\nGear", ""),
+}
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                 "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
                 "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd",
-                "drive_lc_chevrons", "drive_lc_lane", "drive_lc_arrow")
+                "drive_lc_chevrons", "drive_lc_lane", "drive_lc_arrow") + tuple(f"drive_alert_{k}" for k in ALERT_SAMPLES)
+SCENES.update({f"drive_alert_{k}": f"Alert audit: {v[1]} {v[0]}, {v[2]!r} / {v[3]!r}" for k, v in ALERT_SAMPLES.items()})
+ALIASES["drive_alerts"] = [f"drive_alert_{k}" for k in ALERT_SAMPLES]
 
 
 def drive_scene_params(name: str) -> dict:
@@ -968,6 +989,9 @@ def drive_scene_params(name: str) -> dict:
 
 def setup_drive_scene(name: str, d: dict):
   d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
+  if name.startswith("drive_alert_"):
+    d.update(alert=ALERT_SAMPLES[name[len("drive_alert_"):]])
+    return
   if name == "drive_obd":
     _fake_obd()
   if name in ("drive_dense", "drive_obd"):

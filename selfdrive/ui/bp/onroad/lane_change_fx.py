@@ -4,7 +4,8 @@ road shows where the truck is merging to.
 
   chevrons  four chevrons stream along an S-curve from our lane into the target lane
   lane      the target lane is tinted, a brighter band sweeps forward along it, and a thin S-arrow points in
-  arrow     one wide arrow drawn on the road that grows from our lane into the target lane
+  arrow     a translucent arrow grows from our lane into the target lane and lights up a truck-sized
+            box where the truck will end up (the default)
 
 Shown only in laneChangeStarting / laneChangeFinishing (openpilot has committed to the change), so
 a blocked change (blind spot) never shows it. The style is chosen in Quick controls > Road view and
@@ -27,9 +28,11 @@ LaneChangeDirection = log.LaneChangeDirection
 
 X_START = 6.0          # m ahead where the cue starts
 X_END = 34.0           # m ahead where it ends in the target lane
-MERGE_LEN = 18.0       # m over which the S-curve moves across
+MERGE_LEN = 15.0       # m over which the S-curve moves across
 LANE_W = 3.7           # fallback lane width when the model has no neighbouring line
 SAMPLES = 36
+SPOT_LEN = 5.9         # F-150 Lightning length, m
+SPOT_HALF_W = 1.05     # half its width, m
 PERIOD = {"chevrons": 1.2, "lane": 1.4, "arrow": 1.6}
 
 
@@ -138,16 +141,24 @@ class LaneChangeFx:
     if poly.size:
       _fill(r, poly, color)
 
-  def _head(self, r, curve, u: float, size_m: float, color: rl.Color):
+  def _head(self, r, curve, u: float, size_m: float, color: rl.Color, aim: np.ndarray | None = None):
     """Filled arrowhead at fraction u of the curve, in screen space so perspective does not flatten it."""
     f = self._screen_frame(r, curve, u)
     if f is None:
       return
-    at, dirv, nrm, ppm = f
-    w = min(size_m * ppm, 110.0)
-    tip = (at.x + dirv[0] * w * 1.3, at.y + dirv[1] * w * 1.3)
-    a = (at.x + nrm[0] * w, at.y + nrm[1] * w)
-    c = (at.x - nrm[0] * w, at.y - nrm[1] * w)
+    at, dirv, _, ppm = f
+    # point at `aim` (the landing spot) when given, else along the arrow's visible sweep (a chord over
+    # the last stretch): past the merge the local tangent runs at the vanishing point and looks sideways
+    ref = self._proj(r, aim) if aim is not None else self._proj(r, self._at(curve, max(0.0, u - 0.3))[0])
+    if ref is None:
+      return
+    dx, dy = (ref.x - at.x, ref.y - at.y) if aim is not None else (at.x - ref.x, at.y - ref.y)
+    n = math.hypot(dx, dy) or 1.0
+    dirv, nrm = (dx / n, dy / n), (-dy / n, dx / n)
+    w = min(size_m * ppm, 64.0)
+    tip = (at.x + dirv[0] * w * 1.9, at.y + dirv[1] * w * 1.9)
+    a = (at.x + nrm[0] * w * 0.62, at.y + nrm[1] * w * 0.62)
+    c = (at.x - nrm[0] * w * 0.62, at.y - nrm[1] * w * 0.62)
     _fill(r, np.array([a, tip, tip, c], dtype=np.float32), color)
 
   def _lane(self, r, curve, phase, color):
@@ -168,14 +179,78 @@ class LaneChangeFx:
     self._ribbon(r, curve, 0.3, with_alpha(color, int(150 * self._alpha)))
     self._head(r, curve, 1.0, 0.9, with_alpha(color, int(150 * self._alpha)))
 
+  @staticmethod
+  def _spot_x() -> tuple[float, float]:
+    x0 = X_START + 1.0 + MERGE_LEN * 0.85
+    return x0, x0 + SPOT_LEN
+
+  def _spot_centre(self, curve) -> np.ndarray:
+    x = sum(self._spot_x()) / 2
+    return np.array([x, np.interp(x, curve[:, 0], curve[:, 1]), np.interp(x, curve[:, 0], curve[:, 2])])
+
+  def _spot(self, r, curve, glow: float, color: rl.Color):
+    """Where the truck ends up: a truck-sized footprint in the target lane, past the end of the merge."""
+    x0, x1 = self._spot_x()
+    i0, i1 = np.searchsorted(curve[:, 0], [x0, x1])
+    seg = curve[max(0, i0 - 1):min(len(curve), i1 + 1)]
+    if len(seg) < 2:
+      return
+    ys, zs = np.interp([x0, x1], seg[:, 0], seg[:, 1]), np.interp([x0, x1], seg[:, 0], seg[:, 2])
+    pts = [np.array([x, y + side * SPOT_HALF_W, z]) for (x, y, z), side in
+           (((x0, ys[0], zs[0]), -1), ((x1, ys[1], zs[1]), -1), ((x1, ys[1], zs[1]), 1), ((x0, ys[0], zs[0]), 1))]
+    scr = [self._proj(r, q) for q in pts]
+    if None in scr:
+      return
+    _fill(r, np.array([[v.x, v.y] for v in scr], dtype=np.float32), with_alpha(color, int((28 + 40 * glow) * self._alpha)))
+    edge = with_alpha(color, int((90 + 110 * glow) * self._alpha))
+    for a, b in zip(scr, scr[1:] + scr[:1], strict=True):
+      rl.draw_line_ex(a, b, 4.0, edge)
+
   def _arrow(self, r, curve, phase, color):
-    grow = min(1.0, phase / 0.6)
-    grow = 1 - (1 - grow) ** 3
-    fade = 1.0 if phase < 0.8 else 1.0 - (phase - 0.8) / 0.2
-    n = max(2, int(grow * (len(curve) - 1)) + 1)
-    c = with_alpha(color, int(150 * fade * self._alpha))
-    self._ribbon(r, curve[:n], 0.75, c)
-    self._head(r, curve, (n - 1) / (len(curve) - 1), 1.4, c)
+    """Lucas's pick (2026-10-14): a translucent arrow sweeps from our lane into the landing spot, the
+    spot lights up as it arrives, then both fade and the loop starts again.
+
+    The arrow is a screen-space curve between two road points (our lane just ahead, the back of the
+    spot) so it reads as an arrow at any camera height; a band painted flat on the road foreshortens
+    into a sliver over the short distance a lane change covers."""
+    x0, _ = self._spot_x()
+    start = self._proj(r, curve[0])
+    ahead = self._proj(r, self._at(curve, 0.2)[0] * np.array([1, 0, 1]) + curve[0] * np.array([0, 1, 0]))
+    end_p = np.array([x0, np.interp(x0, curve[:, 0], curve[:, 1]), np.interp(x0, curve[:, 0], curve[:, 2])])
+    end, fwd = self._proj(r, end_p), self._proj(r, end_p + np.array([6.0, 0, 0]))
+    side = self._proj(r, curve[0] + np.array([0, 1.0, 0]))
+    if None in (start, ahead, end, fwd, side):
+      return
+    p0, p3 = np.array([start.x, start.y]), np.array([end.x, end.y])
+    span = float(np.linalg.norm(p3 - p0)) or 1.0
+    t0 = np.array([ahead.x - start.x, ahead.y - start.y])
+    # finish heading straight up the screen (forward, like a navigation arrow) rather than along the
+    # lane's perspective line, which runs nearly sideways toward the vanishing point
+    t1 = np.array([0.25 * (fwd.x - end.x) / (abs(fwd.y - end.y) or 1.0), -1.0])
+    t0 /= np.linalg.norm(t0) or 1.0
+    t1 /= np.linalg.norm(t1) or 1.0
+    p1, p2 = p0 + t0 * span * 0.45, p3 - t1 * span * 0.35
+
+    grow = 1 - (1 - min(1.0, phase / 0.55)) ** 3
+    fade = 1.0 if phase < 0.82 else 1.0 - (phase - 0.82) / 0.18
+    ts = np.linspace(0.0, grow, 28)[:, None]
+    pts = (1 - ts) ** 3 * p0 + 3 * (1 - ts) ** 2 * ts * p1 + 3 * (1 - ts) * ts ** 2 * p2 + ts ** 3 * p3
+    if len(pts) >= 2 and grow > 0.02:
+      d = np.gradient(pts, axis=0)
+      d /= np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
+      nrm = np.column_stack([-d[:, 1], d[:, 0]])
+      w0 = min(0.5 * math.hypot(side.x - start.x, side.y - start.y), 46.0)
+      half = (w0 + (14.0 - w0) * ts[:, 0])[:, None]  # tapers toward the spot
+      band = np.vstack([pts + nrm * half, (pts - nrm * half)[::-1]]).astype(np.float32)
+      _fill(r, band, with_alpha(color, int(85 * fade * self._alpha)))
+      tip_at, tip_d = pts[-1], d[-1]
+      tip_n = np.array([-tip_d[1], tip_d[0]])
+      hw = float(half[-1, 0]) * 2.2
+      head = np.array([tip_at + tip_n * hw, tip_at + tip_d * hw * 2.2, tip_at + tip_d * hw * 2.2, tip_at - tip_n * hw],
+                      dtype=np.float32)
+      _fill(r, head, with_alpha(color, int(115 * fade * self._alpha)))
+    arrive = max(0.0, min(1.0, (phase - 0.45) / 0.15))
+    self._spot(r, curve, arrive * fade, color)
 
   # -- entry -----------------------------------------------------------------------------------
 

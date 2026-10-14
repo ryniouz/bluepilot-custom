@@ -48,7 +48,7 @@ DEFAULT_SHOW = (SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_E
 PARAM = "BPRoadView"
 
 LEAD_STYLES = ("floor", "bracket", "corners", "chevron")
-LC_STYLES = ("chevrons", "lane", "arrow", "off")  # lane_change_fx.py; index 0 is the default
+LC_STYLES = ("arrow", "chevrons", "lane", "off")  # lane_change_fx.py; index 0 is the default (Lucas picked arrow)
 LC_STYLE_LABELS = {"chevrons": "Chevrons", "lane": "Lane glow", "arrow": "Arrow", "off": "Off"}
 
 # (bit, label) in the order the settings sheet lists them
