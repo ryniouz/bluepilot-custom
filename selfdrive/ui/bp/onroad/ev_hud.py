@@ -151,7 +151,7 @@ class EvHudRenderer:
     s = self._enabled(preset)
     if s is None:
       return None
-    n = sum(1 for v in (s.soc, s.power_kw, s.range_km) if finite(v))
+    n = sum(1 for v in (s.soc, self._power_value(s), s.range_km) if finite(v))
     if n == 0:
       return None
     w = DOCK_PAD_X * 2 + n * DOCK_SEG_W + (n - 1) * DOCK_GAP
@@ -178,7 +178,7 @@ class EvHudRenderer:
 
     x = dock.x + DOCK_PAD_X
     first = True
-    for name, v in (("soc", s.soc), ("power", s.power_kw), ("range", s.range_km)):
+    for name, v in (("soc", s.soc), ("power", self._power_value(s)), ("range", s.range_km)):
       if not finite(v):
         continue
       if not first:
@@ -213,11 +213,21 @@ class EvHudRenderer:
     self._dock_value(r, f"{soc:.0f}", "%", "Low" if low else "Charge", caption_color=fill if low else None)
     K.bar(self._dock_bar_rect(r), soc / 100.0, fill)
 
+  @staticmethod
+  def _power_value(s: EvSnapshot) -> float:
+    """kW for the power tile: pack power, or while plugged in the charger's power into the pack
+    (negative), which the charging reader reports even when pack current is not decoded."""
+    if s.charging and finite(s.charge_power_kw):
+      return -abs(s.charge_power_kw)
+    return s.power_kw
+
   def _dock_power(self, r: rl.Rectangle, s: EvSnapshot):
-    kw = s.power_kw
+    kw = self._power_value(s)
+    # Plugged in with the ignition on, power flows into the pack from the charger, not from regen
+    charging = s.charging
     regen = kw < -0.5
-    self._dock_value(r, f"{abs(kw):.0f}", "kW", "Regen" if regen else "Power",
-                     caption_color=Console.SUCCESS if regen else None)
+    caption = "Charging" if charging else ("Regen" if regen else "Power")
+    self._dock_value(r, f"{abs(kw):.0f}", "kW", caption, caption_color=Console.SUCCESS if (regen or charging) else None)
     # Center-zero meter: regen grows left in success, drive grows right in accent
     bar = self._dock_bar_rect(r)
     rl.draw_rectangle_rounded(bar, roundness(bar, 6), 4, Console.BG_TRACK)
