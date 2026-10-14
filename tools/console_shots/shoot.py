@@ -131,6 +131,7 @@ SCENES.update({
   "drive_lead_corners": "Lead speed beside the car, corner-frame marker candidate",
   "drive_lead_chevron": "Lead speed beside the car, roof-chevron marker candidate",
   "drive_plugged": "Ignition on while DC charging, charging screen minimized: power tile reads Charging",
+  "drive_obd": "Dense layout with the OBD adapter connected: OBD rows in the details card",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
@@ -138,7 +139,8 @@ SCENES.update({
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                     "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                    "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd",
+                    "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -919,7 +921,7 @@ def scene_params(name: str) -> dict:
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                 "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                "drive_lead_corners", "drive_lead_chevron", "drive_plugged")
+                "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -928,7 +930,7 @@ def drive_scene_params(name: str) -> dict:
   p = {"IsMetric": True, "SpeedLimitMode": 2}  # the truck runs Canadian units
   if name in ("drive_minimal", "drive_qc_handle", "drive_qc_drag"):
     p["BPLayoutPreset"] = 0
-  if name == "drive_dense":
+  if name in ("drive_dense", "drive_obd"):
     p["BPLayoutPreset"] = 2
   if name == "drive_signals":
     p.update({"ShowTurnSignals": True, "BlindSpot": True, "ShowBlindspotOverlay": True})
@@ -945,7 +947,9 @@ def drive_scene_params(name: str) -> dict:
 
 def setup_drive_scene(name: str, d: dict):
   d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
-  if name == "drive_dense":
+  if name == "drive_obd":
+    _fake_obd()
+  if name in ("drive_dense", "drive_obd"):
     d.update(battery=dict(soc=64.0, volts=380.0, amps=110.0), a_ego=-0.8)
     _inject_ev(dict(pack_temp_c=27.0, coolant_temp_c=24.0, tire_kpa=[285.0, 287.0, 281.0, 284.0], lv_volts=14.1,
                     outside_temp_c=4.0, trip_km=18.4, trip_used_kwh=6.2, trip_regen_kwh=1.1, wh_per_km=297.0))
@@ -1321,6 +1325,16 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _fake_obd():
+  """A connected Wi-Fi adapter reading the built-in Lightning DIDs (obdStateBP is on the Lightning branch)."""
+  from bluepilot.ui.lib import obd_link as ol
+  vals = [("HvbEte", 71.4, "kWh"), ("HvbAvgModV", 3.912, "V"), ("HvbMinModV", 3.894, "V"), ("LvSoc", 82.0, "percent"),
+          ("HvbSoc", 61.8, "percent")]
+  snap = ol.ObdSnapshot(received=True, enabled=True, transport="wifi", link="connected", adapter="ELM327 v1.5",
+                        values=[ol.ObdValue(n, v, u, 1.0) for n, v, u in vals])
+  ol.ObdLink.snapshot = lambda self: snap
 
 
 def _fake_guest_mode():
