@@ -29,7 +29,7 @@ WINDOWS = [(30, "30 s"), (120, "2 min"), (600, "10 min"), (3600, "1 h"), (24 * 3
 MAX_PICKS = 4
 ROW_H = 84
 GROUP_H = 64
-LIST_W = 0.40
+LIST_W = 0.42
 PAD = 28
 VALUE = 30
 LABEL = 28
@@ -166,20 +166,19 @@ class StatsPage(Widget):
 
   def _draw_graph(self, r: rl.Rectangle, h):
     inner = K.inset(r, PAD, 24)
-    # Controls: window buttons on the left, Live on the right when panned back
-    self._seg_rects = K.segmented(inner.x + sum(D.text_w(lab, CAP + 2, semi=True) + 48 for _, lab in WINDOWS) + 8,
-                                  inner.y + 32, [lab for _, lab in WINDOWS], self.window_i)
+    # Controls: Live on the left (a button when panned back), window buttons on the right
+    self._seg_rects = K.segmented(inner.x + inner.width, inner.y + 40, [lab for _, lab in WINDOWS], self.window_i)
     self._live_rect = None
     if self.end_offset > 0.5:
       label = tr("Live")
-      w = D.text_w(label, CAP + 2, semi=True) + 48
-      self._live_rect = rl.Rectangle(inner.x + inner.width - w, inner.y, w, 64)
+      w = D.text_w(label, CAP + 2, semi=True) + 56
+      self._live_rect = rl.Rectangle(inner.x, inner.y, w, 80)
       D.button(self._live_rect, label, primary=True, size=CAP + 2)
     else:
-      D.dot(inner.x + inner.width - D.text_w(tr("Live"), CAP, semi=True) - 22, inner.y + 32, 8, Console.SUCCESS)
-      D.text_right(tr("Live"), inner.x + inner.width, inner.y + 32 - CAP / 2 - 2, CAP, Console.TEXT_SECONDARY, semi=True)
+      D.dot(inner.x + 8, inner.y + 40, 8, Console.SUCCESS)
+      D.text(tr("Live"), inner.x + 28, inner.y + 40 - CAP / 2 - 2, CAP, Console.TEXT_SECONDARY, semi=True)
 
-    plot = rl.Rectangle(inner.x, inner.y + 64 + 24, inner.width, inner.height - 64 - 24 - CAP - 16)
+    plot = rl.Rectangle(inner.x, inner.y + 80 + 24, inner.width, inner.height - 80 - 24 - CAP - 16)
     window = WINDOWS[self.window_i][0]
     end = time.monotonic() - self.end_offset
     picks = [k for k in self.picks if h is not None and k in h.keys()]

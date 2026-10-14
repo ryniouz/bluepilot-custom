@@ -265,33 +265,35 @@ def draw_tiles(r: rl.Rectangle, s: EvSnapshot, session: ChargeSession):
     v, u = fmt_duration(s.charge_time_to_full_min)
     tile(cells[2], tr("Time to full"), v, u, tr("Charging for") + f" {ev} {eu}")
   else:
-    tile(cells[2], tr("Charging for"), ev, eu, tr("Time to full not reported"), note_color=Console.TEXT_MUTED)
+    tile(cells[2], tr("Charging for"), ev, eu, tr("No estimate from the truck"), note_color=Console.TEXT_MUTED)
 
   # Battery thermal
   mode = s.thermal_mode
   note = tr(THERMAL_TEXT.get(mode, "No data"))
-  if finite(s.coolant_temp_c):
+  wide = cells[3].width > 420
+  if wide and finite(s.coolant_temp_c):
     cv, cu = fmt_temp(s.coolant_temp_c)
     note += " · " + tr("coolant") + f" {cv} {cu}"
   if finite(s.pack_temp_c):
     tv, tu = fmt_temp(s.pack_temp_c)
     abnormal = not (PACK_TEMP_LOW_C <= s.pack_temp_c <= PACK_TEMP_HIGH_C)
-    tile(cells[3], tr("Battery temperature"), tv, tu, note, value_color=Console.WARNING if abnormal else None,
+    tile(cells[3], tr("Battery temperature") if wide else tr("Battery"), tv, tu, note, value_color=Console.WARNING if abnormal else None,
          note_dot=thermal_color(mode))
   else:
-    tile(cells[3], tr("Battery temperature"), "--", "", note, note_dot=thermal_color(mode))
+    tile(cells[3], tr("Battery temperature") if wide else tr("Battery"), "--", "", note, note_dot=thermal_color(mode))
 
 
 def draw_body(r: rl.Rectangle, s: EvSnapshot, session: ChargeSession):
-  tiles_h = min(300.0, r.height * 0.38)
-  draw_battery(rl.Rectangle(r.x, r.y, r.width, r.height - tiles_h - GAP), s, session)
-  draw_tiles(rl.Rectangle(r.x, r.y + r.height - tiles_h, r.width, tiles_h), s, session)
+  bottom = draw_battery(rl.Rectangle(r.x, r.y, r.width, r.height), s, session)
+  top = bottom + 56
+  tiles_h = min(300.0, r.y + r.height - top)
+  draw_tiles(rl.Rectangle(r.x, top, r.width, tiles_h), s, session)
 
 
 def draw_idle(r: rl.Rectangle, s: EvSnapshot | None, session: ChargeSession | None):
   """Not plugged in: last known charge and the previous session."""
   snap = s if s is not None and s.available else getattr(getattr(ui_state, "ev_source", None), "last_good", None)
-  tiles_h = min(300.0, r.height * 0.38)
+  tiles_h = min(300.0, r.height * 0.36)
   if snap is not None:
     draw_battery(rl.Rectangle(r.x, r.y, r.width, r.height - tiles_h - GAP), snap, None, live=s is not None and s.available)
   else:
