@@ -101,6 +101,11 @@ def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
 
   return always_run(started, params, CP)
 
+# Custom: data export bridge
+def bridge_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("BPBridgeEnabled")
+# End Custom
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -199,6 +204,8 @@ if is_bluepilot():
   procs += [
     PythonProcess("bp_portal", "bluepilot.backend.bp_portal", _bp_portal_enabled),
     PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", _bp_route_preprocessor_enabled),
+    # Custom: data export bridge (drives, live state, keep-until-synced, Citadel uploads)
+    PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
   ]
 
 if os.path.exists("./github_runner.sh"):
