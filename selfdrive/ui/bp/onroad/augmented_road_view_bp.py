@@ -10,6 +10,8 @@ from openpilot.selfdrive.ui.bp.onroad.blindspot_renderer import BlindspotRendere
 from openpilot.selfdrive.ui.bp.onroad.hud_renderer_bp import HudRendererBP
 from openpilot.selfdrive.ui.bp.onroad.alert_renderer_bp import AlertRendererBP
 from openpilot.selfdrive.ui.bp.onroad.model_renderer_bp import ModelRendererBP
+from openpilot.selfdrive.ui.bp.onroad.driver_monitor_bp import DriverMonitorBP
+from openpilot.selfdrive.ui.bp.onroad.road_view import CARD_W as LEAD_CARD_W, SHOW_LEAD_CARD, draw_lead_card, road_prefs
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
 from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
 from openpilot.selfdrive.ui.bp.onroad.console_cues import ConsoleConfidence, draw_blindspot_edge
@@ -36,6 +38,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # BluePilot: Replace renderers with BP versions
     self.model_renderer = ModelRendererBP()
+    # Custom: Console driver-monitoring tile
+    self.driver_state_renderer = DriverMonitorBP()
     self._hud_renderer = HudRendererBP()
     self.alert_renderer = AlertRendererBP()
     # BluePilot: Torque bar renderer. Custom: a strip along the top of the Console dock, or the
@@ -136,6 +140,16 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     self._hud_renderer.render(ui_rect)
 
+    # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
+    lead = self.model_renderer.lead_info
+    if lead is not None and preset != LayoutPreset.MINIMAL and road_prefs.on(SHOW_LEAD_CARD):
+      details = self._ev_hud.last_rect
+      if details is not None:  # Dense: the details card owns the right edge; sit to its left
+        x, y = details.x - 24 - LEAD_CARD_W, details.y
+      else:
+        x, y = self._hud_renderer.lead_card_pos(ui_rect, LEAD_CARD_W)
+      draw_lead_card(x, y, lead, road_prefs.value, ui_state.is_metric, self.model_renderer.lead_alpha)
+
     bp_ui_log.scissor("AugRoadView", "reset (defensive)")
     # Defensive: re-establish scissor before drawing driver state. Some HUD widgets (e.g. speed
     # limit, brake status) can leave raylib state in a bad way on device, causing the bottom-left
@@ -147,7 +161,9 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       int(self._content_rect.width),
       int(self._content_rect.height)
     )
-    self.driver_state_renderer.render(ui_rect)
+    # Custom: a prompt or critical card at the bottom covers the tile's corner; the card shows the ask
+    if not alert_blocks_dock:
+      self.driver_state_renderer.render(ui_rect)
 
     # BluePilot: stock arc torque bar when the dock (which carries the strip) is hidden.
     # Custom: the Minimal preset hides it.
@@ -166,6 +182,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
       else ui_rect
     )
     self.alert_renderer.notify_band = self._hud_renderer.notify_band(ui_rect)
+    self.alert_renderer.notify_top = self._hud_renderer.notify_top(ui_rect)
     self.alert_renderer.render(alert_rect)
 
     bp_ui_log.scissor("AugRoadView", "end")

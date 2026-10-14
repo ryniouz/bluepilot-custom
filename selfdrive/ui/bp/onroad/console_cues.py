@@ -26,7 +26,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness
+from bluepilot.ui.lib.theme import Console, Onroad, Radius, roundness, with_alpha
 
 # -- notification card --------------------------------------------------------------------
 
@@ -129,6 +129,31 @@ def cue_icon(name: str, x: float, y: float, size: float, color: rl.Color):
     rl.draw_ring(rl.Vector2(x + 12 * s, y + 13 * s), 8.5 * s - w / 2, 8.5 * s + w / 2, 0, 360, 40, color)
     _seg([(12, 13), (12, 8.5)], x, y, s, w, color)
     _seg([(10, 2.5), (14, 2.5)], x, y, s, w, color)
+  elif name in ("car_left", "car_right", "car_rear"):
+    # rear view of a car: roof, body, lights, wheels
+    _seg([(6.5, 10), (8.5, 5), (15.5, 5), (17.5, 10)], x, y, s, w, color)
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3 * s, y + 10 * s, 18 * s, 7.5 * s), 0.35, 8, w, color)
+    for lx in (6.5, 17.5):
+      rl.draw_circle_v(rl.Vector2(x + lx * s, y + 13.6 * s), 1.4 * s, color)
+    for wx in (4.5, 16):
+      rl.draw_rectangle_rounded(rl.Rectangle(x + wx * s, y + 17.5 * s, 3.5 * s, 3.5 * s), 0.4, 4, color)
+  elif name == "alert":
+    # bold exclamation for alert tiles
+    rl.draw_rectangle_rounded(rl.Rectangle(x + 10 * s, y + 3 * s, 4 * s, 12.5 * s), 0.6, 6, color)
+    rl.draw_circle_v(rl.Vector2(x + 12 * s, y + 19.5 * s), 2.3 * s, color)
+  elif name == "eye":
+    rl.draw_ring(rl.Vector2(x + 12 * s, y + 12 * s), 3.2 * s - w / 2, 3.2 * s + w / 2, 0, 360, 32, color)
+    pts_top = [(2, 12), (6, 7.5), (12, 5.8), (18, 7.5), (22, 12)]
+    pts_bot = [(2, 12), (6, 16.5), (12, 18.2), (18, 16.5), (22, 12)]
+    _seg(pts_top, x, y, s, w, color)
+    _seg(pts_bot, x, y, s, w, color)
+  elif name == "hands":
+    # steering wheel held at nine and three
+    rl.draw_ring(rl.Vector2(x + 12 * s, y + 12 * s), 9 * s - w / 2, 9 * s + w / 2, 0, 360, 48, color)
+    _seg([(3, 12), (21, 12)], x, y, s, w, color)
+    _seg([(12, 12), (12, 21)], x, y, s, w, color)
+    for hx in (3, 21):
+      rl.draw_rectangle_rounded(rl.Rectangle(x + (hx - 2.6) * s, y + 8.5 * s, 5.2 * s, 7 * s), 0.6, 6, color)
   else:
     D.icon(name, x, y, size, color)
 
@@ -138,14 +163,15 @@ def cue_icon(name: str, x: float, y: float, size: float, color: rl.Color):
 TILE = 128
 TILE_R = 24
 BLINK_S = 0.4             # half period, matches the stock indicator cadence
+TILE_GAP = 24             # between the two tiles at the centre
 
 
 class SignalTiles:
-  """Two tiles flanking the notification slot.
+  """Two tiles side by side at the top centre, like a cluster's indicators.
 
   Blinker only            panel tile, arrow in success, blinking
-  Car in the blind spot   panel tile with a danger outline and the word "Car" (ShowBlindspot)
-  Blinker into that lane  danger-filled tile, white arrow, steady (lane change unsafe)
+  Car in the blind spot   panel tile with a thick danger outline, car mark, "Car" (ShowBlindspot)
+  Blinker into that lane  red tile with a pulsing halo, car mark, "Blocked" (lane change unsafe)
   """
 
   def __init__(self):
@@ -162,29 +188,44 @@ class SignalTiles:
       return "signal"
     return None
 
-  def render(self, band_l: float, band_r: float, y: float):
+  def render_center(self, cx: float, y: float) -> bool:
+    """Draw the tiles side by side around cx (left of centre, right of centre); a side with
+    nothing to show leaves its slot empty so the other tile never moves. Returns True when any
+    tile drew."""
     if not (ui_state.turn_signals or ui_state.blindspot):
-      return
+      return False
     cs = ui_state.sm['carState']
-    on = ((time.monotonic() - self._t0) % (2 * BLINK_S)) < BLINK_S
-    for side, x, blinker, bs in (("left", band_l, cs.leftBlinker, cs.leftBlindspot),
-                                 ("right", band_r - TILE, cs.rightBlinker, cs.rightBlindspot)):
+    now = time.monotonic() - self._t0
+    on = (now % (2 * BLINK_S)) < BLINK_S
+    pulse = 0.5 + 0.5 * math.sin(now * 2 * math.pi / 0.8)
+    shown = False
+    for side, x, blinker, bs in (("left", cx - TILE_GAP / 2 - TILE, cs.leftBlinker, cs.leftBlindspot),
+                                 ("right", cx + TILE_GAP / 2, cs.rightBlinker, cs.rightBlindspot)):
       st = self._state(blinker, bs)
       if st is None:
         continue
+      shown = True
       r = rl.Rectangle(x, y, TILE, TILE)
       rr = roundness(r, TILE_R)
       if st == "danger":
+        # Lane change into a car: solid red tile with a pulsing halo, car mark and "Blocked"
+        halo = rl.Rectangle(r.x - 8, r.y - 8, TILE + 16, TILE + 16)
+        rl.draw_rectangle_rounded(halo, roundness(halo, TILE_R + 8), 10, with_alpha(Console.DANGER_FILL, int(90 + 110 * pulse)))
         rl.draw_rectangle_rounded(r, rr, 10, Console.DANGER_FILL)
-        fg, word = Console.ON_ACCENT, "Car"
+        fg, word = Console.ON_ACCENT, "Blocked"
+        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 12, 72, fg)
+      elif st == "car":
+        rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL_SOLID)
+        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 5, Console.DANGER)
+        fg, word = Console.DANGER, "Car"
+        cue_icon("car_" + side, r.x + (TILE - 72) / 2, r.y + 12, 72, fg)
       else:
         rl.draw_rectangle_rounded(r, rr, 10, Onroad.PANEL_SOLID)
-        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 4 if st == "car" else 2,
-                                           Console.DANGER if st == "car" else Console.BORDER_DEFAULT)
-        fg = Console.DANGER if st == "car" else (Console.SUCCESS if on else Console.BG_HIGH)
-        word = "Car" if st == "car" else ("Left" if side == "left" else "Right")
-      cue_icon(f"arrow_{side}", r.x + (TILE - 60) / 2, r.y + 16, 60, fg)
+        rl.draw_rectangle_rounded_lines_ex(r, rr, 10, 2, Console.BORDER_DEFAULT)
+        fg, word = (Console.SUCCESS if on else Console.BG_HIGH), ("Left" if side == "left" else "Right")
+        cue_icon(f"arrow_{side}", r.x + (TILE - 60) / 2, r.y + 16, 60, fg)
       D.text_center(word, r.x + TILE / 2, r.y + TILE - 44, 28, fg if st != "signal" else Console.TEXT_SECONDARY, semi=True)
+    return shown
 
 
 EDGE_W = 20
@@ -246,6 +287,9 @@ class ConsoleConfidence(ConfidenceBallTiciBP):
 
 # -- Canadian speed-limit sign ------------------------------------------------------------
 
+SIGN_W = 168               # portrait Canadian sign inside SP's 200 px sign rect
+
+
 class CanadianSpeedLimit(SpeedLimitRenderer):
   """SP speed-limit logic with the Canadian regulatory sign: MAXIMUM, the value, km/h."""
 
@@ -256,6 +300,8 @@ class CanadianSpeedLimit(SpeedLimitRenderer):
     self._render_canada(rect, val, sub, color, has_limit, alpha)
 
   def _render_canada(self, rect, val, sub, color, has_limit, alpha=1.0):
+    # Canadian regulatory signs are portrait: draw a narrower sign centred in SP's rect
+    rect = rl.Rectangle(rect.x + (rect.width - SIGN_W) / 2, rect.y, SIGN_W, rect.height)
     white = rl.color_alpha(rl.WHITE, alpha)
     black = rl.color_alpha(rl.BLACK, alpha)
     text_color = rl.color_alpha(color, alpha)
@@ -263,8 +309,8 @@ class CanadianSpeedLimit(SpeedLimitRenderer):
     inner = rl.Rectangle(rect.x + 9, rect.y + 9, rect.width - 18, rect.height - 18)
     rl.draw_rectangle_rounded_lines_ex(inner, roundness(inner, 12), 10, 5, black)
     cx = rect.x + rect.width / 2
-    self._draw_text_centered(self.font_demi, "MAXIMUM", 30, rl.Vector2(cx, rect.y + 44), black)
-    self._draw_text_centered(self.font_bold, val, 96 if len(val) < 3 else 80, rl.Vector2(cx, rect.y + rect.height / 2 + 12), text_color)
+    self._draw_text_centered(self.font_demi, "MAXIMUM", 22, rl.Vector2(cx, rect.y + 42), black)
+    self._draw_text_centered(self.font_bold, val, 88 if len(val) < 3 else 72, rl.Vector2(cx, rect.y + rect.height / 2 + 10), text_color)
     self._draw_text_centered(self.font_demi, "km/h" if ui_state.is_metric else "mph", 30,
                              rl.Vector2(cx, rect.y + rect.height - 44), black)
     if sub and has_limit:

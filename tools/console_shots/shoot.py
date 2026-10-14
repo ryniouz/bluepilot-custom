@@ -81,9 +81,11 @@ SCENES.update({
   "drive_prompt": "Mid userPrompt alert (Pay Attention) as a Console card",
   "drive_critical": "Mid critical alert as a Console card",
   "drive_popup": "SP green-light pop-up as a notification card, with smart-cruise chips",
+  "drive_lead": "Closing on a lead: bracket marker and lead card with every row on",
+  "drive_road_settings": "Quick controls on the Road view page (what the road view shows)",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
-                    "drive_critical", "drive_popup", "sidebar", "alert_full_prompt", "alert_full_critical"]
+                    "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
 SCONS_TARGETS = [
@@ -830,7 +832,8 @@ def scene_params(name: str) -> dict:
 
 
 # --- Stream B (driving screen) scene setup ------------------------------------------------
-DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup")
+DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
+                "drive_lead", "drive_road_settings")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -845,6 +848,8 @@ def drive_scene_params(name: str) -> dict:
     p.update({"ShowTurnSignals": True, "BlindSpot": True, "ShowBlindspotOverlay": True})
   if name == "drive_popup":
     p.update({"StandstillTimer": True})
+  if name == "drive_lead":
+    p.update({"BPRoadView": 0x17F})  # every row on
   return p
 
 
@@ -866,6 +871,8 @@ def setup_drive_scene(name: str, d: dict):
   elif name == "drive_popup":
     d.update(v_ego=0.0, lead_d=12.0)
     _inject_popup()
+  elif name == "drive_lead":
+    d.update(lead_d=24.0, lead_v_rel=-4.2)
 
 
 def _inject_ev(fields: dict):
@@ -988,6 +995,10 @@ def run_scene(sc: Scene):
         sc.main._quick.open()
       else:
         sc.main._sidebar.set_visible(True)
+      sc.step(max(20, sc.frames // 4))
+    if name == "drive_road_settings":  # stream B
+      sc.main._quick.open()
+      sc.main._quick._page = "road"
       sc.step(max(20, sc.frames // 4))
     if name == "onroad_debug_panel":
       sc.main._debug_panel.toggle_visibility()
