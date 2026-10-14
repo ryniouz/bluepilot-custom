@@ -61,7 +61,7 @@ class TestCatalog:
     assert temps.short_name == "TMax" and temps.extra[0][0] == "TMin"
     assert by[("7E0", "22DD01")].decode(bytes([0x01, 0x86, 0xA0])) == 100000  # all 3 bytes, div 0 = 1
     assert by[("7E4", "2248F9")].decode(bytes([0xFF, 0x9B])) == pytest.approx(-10.1)  # signed
-    assert ("7E0", "224801") in by  # "(default)" header
+    assert ("7DF", "224801") in by  # "(default)" header = functional request
 
 
 class TestElm:
@@ -87,6 +87,12 @@ class TestElm:
         elm.request("7E4", "2E0101")  # never sent
     assert "2E0101" not in t.sent
     assert t.sent.count("ATSH7E4") == 1  # header switch only when it changes
+
+  def test_functional_request(self):
+    t = SimTransport(responses={})
+    t._answer = lambda cmd: "OK" if cmd.startswith("AT") else "7EC037F2231\r7EA0562485E5DC0"
+    with t:
+      assert Elm327(t).request("7DF", "22485E") == bytes.fromhex("5DC0")  # 7EC refuses, 7EA answers
 
   def test_negative(self):
     t = SimTransport(responses={})
@@ -146,6 +152,8 @@ class TestService:
     assert vals["HvbT"].value == pytest.approx(27.0, abs=0.01) and vals["HvbT"].unit == "degC"
     assert vals["TireLF"].unit == "kPa" and 200 < vals["TireLF"].value < 320
     assert vals["HvbA"].value == pytest.approx(-20.0)
+    assert vals["HvbSoh"].value == pytest.approx(97.0) and vals["HvbCHP"].value == pytest.approx(2.7)
+    assert vals["ACInV"].value == pytest.approx(240.0) and vals["ACInA"].value == 47  # functional 7DF, answered on 7EA
     assert len(vals) == len(SIM_RESPONSES)
     assert m.requestsPerSecond > 0 and 0 <= m.lastResponseAgeS < 2
     # only reads ever reach the adapter
