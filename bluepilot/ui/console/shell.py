@@ -151,16 +151,15 @@ class ConsoleShell(Widget):
     self.register_page(Dest.ENERGY, Page(tr("Charging settings"), "sliders", charge_settings, key="charging",
                                          subtitle=tr("Energy"), framed=False))
 
-    from bluepilot.ui.console.pages.drives import DrivesPage, OffloadPage
+    from bluepilot.ui.console.pages.drives import DrivesPage
     drives = DrivesPage()
     self.register_page(Dest.DRIVES, Page(tr("Previous drives"), "list", drives, key="drives", framed=False))
-    offload = OffloadPage()
-    self.register_page(Dest.DRIVES, Page(tr("Offloading"), "cloud", offload, key="drives_offload", framed=False))
-    from bluepilot.ui.console.pages.upload_settings import UploadSettingsPage
+    # Uploads: the old Offloading and Upload settings pages merged; their keys still open it
+    from bluepilot.ui.console.pages.uploads import UploadsPage
     wifi = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None
-    self.register_page(Dest.DRIVES, Page(tr("Upload settings"), "sliders",
-                                         UploadSettingsPage(getattr(wifi.instance, "_wifi_manager", None) if wifi is not None else None),
-                                         key="upload_settings", framed=False))
+    self.register_page(Dest.DRIVES, Page(tr("Uploads"), "cloud",
+                                         UploadsPage(getattr(wifi.instance, "_wifi_manager", None) if wifi is not None else None),
+                                         key="uploads", framed=False, aliases=("drives_offload", "upload_settings")))
 
     from bluepilot.ui.console.pages.theme import ThemePage
     self.register_page(Dest.SCREEN, Page(tr("Theme and layout"), "palette", ThemePage(), key="theme",
@@ -178,12 +177,12 @@ class ConsoleShell(Widget):
     self.connectivity = ConnectivityPage(getattr(net.instance, "_wifi_manager", None) if net is not None else None)
     self.connectivity.on_open_wifi = lambda: self.open_panel(self._wifi_key)
     self.connectivity.on_open_export = lambda: self.open_panel("export")
-    self.connectivity.on_open_uploads = lambda: self.open_panel("drives_offload")
+    self.connectivity.on_open_uploads = lambda: self.open_panel("uploads")
     self.connectivity.on_open_cellular = lambda: self.open_panel("cellular")
     self.register_page(Dest.CONNECT, Page(tr("Status"), "pulse", self.connectivity, key="connectivity", framed=False))
     from bluepilot.ui.console.pages.cellular import CellularPage
     cellular = CellularPage(self.connectivity._wifi)
-    cellular.on_open_uploads = lambda: self.open_panel("upload_settings")
+    cellular.on_open_uploads = lambda: self.open_panel("uploads")
     self.register_page(Dest.CONNECT, Page(tr("Cellular"), "cell", cellular, key="cellular", framed=False))
     panel(Dest.CONNECT, tr("Wi-Fi"), "wifi", "NETWORK", tr("Connect"))
     from bluepilot.ui.console.pages.automations import AutomationsPage
