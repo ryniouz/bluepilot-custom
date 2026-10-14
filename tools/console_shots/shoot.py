@@ -49,7 +49,7 @@ SCENES: dict[str, str] = {
   "home_mismatch": "Home > Alerts after the comma refused a non-Lightning car (BPPlatformMismatch)",
   "home_charging": "Home after the charging page was minimized (Charging card reopens it)",
   "drives": "Drives > Previous drives (fake log root, some synced)",
-  "drives_offload": "Drives > Offloading (comma connect queue + Citadel sync)",
+  "drives_offload": "Drives > Uploads (opened by the old Offloading key)",
   "drives_storage": "Drives > Storage",
   "connectivity": "Connect > Status (Wi-Fi, LTE, server and sync, home location)",
   "updates": "System > Updates with an update available from Lucas's repo",
@@ -76,7 +76,7 @@ SCENES: dict[str, str] = {
   "theme_large": "Screen > Theme and layout at UI size Large",
   "automations": "Connect > Home automations: at home on a home network, after joining it",
   "automations_large": "Connect > Home automations at UI size Large",
-  "upload_settings": "Drives > Upload settings: comma connect, Citadel uploads, LTE data limit",
+  "upload_settings": "Drives > Uploads with Road Trip Mode on and a 5 GB limit",
   "vehicle": "System > Vehicle: the Lightning, platform lock, Driving tab",
   "vehicle_alerts": "System > Vehicle: Alerts tab (battery %, tire PSI, 12 V)",
   "vehicle_guest": "System > Vehicle: Guest Mode tab",
@@ -1269,6 +1269,7 @@ def run_scene(sc: Scene):
     sc.put("BPServerUrl", "https://citadel.example.lan")
     sc.put("BPRoadTripMode", True)
     sc.put("BPCellLimitMB", 5000)
+    _seed_drives(sc)
     sc.main._open_shell()
     sc.main._shell.open_panel("upload_settings")
     sc.settle()
