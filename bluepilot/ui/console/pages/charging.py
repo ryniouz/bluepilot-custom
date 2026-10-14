@@ -30,8 +30,6 @@ from bluepilot.ui.console import kit as K
 from bluepilot.ui.lib.ev_data import ChargeSession, EvSnapshot, finite, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
 from bluepilot.ui.lib.theme import Console, roundness
 
-KM_TO_MI = 0.621371
-
 # Lightning maximum charge power, for the power bar: DC about 155 kW (Extended Range), AC 19.2 kW (80 A)
 MAX_DC_KW = 155.0
 MAX_AC_KW = 19.2
@@ -97,16 +95,13 @@ def fmt_kw(kw: float) -> str:
   return f"{kw:.0f}" if kw >= 10 else f"{kw:.1f}"
 
 
+# Canadian units throughout, whatever IsMetric says: °C and km (Lucas, 2026-10-14)
 def fmt_temp(c: float) -> tuple[str, str]:
-  if ui_state.is_metric:
-    return f"{c:.0f}", "°C"
-  return f"{c * 9 / 5 + 32:.0f}", "°F"
+  return f"{c:.0f}", "°C"
 
 
 def fmt_dist(km: float) -> tuple[str, str]:
-  if ui_state.is_metric:
-    return f"{km:.0f}", "km"
-  return f"{km * KM_TO_MI:.0f}", "mi"
+  return f"{km:.0f}", "km"
 
 
 def charge_title(s: EvSnapshot) -> str:

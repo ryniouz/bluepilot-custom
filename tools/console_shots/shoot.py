@@ -1015,7 +1015,7 @@ def _seed_history():
               "ev.current_a": power * 1000 / 380, "ev.coolant_temp_c": 22 + 4 * m, "ev.range_km": soc / 100 * 131000 / 300,
               "ev.lv_volts": 12.6 + (0.9 if not driving else 1.6), "ev.outside_temp_c": 14.0, "ev.charging": 0.0 if driving else 1.0,
               "ev.charge_power_kw": math.nan if driving else -power, "ev.motor_torque_nm": 180 + 140 * math.sin(i / 23.0) if driving else 0.0,
-              "ev.tire_kpa.0": 262.0, "ev.tire_kpa.1": 262.0, "ev.tire_kpa.2": 255.0, "ev.tire_kpa.3": 258.0}
+              "ev.tire_kpa.0": 38.0, "ev.tire_kpa.1": 38.0, "ev.tire_kpa.2": 37.0, "ev.tire_kpa.3": 37.5}
       self.push(vals, t)
     self._next_fine = 0.0
 

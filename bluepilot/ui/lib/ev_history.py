@@ -27,6 +27,7 @@ FINE_S = 3600.0
 COARSE_DT = 30.0
 COARSE_S = 24 * 3600.0
 RAW_SERVICES = ("carStateBP", "chargingStateBP")
+KPA_TO_PSI = 0.145038  # Canadian units: °C and km, but tire pressure in psi
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ TIRES = ("Front left tire", "Front right tire", "Rear left tire", "Rear right ti
 # Unit from a capnp field name suffix, for the raw carStateBP values
 _SUFFIX_UNITS = [
   ("Percent", "%"), ("Perc", "%"), ("Kwh", "kWh"), ("Kw", "kW"), ("KwPerKm", "kW/km"), ("WhPerKm", "Wh/km"),
-  ("TempC", "°C"), ("C", "°C"), ("Kpa", "kPa"), ("Nm", "Nm"), ("Km", "km"), ("Hours", "h"), ("Seconds", "s"),
+  ("TempC", "°C"), ("C", "°C"), ("Kpa", "psi"), ("Nm", "Nm"), ("Km", "km"), ("Hours", "h"), ("Seconds", "s"),
   ("Voltage", "V"), ("Volt", "V"), ("Current", "A"), ("Amps", "A"),
 ]
 _SKIP_RAW = re.compile(r"(Available|Raw|Value)$")
@@ -101,7 +102,7 @@ def flatten(obj, prefix: str, out: dict[str, float]) -> None:
   elif isinstance(obj, (int, float)):
     leaf = prefix.rsplit(".", 1)[-1]
     if not _SKIP_RAW.search(leaf):
-      out[prefix] = float(obj)
+      out[prefix] = float(obj) * (KPA_TO_PSI if leaf.endswith("Kpa") else 1.0)
 
 
 class _Ring:
@@ -160,7 +161,7 @@ class EvHistory:
       f = key[3:]
       if f.startswith("tire_kpa."):
         idx = int(f.rsplit(".", 1)[1])
-        self._info[key] = SignalInfo(key, TIRES[idx] if idx < 4 else f, "kPa", "Vehicle", 0)
+        self._info[key] = SignalInfo(key, TIRES[idx] if idx < 4 else f, "psi", "Vehicle", 0)
       else:
         label, unit, group, digits = EV_SIGNALS.get(f, (_humanize(f), "", "Other", 1))
         self._info[key] = SignalInfo(key, label, unit, group, digits)
@@ -184,7 +185,7 @@ class EvHistory:
       v = getattr(snap, name)
       if name == "tire_kpa":
         for i, t in enumerate(v[:4]):
-          out[f"ev.tire_kpa.{i}"] = float(t)
+          out[f"ev.tire_kpa.{i}"] = float(t) * KPA_TO_PSI
       elif isinstance(v, bool):
         out[f"ev.{name}"] = 1.0 if v else 0.0
       elif isinstance(v, (int, float)):
