@@ -351,6 +351,25 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlinkerPauseLaneChange", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Custom: Lightning control and CAN (stream B)
+    {"BPLightningTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // Lightning tune profile, selected by fingerprint
+    {"BPTowProfile", {PERSISTENT | BACKUP, INT, "0"}},              // 0 auto (trailer or Tow/Haul), 1 off, 2 always on
+    {"BPDriveModeTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // follow the drive mode (sport, off-road, slippery)
+    {"BPOnePedalMode", {PERSISTENT | BACKUP, INT, "2"}},            // 0 off, 1 on, 2 estimate from coast-down
+    {"BPLowSocAlertPct", {PERSISTENT | BACKUP, INT, "20"}},
+    {"BPCriticalSocAlertPct", {PERSISTENT | BACKUP, INT, "10"}},
+    {"BPTireLowPressureKpa", {PERSISTENT | BACKUP, INT, "240"}},
+    {"BPLowVoltAlertV", {PERSISTENT | BACKUP, FLOAT, "11.8"}},
+    {"BPChargeKeepAwake", {PERSISTENT | BACKUP, BOOL, "1"}},        // stay on offroad while the truck charges
+    {"BPChargeSleepDelayMin", {PERSISTENT | BACKUP, INT, "30"}},    // power down this long after an offroad charge ends; 0 = use MaxTimeOffroad
+    {"BPChargingActive", {CLEAR_ON_MANAGER_START, BOOL, "0"}},      // written by charging_monitor
+    {"BPChargeLastActiveTs", {CLEAR_ON_MANAGER_START, FLOAT}},      // time.monotonic() of the last charging sample
+    {"BPGuestMode", {PERSISTENT, BOOL, "0"}},                        // factory driver assist: card goes passive (noOutput) at the next car start
+    {"BPGuestModeOneTrip", {PERSISTENT | BACKUP, BOOL, "1"}},       // turn Guest Mode off again after one drive
+    {"BPGuestModeActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},  // this drive is running as Guest Mode (UI)
+    {"BPGuestModeUsed", {PERSISTENT, BOOL, "0"}},                    // set by card on a guest drive; cleared at the next offroad start
+    // Custom: end
+
     // BluePilot: Portal (Web Routes Server)
     {"EnableWebRoutesServer", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPPortalPort", {PERSISTENT | BACKUP, INT, "8088"}},

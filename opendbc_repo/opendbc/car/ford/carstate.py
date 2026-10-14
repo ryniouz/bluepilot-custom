@@ -7,6 +7,11 @@ from opendbc.car.ford.values import DBC, CarControllerParams, FordFlags
 from opendbc.car.interfaces import CarStateBase
 from opendbc.sunnypilot.car.ford.mads import MadsCarState
 from opendbc.sunnypilot.car.ford.carstate_ext import CarStateExt
+# Custom: Lightning EV state, vehicle mode and alerts
+from opendbc.car import DT_CTRL
+from opendbc.sunnypilot.car.ford.lightning import EV_PT_MESSAGES, HEV_BATTERY_MESSAGES, EvSettings, LightningState, \
+                                                  fill_car_state_bp
+# Custom: end
 
 ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
@@ -39,6 +44,31 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
     # BluePilot: Save HEV data available flags to params for UI
     self.params.put_bool("FordPrefHevDataAvailable", True if CP.flags & FordFlags.HEV_CLUSTER_DATA else False)
     self.params.put_bool("FordPrefHevBattDataAvailable", True if CP.flags & FordFlags.HEV_BATTERY_DATA else False)
+
+    # Custom: Lightning EV state. Read by carcontroller for tune profile selection.
+    self.lightning = LightningState()
+    self.ev_settings = EvSettings()
+    self.bp_drive_mode = "unknown"
+    self.bp_trailer_connected = False
+    self.bp_one_pedal = False
+    self.bp_tune_state = None
+    self._bp_frame = 0
+    self._update_ev_settings()
+    # Custom: end
+
+  # Custom: settings are read once a second, not every 100 Hz frame
+  def _update_ev_settings(self):
+    try:
+      self.ev_settings = EvSettings(
+        low_soc_pct=float(self.params.get("BPLowSocAlertPct", return_default=True)),
+        critical_soc_pct=float(self.params.get("BPCriticalSocAlertPct", return_default=True)),
+        tire_low_kpa=float(self.params.get("BPTireLowPressureKpa", return_default=True)),
+        low_volt_v=float(self.params.get("BPLowVoltAlertV", return_default=True)),
+        one_pedal_mode=int(self.params.get("BPOnePedalMode", return_default=True)),
+      )
+    except (TypeError, ValueError):
+      self.ev_settings = EvSettings()
+  # Custom: end
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -166,10 +196,175 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
       *self.button_events,
     ]
 
+<<<<<<< ours
     # BluePilot: HEV telemetry and brake light status (delegated to carstate_ext)
     self.car_state_bp_msg = CarStateExt.update_car_state_bp(self, cp, cp_cam)
     return ret, ret_sp
 
+=======
+    self.car_state_bp_msg = self.update_car_state_bp(cp, cp_cam, ret)
+    return ret, ret_sp
+
+  def update_car_state_bp(self, cp, cp_cam, ret=None):
+    """Update the CarStateBP message for HEV/PHEV data
+
+    Args:
+        cp: Powertrain bus CAN parser
+        cp_cam: Camera bus CAN parser
+    """
+    # Create a new message
+    dat = messaging.new_message("carStateBP")
+    dat.valid = True
+
+    # Get handles to the message structures
+    hybrid_drive = dat.carStateBP.hybridDrive
+    hybrid_battery = dat.carStateBP.hybridBattery
+    brake_light_status = dat.carStateBP.brakeLightStatus
+
+    # Initialize with default values
+    hybrid_drive.dataAvailable = False
+    hybrid_drive.throttleDemandPercent = 0.0
+    hybrid_drive.throttleThresholdPercent = 0.0
+    hybrid_drive.powerFlowMode = ""
+    hybrid_drive.powerFlowModeValue = 0
+    hybrid_drive.engineOnReason = ""
+    hybrid_drive.engineOnReasonValue = 0
+
+    hybrid_battery.dataAvailable = False
+    hybrid_battery.voltHighLimit = 0.0
+    hybrid_battery.voltLowLimit = 0.0
+    hybrid_battery.voltActual = 0.0
+    hybrid_battery.ampsActual = 0.0
+    hybrid_battery.socMinPerc = 0.0
+    hybrid_battery.socMaxPerc = 0.0
+    hybrid_battery.socActual = 0.0
+
+    # Initialize brake light status
+    brake_light_status.dataAvailable = False
+    brake_light_status.brakeLightsOn = False
+
+    # Brake light status - try BCM message first (more reliable), then fallback to BrakeSysFeatures_2
+    brake_lights_detected = False
+
+    # Primary: BCM_Lamp_Stat_FD1 message (actual brake light status from Body Control Module)
+    try:
+      bcm_data = cp.vl["BCM_Lamp_Stat_FD1"]
+      if bcm_data is not None:
+        brake_light_status.dataAvailable = True
+
+        # Try StopLghtOn_B_Stat signal first (standard DBC signal)
+        if "StopLghtOn_B_Stat" in bcm_data:
+          brake_light_status.brakeLightsOn = bool(bcm_data["StopLghtOn_B_Stat"])
+          brake_lights_detected = True
+        # Fallback: Try other BCM lamp signals that might indicate brake lights
+        elif "RvrseLghtOn_B_Stat" in bcm_data:
+          # Some vehicles may use reverse light status as brake indicator
+          brake_light_status.brakeLightsOn = bcm_data["RvrseLghtOn_B_Stat"] == 1
+          brake_lights_detected = True
+        else:
+          # If no known signals work, mark as unavailable and fall back
+          brake_light_status.dataAvailable = False
+    except (KeyError, AttributeError):
+      pass  # BCM message not available, try fallback
+
+    # Fallback: BrakeSysFeatures_2 message (brake light request signal)
+    if not brake_lights_detected:
+      try:
+        brake_data = cp.vl["BrakeSysFeatures_2"]
+        if brake_data is not None:
+          brake_light_status.dataAvailable = True
+          # BrkLamp_B_Rq indicates when brake lights should be on
+          brake_light_status.brakeLightsOn = brake_data["BrkLamp_B_Rq"] == 1
+          brake_lights_detected = True
+      except (KeyError, AttributeError):
+        pass  # BrakeSysFeatures_2 not available
+
+    # ACC brake light logic (applies to both sources)
+    if brake_lights_detected and self.CP.openpilotLongitudinalControl:
+      try:
+        acc_data = cp_cam.vl["ACCDATA"]  # ACCDATA is on camera bus
+        # Check if openpilot is actively requesting braking via ACC
+        acc_brake_active = (acc_data["AccBrkPrchg_B_Rq"] == 1 or
+                           acc_data["AccBrkDecel_B_Rq"] == 1)
+        brake_light_status.brakeLightsOn = (brake_light_status.brakeLightsOn or
+                                           acc_brake_active)
+      except (KeyError, AttributeError):
+        pass  # ACCDATA not available, use original brake light status
+
+    # HEV cluster data
+    try:
+        if self.CP.flags & FordFlags.HEV_CLUSTER_DATA:
+          hev_data = cp.vl["Cluster_HEV_Data2"]
+          if hev_data is not None:
+            hybrid_drive.dataAvailable = True
+            hybrid_drive.throttleDemandPercent = hev_data["EffWhlLvl2_Pc_Dsply"]
+            hybrid_drive.throttleThresholdPercent = hev_data[
+                "EffWhlThres_Pc_Dsply"
+            ]
+            power_flow_value = int(hev_data["PwrFlowTxt_D_Dsply"])
+            engine_reason_value = int(hev_data["EngOnMsg1_D_Dsply"])
+            hybrid_drive.powerFlowMode = get_hev_power_flow_text(power_flow_value)
+            hybrid_drive.powerFlowModeValue = power_flow_value
+            hybrid_drive.engineOnReason = get_hev_engine_on_reason_text(engine_reason_value)
+            hybrid_drive.engineOnReasonValue = engine_reason_value
+    except (KeyError, AttributeError):
+      pass
+
+    # HEV battery data
+    try:
+      if self.CP.flags & FordFlags.HEV_BATTERY_DATA:
+        batt_data1 = cp.vl["Battery_Traction_1_FD1"]
+        batt_data3 = cp.vl["Battery_Traction_3_FD1"]
+        batt_data4 = cp.vl["Battery_Traction_4_FD1"]
+
+        if all(x is not None for x in [batt_data1, batt_data3, batt_data4]):
+          hybrid_battery.dataAvailable = True
+          hybrid_battery.voltHighLimit = batt_data1["BattTrac_U_LimHi"]
+          hybrid_battery.voltLowLimit = batt_data1["BattTrac_U_LimLo"]
+          hybrid_battery.voltActual = batt_data1["BattTrac_U_Actl"]
+          hybrid_battery.ampsActual = batt_data1["BattTrac_I_Actl"]
+          hybrid_battery.socMinPerc = batt_data3["BattTracSoc_Pc_MnPrtct"]
+          hybrid_battery.socMaxPerc = batt_data3["BattTracSoc_Pc_MxPrtct"]
+          hybrid_battery.socActual = batt_data4["BattTracSoc2_Pc_Actl"]
+    except (KeyError, AttributeError):
+        pass
+
+    # Custom: Lightning EV state, tire, 12 V, ambient, drive mode, trailer and alerts
+    if self.CP.flags & FordFlags.CANFD and ret is not None:
+      self._bp_frame += 1
+      if self._bp_frame % 100 == 0:
+        self._update_ev_settings()
+      try:
+        values = self.lightning.update(cp, self.ev_settings, ret.vEgo, ret.aEgo, ret.gasPressed, ret.brakePressed,
+                                       ret.cruiseState.enabled, DT_CTRL)
+        fill_car_state_bp(dat.carStateBP, values)
+        self.bp_drive_mode = values["vehicleMode.driveMode"]
+        self.bp_trailer_connected = values["vehicleMode.trailerConnected"]
+        self.bp_one_pedal = values["vehicleMode.onePedalActive"]
+        # BattTrac_I_Actl is stuck at -750 A on the Lightning: give the existing gauge the working current
+        if hybrid_battery.dataAvailable and values["evBattery.packCurrentSource"] not in ("none", "battTracActl"):
+          hybrid_battery.ampsActual = values["evBattery.packCurrent"]
+      except (KeyError, AttributeError, TypeError, ValueError) as e:
+        print(f"Lightning EV state error: {e}")
+      # (platformTuneActive, profile, accelMaxScale, latAccelScale), set by carcontroller
+      if self.bp_tune_state is not None:
+        tune = dat.carStateBP.tune
+        tune.platformTuneActive, tune.profile, tune.accelMaxScale, tune.latAccelScale = self.bp_tune_state
+    # Custom: end
+
+    return dat
+
+  def update_traffic_signals(self, cp_cam):
+     # TODO: Check if CAN platforms have the same signals
+     if self.CP.flags & FordFlags.CANFD:
+       self.v_limit = cp_cam.vl["Traffic_RecognitnData"]["TsrVLim1MsgTxt_D_Rq"]
+       v_limit_unit = cp_cam.vl["Traffic_RecognitnData"]["TsrVlUnitMsgTxt_D_Rq"]
+
+       speed_factor = CV.MPH_TO_MS if v_limit_unit == 2 else CV.KPH_TO_MS if v_limit_unit == 1 else 0
+
+       return self.v_limit * speed_factor if self.v_limit not in (0, 255) else 0
+
+>>>>>>> theirs
   @staticmethod
   def get_can_parsers(CP, CP_SP):
     pt_messages = [
@@ -201,6 +396,13 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
       pt_messages.append(("Battery_Traction_3_FD1", float('nan')))
       pt_messages.append(("Battery_Traction_4_FD1", float('nan')))
       pt_messages.append(("MtrTracData_1_FD1", float('nan')))
+
+    # Custom: Lightning EV, tire, 12 V, ambient, drive mode and trailer messages (non-critical)
+    if CP.flags & FordFlags.CANFD:
+      pt_messages += [(m, float('nan')) for m in EV_PT_MESSAGES]
+      if not CP.flags & FordFlags.HEV_BATTERY_DATA:
+        pt_messages += [(m, float('nan')) for m in HEV_BATTERY_MESSAGES]
+    # Custom: end
 
     if CP.flags & FordFlags.ALT_STEER_ANGLE:
       pt_messages += [

@@ -119,6 +119,24 @@ class PowerMonitoring:
 
     return 0 < sp_max_time_val_s <= offroad_time
 
+  # Custom: offroad charging keep-awake and post-charge sleep delay
+  def charging_shutdown_state(self, now: float, offroad_timestamp: float) -> tuple[bool, bool]:
+    try:
+      charging = self.params.get_bool("BPChargingActive")
+      keep_awake = bool(self.params.get("BPChargeKeepAwake", return_default=True))
+      last = self.params.get("BPChargeLastActiveTs")
+      delay_s = 60. * float(self.params.get("BPChargeSleepDelayMin", return_default=True))
+    except Exception:
+      cloudlog.exception("charging shutdown params")
+      return False, False
+    fresh = last is not None and (now - float(last)) < 60.  # the monitor refreshes it every 10 s while charging
+    if charging and fresh:
+      return keep_awake, False
+    # BPChargeSleepDelayMin = 0: no post-charge rule, MaxTimeOffroad decides
+    charged_this_offroad = last is not None and float(last) >= offroad_timestamp
+    return False, delay_s > 0 and charged_this_offroad and (now - float(last)) >= delay_s
+  # Custom: end
+
   # See if we need to shutdown
   def should_shutdown(self, ignition: bool, in_car: bool, offroad_timestamp: float | None, started_seen: bool):
     if offroad_timestamp is None:
@@ -132,6 +150,13 @@ class PowerMonitoring:
     should_shutdown |= self.max_time_offroad_exceeded(offroad_time)
     should_shutdown |= low_voltage_shutdown
     should_shutdown |= (self.car_battery_capacity_uWh <= 0)
+    # Custom: offroad charging (selfdrive/car/charging_monitor.py). Stay on while the truck charges,
+    # except for the 12 V cutoff; power down BPChargeSleepDelayMin after a charge in this offroad period ends.
+    charge_hold, charge_done = self.charging_shutdown_state(now, offroad_timestamp)
+    if charge_hold:
+      should_shutdown = low_voltage_shutdown
+    should_shutdown |= charge_done
+    # Custom: end
     should_shutdown &= not ignition
     should_shutdown &= (not self.params.get_bool("DisablePowerDown"))
     should_shutdown &= in_car
