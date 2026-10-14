@@ -76,6 +76,7 @@ class BluePilotLayout(Widget):
       ("disable_downhill_comp_UI", self._disable_dowhill_comp),
       ("BPUIDebugLog", self._ui_debug_log),
       ("BPEvHud", self._ev_hud),
+      ("BPChargingScreen", self._charging_screen),
       ("BPBridgeEnabled", self._bridge_enabled),
       ("BPKeepUntilSynced", self._keep_until_synced),
     )
@@ -436,6 +437,13 @@ class BluePilotLayout(Widget):
       callback=lambda state: self._toggle_callback(state, "BPEvHud"),
       icon="speed_limit.png"
     )
+    self._charging_screen = toggle_item(
+      lambda: tr("Charging screen"),
+      lambda: tr("While the truck is charging and parked, show charge state, power, energy added and time to full. Tap to go back."),
+      initial_state=self._safe_get_bool(self._params, "BPChargingScreen", True),
+      callback=lambda state: self._toggle_callback(state, "BPChargingScreen"),
+      icon="speed_limit.png"
+    )
 
     # Custom: Data export (params from the comma-export branch; rows hide their value if the key is absent)
     self._bridge_enabled = toggle_item(
@@ -478,6 +486,7 @@ class BluePilotLayout(Widget):
       self._console_accent_btn,
       self._layout_preset_btn,
       self._ev_hud,
+      self._charging_screen,
       SectionHeader(tr("Data export")),
       self._bridge_enabled,
       self._keep_until_synced,

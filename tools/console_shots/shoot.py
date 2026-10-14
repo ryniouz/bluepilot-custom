@@ -60,11 +60,14 @@ SCENES: dict[str, str] = {
   "onroad_ev_powerflow": "Onroad with battery + power flow gauges (flat style)",
   "onroad_all": "Onroad with as many optional elements enabled as possible",
   "onroad_debug_panel": "Onroad with the BluePilot controls debug panel open",
+  "charging_dc": "Charging screen, DC fast charge (charge fields injected; CarStateBP.ev not on this branch yet)",
+  "charging_ac": "Charging screen, AC charge limited by a cold battery",
 }
 ALIASES = {
   "alert_full": ["alert_full_prompt", "alert_full_critical"],
   "alerts": ["alert_small", "alert_mid", "alert_full_prompt", "alert_full_critical"],
   "onroad": ["onroad_engaged", "onroad_disengaged", "onroad_override", "onroad_experimental"],
+  "charging": ["charging_dc", "charging_ac"],
 }
 
 SCONS_TARGETS = [
@@ -856,6 +859,10 @@ def run_scene(sc: Scene):
       d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
       if name == "onroad_ev_powerflow":
         d.update(drive=dict(throttle=34.0, threshold=70.0, mode="EV Drive", mode_value=1))
+    elif name in ("charging_dc", "charging_ac"):
+      d.update(battery=dict(soc=62.0 if name == "charging_dc" else 41.0, volts=388.0, amps=-746.0),
+               v_ego=0.0, enabled=False, state="disabled", lead=False)
+      _inject_charge(name)
     elif name == "onroad_all":
       d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0),
                drive=dict(throttle=34.0, threshold=70.0, mode="EV Drive", mode_value=1),
@@ -869,6 +876,40 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _inject_charge(name: str):
+  """Fill the charge fields the Lightning CAN stream will publish, so the screen can be rendered now."""
+  import math
+  import time
+  from bluepilot.ui.lib import ev_data
+
+  dc = name == "charging_dc"
+  fields = dict(charging=True, charge_type=2 if dc else 1, charge_status="ChargingDCFastChange" if dc else "ChargingAC",
+                charge_power_kw=148.0 if dc else 9.4, charge_time_to_full_min=21.0 if dc else 312.0,
+                charge_target_soc=80.0 if dc else 90.0, charge_inhibit_thermal=not dc,
+                pack_temp_c=31.0 if dc else -4.0, range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0)
+  orig = ev_data.EvDataSource.update
+
+  def update(self, sm, started_frame, now=None):
+    snap = orig(self, sm, started_frame, now)
+    for k, v in fields.items():
+      setattr(snap, k, v)
+    return snap
+
+  ev_data.EvDataSource.update = update
+  ev_data.ChargeSession.ENTER_S = 0.0
+  ev_data.ChargeSession.STANDSTILL_MS = math.inf
+  orig_begin = ev_data.ChargeSession._begin
+
+  def begin(self, snap, now):
+    orig_begin(self, snap, now)
+    self.start_t = time.monotonic() - (23 if dc else 95) * 60
+    self.start_soc = 31.0 if dc else 28.0
+    self.energy_kwh = 41.3 if dc else 13.6
+    self.peak_kw = 212.0 if dc else 9.6
+
+  ev_data.ChargeSession._begin = begin
 
 
 def run_worker(args) -> int:

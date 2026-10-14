@@ -15,6 +15,7 @@ SIDEBAR_WIDTH = BPConstants.SIDEBAR_WIDTH  # noqa: F811
 from bluepilot.ui.layouts.home_bp import HomeLayoutBP as HomeLayout  # noqa: F811
 from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP as AugmentedRoadView  # noqa: F811
 from bluepilot.ui.widgets.debug import ControlsDebugPanel
+from openpilot.selfdrive.ui.bp.onroad.charging_view import ChargingView  # Custom: charging screen
 # BluePilot: END - BP sidebar, home layout, and onroad overlays
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.widgets import Widget
@@ -28,6 +29,7 @@ class MainState(IntEnum):
   HOME = 0
   SETTINGS = 1
   ONROAD = 2
+  CHARGING = 3  # Custom: charging screen
 
 
 class MainLayout(Widget):
@@ -41,7 +43,9 @@ class MainLayout(Widget):
     self._prev_onroad = False
 
     # Initialize layouts
-    self._layouts = {MainState.HOME: HomeLayout(), MainState.SETTINGS: SettingsLayout(), MainState.ONROAD: AugmentedRoadView()}
+    self._layouts = {MainState.HOME: HomeLayout(), MainState.SETTINGS: SettingsLayout(), MainState.ONROAD: AugmentedRoadView(),
+                     MainState.CHARGING: ChargingView()}  # Custom: charging screen
+    self._prev_charging = False  # Custom: charging screen
 
     self._sidebar_rect = rl.Rectangle(0, 0, 0, 0)
     self._content_rect = rl.Rectangle(0, 0, 0, 0)
@@ -78,6 +82,7 @@ class MainLayout(Widget):
       self._layouts[MainState.HOME].set_model_settings_callback(lambda: self.open_settings(_settings_mod.PanelType.MODELS))
     self._layouts[MainState.SETTINGS].set_callbacks(on_close=self._set_mode_for_state)
     self._layouts[MainState.ONROAD].set_click_callback(self._on_onroad_clicked)
+    self._layouts[MainState.CHARGING].set_click_callback(self._on_charging_clicked)  # Custom: charging screen
     device.add_interactive_timeout_callback(self._set_mode_for_state)
 
   def _update_layout_rects(self):
@@ -92,7 +97,30 @@ class MainLayout(Widget):
 
       self._set_mode_for_state()
 
+    # Custom: charging screen takes over from the driving view or home while charging
+    charging = bool(getattr(ui_state, "charging_screen", False))
+    if charging != self._prev_charging:
+      self._prev_charging = charging
+      if self._current_mode != MainState.SETTINGS:
+        self._set_mode_for_state()
+    # Custom: end
+
+  def _on_charging_clicked(self):
+    # Custom: a tap goes back to the driving view (or home) for the rest of this charge
+    session = getattr(ui_state, "charge_session", None)
+    if session is not None:
+      session.dismissed = True
+    ui_state.charging_screen = False
+    self._prev_charging = False
+    self._set_mode_for_state()
+
   def _set_mode_for_state(self):
+    # Custom: charging screen
+    if getattr(ui_state, "charging_screen", False):
+      self._sidebar.set_visible(False)
+      self._set_current_layout(MainState.CHARGING)
+      return
+    # Custom: end
     if ui_state.started:
       # Don't hide sidebar from interactive timeout
       if self._current_mode != MainState.ONROAD:

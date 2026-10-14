@@ -14,6 +14,7 @@ from openpilot.system.hardware import HARDWARE, PC
 
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
 from bluepilot.ui.lib.theme import set_accent as set_console_accent  # Custom: Console theme
+from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
 
@@ -120,6 +121,21 @@ class UIState(UIStateSP):
       self.update_params()
     device.update()
     UIStateSP.update(self)
+    self._update_ev()
+
+  # Custom: EV data shared by the EV panel and the charging screen
+  def _update_ev(self) -> None:
+    if not hasattr(self, "ev_source"):
+      self.ev_source = EvDataSource()
+      self.charge_session = ChargeSession()
+    self.ev = self.ev_source.update(self.sm, self.started_frame)
+    try:
+      v_ego = float(self.sm["carState"].vEgo) if self.started else 0.0
+    except (KeyError, AttributeError, TypeError, ValueError):
+      v_ego = 0.0
+    show = self.charge_session.update(self.ev, v_ego)
+    self.charging_screen = show and getattr(self, "charging_screen_enabled", True)
+  # Custom: end
 
   def _update_state(self) -> None:
     # Handle panda states updates
@@ -202,6 +218,7 @@ class UIState(UIStateSP):
     except (TypeError, ValueError):
       self.layout_preset = 1
     self.ev_hud = bool(self.params.get("BPEvHud", return_default=True))
+    self.charging_screen_enabled = bool(self.params.get("BPChargingScreen", return_default=True))
     # Custom: end
     self._param_update_time = time.monotonic()
 

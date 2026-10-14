@@ -54,7 +54,8 @@ class EvHudRenderer:
   # -- data -----------------------------------------------------------------
 
   def update(self) -> EvSnapshot:
-    return self.data.update(ui_state.sm, ui_state.started_frame)
+    shared = getattr(ui_state, "ev", None)
+    return shared if shared is not None else self.data.update(ui_state.sm, ui_state.started_frame)
 
   # -- layout ---------------------------------------------------------------
 

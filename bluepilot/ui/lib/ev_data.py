@@ -76,6 +76,14 @@ class EvSnapshot:
   trailer: bool = False
   one_pedal: bool = False
   low_soc: bool = False
+  # Charging (CarStateBP.ev charge fields from the Lightning CAN stream)
+  charging: bool = False
+  charge_type: int = 0             # 0 none, 1 AC, 2 DC
+  charge_status: str = ""
+  charge_power_kw: float = NAN     # kW into the pack
+  charge_time_to_full_min: float = NAN
+  charge_target_soc: float = NAN
+  charge_inhibit_thermal: bool = False
   # Trip integrals (since the UI went onroad)
   trip_used_kwh: float = 0.0
   trip_regen_kwh: float = 0.0
@@ -148,6 +156,13 @@ class EvDataSource:
         s.trailer = bool(_f(ev, "trailerConnected", False))
         s.one_pedal = bool(_f(ev, "onePedalActive", False))
         s.low_soc = bool(_f(ev, "lowSocAlert", False))
+        s.charging = bool(_f(ev, "chargingActive", False))
+        s.charge_type = int(_f(ev, "chargeType", 0) or 0)
+        s.charge_status = str(_f(ev, "chargeStatusText", "") or "")
+        s.charge_power_kw = _f(ev, "chargePowerKw")
+        s.charge_time_to_full_min = _f(ev, "chargeTimeToFullMin")
+        s.charge_target_soc = _f(ev, "chargeTargetSoc")
+        s.charge_inhibit_thermal = bool(_f(ev, "chargeInhibitThermal", False))
 
       if hb_ok:
         s.available = True
@@ -188,6 +203,9 @@ class EvDataSource:
           s.trip_regen_kwh += -kwh
     self._last_t = now
 
+    if s.charging and not finite(s.charge_power_kw) and finite(s.power_kw) and s.power_kw < 0:
+      s.charge_power_kw = -s.power_kw
+
     if s.trip_km > 0.5:
       s.wh_per_km = 1000.0 * (s.trip_used_kwh - s.trip_regen_kwh) / s.trip_km
 
@@ -197,3 +215,75 @@ class EvDataSource:
       s.range_estimated = True
 
     return s
+
+
+class ChargeSession:
+  """Decides when the charging screen replaces the driving view, and tracks the session.
+
+  The screen only takes over at a standstill, after the truck has reported charging for
+  ENTER_S, and it lets go after EXIT_S without a charging report or as soon as the truck moves.
+  """
+
+  ENTER_S = 2.0
+  EXIT_S = 5.0
+  STANDSTILL_MS = 0.3
+
+  def __init__(self):
+    self.active = False
+    self.dismissed = False      # driver tapped back to the driving view for this session
+    self.start_t = 0.0
+    self.start_soc = NAN
+    self.energy_kwh = 0.0
+    self.peak_kw = NAN
+    self._on_since: float | None = None
+    self._off_since: float | None = None
+    self._last_t: float | None = None
+
+  def update(self, snap: EvSnapshot, v_ego: float, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    moving = finite(v_ego) and v_ego > self.STANDSTILL_MS
+
+    if snap.charging and not moving:
+      self._off_since = None
+      if self._on_since is None:
+        self._on_since = now
+      if not self.active and now - self._on_since >= self.ENTER_S:
+        self._begin(snap, now)
+    else:
+      self._on_since = None
+      if self.active:
+        if moving:
+          self._end()
+        else:
+          if self._off_since is None:
+            self._off_since = now
+          if now - self._off_since >= self.EXIT_S:
+            self._end()
+
+    if self.active:
+      if self._last_t is not None and snap.charging and finite(snap.charge_power_kw):
+        dt = min(max(now - self._last_t, 0.0), 0.5)
+        self.energy_kwh += max(snap.charge_power_kw, 0.0) * dt / 3600.0
+      if finite(snap.charge_power_kw):
+        self.peak_kw = snap.charge_power_kw if not finite(self.peak_kw) else max(self.peak_kw, snap.charge_power_kw)
+      if not finite(self.start_soc) and finite(snap.soc):
+        self.start_soc = snap.soc
+    self._last_t = now
+    return self.active and not self.dismissed
+
+  def elapsed_s(self, now: float | None = None) -> float:
+    now = time.monotonic() if now is None else now
+    return max(0.0, now - self.start_t) if self.active else 0.0
+
+  def _begin(self, snap: EvSnapshot, now: float):
+    self.active = True
+    self.dismissed = False
+    self.start_t = now
+    self.start_soc = snap.soc
+    self.energy_kwh = 0.0
+    self.peak_kw = NAN
+
+  def _end(self):
+    self.active = False
+    self.dismissed = False
+    self._off_since = None

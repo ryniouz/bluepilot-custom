@@ -324,6 +324,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPLayoutPreset", {PERSISTENT | BACKUP, INT, "1"}},
     {"BPEvHud", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
     // Custom: end
 
     // WiFi Management
