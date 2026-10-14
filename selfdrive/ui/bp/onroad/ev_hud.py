@@ -204,6 +204,9 @@ class EvHudRenderer:
     if dock is None:
       return None
     s = self.update()
+    self.dock_last_rect = dock
+    if float(getattr(ui_state, "qc_open", 0.0) or 0.0) > 0.0:
+      return dock  # grown into the quick-controls sheet, which draws itself from this rect
     rl.draw_rectangle_rounded(dock, roundness(dock, DOCK_RADIUS), 10, Onroad.PANEL)
 
     if torque_bar is not None and ui_state.torque_bar:

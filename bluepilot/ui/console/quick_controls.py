@@ -7,7 +7,7 @@ diagnostics). The road view card opens a second page of switches for what the ro
 lead card show.
 
 Opening: drag the dock (or, in Minimal mode where there is no dock, the small handle bar at the
-bottom) upward and the sheet follows the finger; let go past a third of the way and it settles
+bottom) upward and the dock itself grows into the sheet, following the finger; let go past a third of the way and it settles
 open, otherwise it drops back. A tap on the handle, the dock or the camera opens it too. Dragging
 the sheet down (from anywhere on it) closes it, as do a tap outside it, its close button, or a few seconds
 without a touch, so the road stays clear.
@@ -49,6 +49,21 @@ CLOSE_AT = 0.7           # released below this fraction (from open) settles clos
 HANDLE_W = 260           # Minimal mode's collapsed bar
 HANDLE_H = 56
 HANDLE_BOTTOM = 28
+DOCK_RADIUS = 24         # ev_hud's dock corner, where the sheet grows from
+REVEAL_AT = 0.55         # sheet contents fade in from this much open ...
+REVEAL_FULL = 0.95       # ... to fully shown here
+
+
+def _lerp(a: float, b: float, t: float) -> float:
+  return a + (b - a) * t
+
+
+def _lerp_rect(a: rl.Rectangle, b: rl.Rectangle, t: float) -> rl.Rectangle:
+  return rl.Rectangle(_lerp(a.x, b.x, t), _lerp(a.y, b.y, t), _lerp(a.width, b.width, t), _lerp(a.height, b.height, t))
+
+
+def _card_fill() -> rl.Color:  # read at draw time so day/night switches follow
+  return with_alpha(Console.BG_RAISED, 0xE0)
 
 
 def _chevron_up(cx: float, cy: float, half: float, color: rl.Color):
@@ -68,6 +83,7 @@ class QuickControls:
     self._was_down = False
     self._touched_t = 0.0
     self._sheet: rl.Rectangle | None = None
+    self._origin: rl.Rectangle | None = None   # the dock (or handle) the sheet grows out of
     self._page = "main"      # or "road"
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
     self.on_bookmark: Callable[[], None] | None = None
@@ -182,22 +198,52 @@ class QuickControls:
         self._p = self._target
     if self._p <= 0.0 and self._target <= 0.0:
       self._page = "main"
+    # The dock hides while it is grown into the sheet (ev_hud reads this)
+    ui_state.qc_open = self._p
+    if self._p <= 0.0:
+      dock = getattr(ui_state, "qc_dock", None)
+      self._origin = dock if dock is not None else self._handle_rect(rect)
     self._render_handle(rect)
     self._hits = []
     if self._p <= 0.0:
       self._sheet = None
       return
 
-    # The sheet rises from the bottom edge, following the finger while dragged
+    # The dock itself grows into the sheet (and shrinks back into it), following the finger while dragged. Without
+    # a dock or handle to grow from, the sheet rises from the bottom edge as before.
     sheet_h = self._sheet_h()
     y_open = rect.y + rect.height - sheet_h - SHEET_MARGIN
-    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open + (1 - self._p) * self._travel(), rect.width - 2 * SHEET_MARGIN, sheet_h)
-    self._sheet = sheet
-    rl.draw_rectangle_rounded(sheet, roundness(sheet, SHEET_RADIUS), 12, Console.BG_PANEL)
-    rl.draw_rectangle_rounded_lines_ex(sheet, roundness(sheet, SHEET_RADIUS), 12, 2, Console.BORDER_DEFAULT)
-    grab = rl.Rectangle(sheet.x + sheet.width / 2 - 36, sheet.y + 12, 72, 6)
+    sheet = rl.Rectangle(rect.x + SHEET_MARGIN, y_open, rect.width - 2 * SHEET_MARGIN, sheet_h)
+    e = self._p
+    if self._origin is not None:
+      frame = _lerp_rect(self._origin, sheet, e)
+      radius = _lerp(DOCK_RADIUS, SHEET_RADIUS, e)
+    else:
+      frame = rl.Rectangle(sheet.x, sheet.y + (1 - e) * self._travel(), sheet.width, sheet.height)
+      sheet = frame
+      radius = SHEET_RADIUS
+    self._sheet = frame
+    # translucent like the dock it came from, so the road stays readable behind it
+    rl.draw_rectangle_rounded(frame, roundness(frame, radius), 12, Onroad.PANEL)
+    rl.draw_rectangle_rounded_lines_ex(frame, roundness(frame, radius), 12, 2, with_alpha(Console.BORDER_DEFAULT, 0xB0))
+    grab = rl.Rectangle(frame.x + frame.width / 2 - 36, frame.y + 9 + 3 * e, 72, 6)
     rl.draw_rectangle_rounded(grab, 1.0, 6, Console.BORDER_STRONG)
 
+    reveal = max(0.0, min(1.0, (e - REVEAL_AT) / (REVEAL_FULL - REVEAL_AT)))
+    if reveal <= 0.0:
+      return
+    # contents keep their open layout and ride the centre of the growing panel, so they arrive in place
+    cx = frame.x + frame.width / 2 - sheet.width / 2
+    cy = frame.y + frame.height / 2 - sheet.height / 2
+    rl.begin_scissor_mode(int(frame.x), int(frame.y), int(frame.width), int(frame.height))
+    self._render_contents(rl.Rectangle(cx, cy, sheet.width, sheet.height))
+    rl.end_scissor_mode()
+    if reveal < 1.0:
+      # contents fade in over the growing panel
+      rl.draw_rectangle_rounded(frame, roundness(frame, radius), 12, with_alpha(Console.BG_PANEL, int(0xD9 * (1 - reveal))))
+      self._hits = []
+
+  def _render_contents(self, sheet: rl.Rectangle):
     # Header: title on the left; actions and close on the right
     hx, hy = sheet.x + SHEET_PAD, sheet.y + SHEET_PAD - 4
     road = self._page == "road"
@@ -234,7 +280,7 @@ class QuickControls:
       cards.append(rl.Rectangle(x, body.y, unit * wgt, body.height))
       x += unit * wgt + CARD_GAP
     for c in cards:
-      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_RAISED)
+      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, _card_fill())
 
     # Experimental mode: title + state word, toggle on the right
     c = cards[0]
@@ -285,7 +331,7 @@ class QuickControls:
     h = (body.height - CARD_GAP * (rows - 1)) / rows
     for i, (bit, label) in enumerate(ROAD_OPTIONS):
       c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
-      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_RAISED)
+      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, _card_fill())
       on = road_prefs.on(bit)
       D.text(D.fit(tr(label), D.BODY, w - 2 * CARD_PAD - 120, semi=True), c.x + CARD_PAD, c.y + (h - D.BODY) / 2 - 2, D.BODY,
              Console.TEXT_PRIMARY if on else Console.TEXT_MUTED, semi=True)
