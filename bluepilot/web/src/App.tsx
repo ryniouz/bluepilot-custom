@@ -7,6 +7,7 @@ import { WarningBanners, StatusOverlay } from '@/components/common'
 import { ToastContainer } from '@/components/common/Toast'
 import { systemAPI } from '@/services/api'
 import type { DeviceStatus } from '@/types'
+import { initConsoleAccent } from '@/utils/consoleTheme'
 
 // Views
 import { Home } from '@/views/Home'
@@ -16,6 +17,7 @@ import { SettingsView } from '@/views/SettingsView'
 import { LogsView } from '@/views/LogsView'
 
 // Styles
+import '@fontsource-variable/inter'
 import '@/styles/variables.css'
 import '@/styles/App.css'
 
@@ -28,6 +30,9 @@ function App() {
   useEffect(() => {
     // Connect to WebSocket on mount
     connect()
+
+    // Custom: Console accent from the device param
+    initConsoleAccent()
 
     // Check device status
     checkDeviceStatus()

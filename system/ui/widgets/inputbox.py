@@ -3,6 +3,7 @@ import time
 from openpilot.system.ui.lib.application import gui_app, MousePos, FONT_SCALE
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 PASSWORD_MASK_CHAR = "•"
 PASSWORD_MASK_DELAY = 1.5  # Seconds to show character before masking
@@ -102,7 +103,7 @@ class InputBox(Widget):
       return True
     return False
 
-  def _render(self, rect, color=rl.BLACK, border_color=rl.DARKGRAY, text_color=rl.WHITE, font_size=80):
+  def _render(self, rect, color=Console.BG_PAGE, border_color=Console.BG_HIGH, text_color=Console.TEXT_PRIMARY, font_size=80):
     # Store dimensions for text offset calculations
     self._visible_width = rect.width
     self._font_size = font_size
@@ -147,7 +148,7 @@ class InputBox(Widget):
 
       cursor_height = font_size * FONT_SCALE + 4
       cursor_y = rect.y + rect.height / 2 - cursor_height / 2
-      rl.draw_line(int(cursor_x), int(cursor_y), int(cursor_x), int(cursor_y + cursor_height), rl.WHITE)
+      rl.draw_line(int(cursor_x), int(cursor_y), int(cursor_x), int(cursor_y + cursor_height), Console.TEXT_PRIMARY)
 
     rl.end_scissor_mode()
 

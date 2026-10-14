@@ -4,6 +4,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 # BluePilot: GPU circle shader moved to BP module after upstream removal
 from openpilot.bluepilot.ui.lib.bp_shaders import draw_shader_circle_gradient
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, Onroad  # Custom: Console theme
 
 class ConfidenceBallBP(ConfidenceBall):
   def __init__(self, demo: bool = False, radius: float=24, width: float = 60, align_right: bool = True):
@@ -67,24 +68,21 @@ class ConfidenceBallBP(ConfidenceBall):
     dot_height = content_rect.y + dot_height
 
     # confidence zones
+    # Custom: Console status colours, flat ball (top == bottom, no gradient)
     if ui_state.status in (UIStatus.LAT_ONLY, UIStatus.LONG_ONLY, UIStatus.ENGAGED) or self._demo:
       if self._confidence_filter.x > 0.5:
-        top_dot_color = rl.Color(0, 255, 204, 255)
-        bottom_dot_color = rl.Color(0, 255, 38, 255)
+        top_dot_color = Console.SUCCESS
       elif self._confidence_filter.x > 0.2:
-        top_dot_color = rl.Color(255, 200, 0, 255)
-        bottom_dot_color = rl.Color(255, 115, 0, 255)
+        top_dot_color = Console.WARNING
       else:
-        top_dot_color = rl.Color(255, 0, 21, 255)
-        bottom_dot_color = rl.Color(255, 0, 89, 255)
+        top_dot_color = Console.DANGER
 
     elif ui_state.status == UIStatus.OVERRIDE:
-      top_dot_color = rl.Color(255, 255, 255, 255)
-      bottom_dot_color = rl.Color(82, 82, 82, 255)
+      top_dot_color = Console.TEXT_PRIMARY
 
     else:
-      top_dot_color = rl.Color(50, 50, 50, 255)
-      bottom_dot_color = rl.Color(13, 13, 13, 255)
+      top_dot_color = Console.BG_HIGH
+    bottom_dot_color = top_dot_color
 
     if content_rect.width < 2 * self._status_dot_radius:
       # Bar is narrower than ball diameter - position so left edge of ball is at bar left edge
@@ -95,8 +93,9 @@ class ConfidenceBallBP(ConfidenceBall):
 
     # MADS beam (teal bar) only when LAT_ONLY or LONG_ONLY; no bar when ENGAGED
     if ui_state.status in (UIStatus.LAT_ONLY, UIStatus.LONG_ONLY):
-      color = self.get_lat_long_dot_color()
-      color = rl.Color(color.r, color.g, color.b, 150)  # Set alpha for faded background
+      # Custom: Console - steering-only is info, cruise-only is purple
+      color = Onroad.LAT_ONLY if ui_state.status == UIStatus.LAT_ONLY else Onroad.LONG_ONLY
+      color = rl.Color(color.r, color.g, color.b, 110)  # Set alpha for faded background
       self.draw_mads_beam(int(content_rect.x),
                           int(content_rect.y),
                           int(content_rect.width),

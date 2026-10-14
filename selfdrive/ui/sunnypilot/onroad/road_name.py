@@ -10,6 +10,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class RoadNameRenderer(Widget):
@@ -42,7 +43,7 @@ class RoadNameRenderer(Widget):
 
     road_rect = rl.Rectangle(rect.x + rect.width / 2 - rect_width / 2, rect.y - 4, rect_width, 60)
 
-    rl.draw_rectangle_rounded(road_rect, 0.2, 10, rl.Color(0, 0, 0, 120))
+    rl.draw_rectangle_rounded(road_rect, 0.2, 10, with_alpha(Console.BG_PAGE, 120))
 
     max_text_width = road_rect.width - 20
     if text_size.x > max_text_width:
@@ -53,4 +54,4 @@ class RoadNameRenderer(Widget):
 
     sz = measure_text_cached(self.font_demi, text, 46)
     origin = rl.Vector2(road_rect.x + road_rect.width / 2 - sz.x / 2, road_rect.y + road_rect.height / 2 - sz.y / 2)
-    rl.draw_text_ex(self.font_demi, text, origin, 46, 0, rl.Color(255, 255, 255, 200))
+    rl.draw_text_ex(self.font_demi, text, origin, 46, 0, with_alpha(Console.TEXT_PRIMARY, 200))

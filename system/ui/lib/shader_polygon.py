@@ -3,6 +3,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 from openpilot.system.ui.lib.application import gui_app, GL_VERSION
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 MAX_GRADIENT_COLORS = 20  # includes stops as well
 
@@ -181,7 +182,7 @@ def _configure_shader_color(state: ShaderState, color: Optional[rl.Color],
     rl.set_shader_value(state.shader, state.locations['gradientStart'], start_vec, UNIFORM_VEC2)
     rl.set_shader_value(state.shader, state.locations['gradientEnd'], end_vec, UNIFORM_VEC2)
   else:
-    color = color or rl.WHITE
+    color = color or Console.TEXT_PRIMARY
     state.fill_color_ptr[0:4] = [color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0]
     rl.set_shader_value(state.shader, state.locations['fillColor'], state.fill_color_ptr, UNIFORM_VEC4)
 
@@ -229,7 +230,7 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
 
   # Draw strip, color here doesn't matter
   rl.begin_shader_mode(state.shader)
-  rl.draw_triangle_strip(tri_strip, len(tri_strip), rl.WHITE)
+  rl.draw_triangle_strip(tri_strip, len(tri_strip), Console.TEXT_PRIMARY)
   rl.end_shader_mode()
 
 

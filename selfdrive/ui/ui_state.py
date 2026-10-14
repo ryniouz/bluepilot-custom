@@ -15,6 +15,11 @@ from openpilot.system.hardware import HARDWARE, PC
 
 from openpilot.common.bluepilot import is_bluepilot
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
+from bluepilot.ui.lib.theme import set_accent as set_console_accent, set_mode as set_console_mode, freeze_derived  # Custom: Console theme
+from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
+from bluepilot.ui.lib.ev_history import EvHistory  # Custom: Statistics page and Home chart history
+from cereal.services import SERVICE_LIST  # Custom: offroad charging reader (Lightning stream, PR #2)
+CHARGING_SERVICES = ["chargingStateBP"] if "chargingStateBP" in SERVICE_LIST else []  # Custom
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
 PARAM_UPDATE_TIME = 1 / 5.0
@@ -64,7 +69,8 @@ class UIState(UIStateSP):
         "liveParameters",
         "testJoystick",
         "rawAudioData",
-      ] + self.sm_services_ext
+        "peripheralState",  # Custom: 12 V reading for the Console EV HUD
+      ] + CHARGING_SERVICES + self.sm_services_ext
       + (["carStateBP"] if is_bluepilot() else [])  # BluePilot: hybrid battery and drive data
     )
 
@@ -131,6 +137,60 @@ class UIState(UIStateSP):
     self._update_status()
     device.update()
     UIStateSP.update(self)
+    self._update_ev()
+    self._update_console_mode()
+
+  # Custom: Console day/night. Auto follows the road camera's light level while driving
+  # (with hysteresis so tunnels and overpasses do not flip it) and the clock when parked.
+  DAY_LIGHT_ON, DAY_LIGHT_OFF, MODE_HOLD_S = 70.0, 45.0, 10.0
+
+  def _update_console_mode(self) -> None:
+    freeze_derived()
+    set_console_accent(getattr(self, "console_accent", "blue"))
+    pref = getattr(self, "console_mode_pref", "auto")
+    cur = getattr(self, "console_mode", None)
+    if pref in ("day", "night"):
+      target = "light" if pref == "day" else "dark"
+      hold = 0.0
+    else:
+      target = cur or "dark"
+      if self.started and self.light_sensor >= 0:
+        if self.light_sensor > self.DAY_LIGHT_ON:
+          target = "light"
+        elif self.light_sensor < self.DAY_LIGHT_OFF:
+          target = "dark"
+      else:
+        target = "light" if 7 <= time.localtime().tm_hour < 19 else "dark"
+      hold = 0.0 if cur is None else self.MODE_HOLD_S
+
+    now = time.monotonic()
+    if target == cur:
+      self._mode_pending_since = None
+      return
+    since = getattr(self, "_mode_pending_since", None)
+    if since is None:
+      self._mode_pending_since = since = now
+    if now - since >= hold:
+      self.console_mode = target
+      self._mode_pending_since = None
+      set_console_mode(target)
+  # Custom: end
+
+  # Custom: EV data shared by the EV panel and the charging screen
+  def _update_ev(self) -> None:
+    if not hasattr(self, "ev_source"):
+      self.ev_source = EvDataSource()
+      self.charge_session = ChargeSession()
+      self.ev_history = EvHistory()
+    self.ev = self.ev_source.update(self.sm, self.started_frame)
+    self.ev_history.update(self.sm, self.ev)
+    try:
+      v_ego = float(self.sm["carState"].vEgo) if self.started else 0.0
+    except (KeyError, AttributeError, TypeError, ValueError):
+      v_ego = 0.0
+    show = self.charge_session.update(self.ev, v_ego)
+    self.charging_screen = show and (getattr(self, "charging_screen_enabled", True) or self.charge_session.reopened)
+  # Custom: end
 
   def _params_refresh_worker(self):
     drop_realtime()
@@ -217,6 +277,29 @@ class UIState(UIStateSP):
     self.usbgpu_compiled = self.params.get_bool("UsbGpuCompiled")
 
     UIStateSP.update_params(self)
+    # Custom: Console theme params (accent, layout preset, EV HUD). 7.0 refreshes params on a
+    # background thread, so the accent is only stored here and applied on the UI thread in
+    # _update_console_mode (theme tokens are rewritten in place).
+    accent = self.params.get("BPConsoleAccent", return_default=True) or "blue"
+    if isinstance(accent, bytes):
+      accent = accent.decode("utf-8", errors="ignore")
+    self.console_accent = str(accent)
+    mode_pref = self.params.get("BPConsoleMode", return_default=True) or "auto"
+    if isinstance(mode_pref, bytes):
+      mode_pref = mode_pref.decode("utf-8", errors="ignore")
+    self.console_mode_pref = str(mode_pref).strip().lower()
+    try:
+      preset = self.params.get("BPLayoutPreset", return_default=True)  # 0 (Minimal) is a valid value
+      self.layout_preset = int(preset) if preset is not None else 1
+    except (TypeError, ValueError):
+      self.layout_preset = 1
+    self.ev_hud = bool(self.params.get("BPEvHud", return_default=True))
+    self.charging_screen_enabled = bool(self.params.get("BPChargingScreen", return_default=True))
+    try:
+      self.charge_sleep_min = int(self.params.get("BPChargeSleepMin", return_default=True) or 0)
+    except (TypeError, ValueError):
+      self.charge_sleep_min = 30
+    # Custom: end
 
 
 class Device(DeviceSP):
@@ -337,7 +420,14 @@ class Device(DeviceSP):
         callback()
     self._prev_timed_out = interaction_timeout
 
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC)
+    # Custom: stay on while charging with the ignition off, until the BPChargeSleepMin delay runs out
+    charging_awake = False
+    session = getattr(ui_state, "charge_session", None)
+    if not ui_state.ignition and getattr(ui_state, "charging_screen", False) and session is not None:
+      sleep_min = getattr(ui_state, "charge_sleep_min", 30)
+      charging_awake = sleep_min <= 0 or session.elapsed_s() < sleep_min * 60 or not interaction_timeout
+    # Custom: end
+    self._set_awake(ui_state.ignition or not interaction_timeout or PC or charging_awake)
 
   def _set_awake(self, on: bool):
     if on != self._awake:

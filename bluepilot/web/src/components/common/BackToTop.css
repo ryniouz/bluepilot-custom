@@ -12,12 +12,12 @@
   height: 48px;
   padding: 0;
 
-  background: var(--primary-color, #2196f3);
+  background: var(--primary-color, var(--accent));
   border: none;
   border-radius: 50%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(var(--ink-rgb), 0.1);
 
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
 
   opacity: 0.9;
@@ -29,7 +29,7 @@
 .back-to-top:hover {
   opacity: 1;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.4), 0 0 0 1px rgba(var(--ink-rgb), 0.15);
 }
 
 .back-to-top:active {

@@ -1,7 +1,7 @@
 .confirm-dialog-message {
   font-size: 0.95rem;
   line-height: 1.6;
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary, var(--text-ghost));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -24,14 +24,14 @@
 }
 
 .confirm-dialog-message--warning .confirm-dialog-icon {
-  color: var(--warning-color, #ffc107);
+  color: var(--warning-color, var(--warning));
 }
 
 .confirm-dialog-message--info .confirm-dialog-icon {
-  color: var(--bp-accent-blue, #2196f3);
+  color: var(--bp-accent-blue, var(--accent));
 }
 
 .confirm-dialog-message strong {
-  color: var(--text-primary, #000);
+  color: var(--text-primary, var(--bg-page));
   font-weight: 600;
 }

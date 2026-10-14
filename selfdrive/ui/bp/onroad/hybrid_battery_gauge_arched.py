@@ -19,6 +19,7 @@ from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import arc_bar_pts
 from openpilot.system.ui.lib.shader_polygon import draw_polygon
+from bluepilot.ui.lib.theme import Console, Onroad  # Custom: Console theme
 
 # Match powerflow arch so battery segment aligns (same center, radius, line height)
 POWERFLOW_RADIUS = 3400
@@ -28,8 +29,8 @@ POWERFLOW_TEXT_Y_OFFSET = 95
 POWERFLOW_TEXT_BG_PADDING = 18
 POWERFLOW_ANGLE_SPAN = 15.0
 POWERFLOW_BAR_HEIGHT = 40  # Same as powerflow bar (fill uses this)
-POWERFLOW_BG_COLOR = rl.Color(20, 20, 20, 200)
-POWERFLOW_BORDER_COLOR = rl.Color(200, 200, 200, 255)
+POWERFLOW_BG_COLOR = Onroad.PANEL
+POWERFLOW_BORDER_COLOR = Console.BORDER_STRONG
 POWERFLOW_BORDER_THICKNESS = 2.0
 
 # Battery arc sits to the left of powerflow; ~25% of powerflow angular width so it stays on-screen
@@ -46,13 +47,13 @@ BATTERY_SOLO_ROTATION_DEG = 3.0
 BATTERY_SOLO_LEFT_OFFSET = 25
 
 # Colors (same as before)
-BATTERY_BG_COLOR = rl.Color(40, 40, 40, 220)
-BATTERY_LOW_COLOR = rl.Color(200, 100, 100, 255)
-BATTERY_MID_COLOR = rl.Color(200, 200, 100, 255)
-BATTERY_HIGH_COLOR = rl.Color(100, 200, 100, 255)
-TEXT_COLOR = rl.Color(255, 255, 255, 255)
-CHARGING_COLOR = rl.Color(100, 255, 100, 255)
-DISCHARGING_COLOR = rl.Color(255, 100, 100, 255)
+BATTERY_BG_COLOR = Console.BG_RAISED
+BATTERY_LOW_COLOR = Console.DANGER
+BATTERY_MID_COLOR = Console.WARNING
+BATTERY_HIGH_COLOR = Console.SUCCESS
+TEXT_COLOR = Console.TEXT_PRIMARY
+CHARGING_COLOR = Console.SUCCESS
+DISCHARGING_COLOR = Console.DANGER
 
 
 class HybridBatteryGaugeArched(Widget):

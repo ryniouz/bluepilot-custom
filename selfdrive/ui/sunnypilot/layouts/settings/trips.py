@@ -20,6 +20,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class TripsLayout(Widget):
@@ -80,11 +81,11 @@ class TripsLayout(Widget):
 
   def _render_stat_group(self, x, y, width, height, title, data, is_metric):
     # Card Background
-    rl.draw_rectangle_rounded(rl.Rectangle(x, y, width, height), 0.05, 10, rl.Color(30, 30, 30, 255))
+    rl.draw_rectangle_rounded(rl.Rectangle(x, y, width, height), 0.05, 10, Console.BG_PANEL)
 
     # Title
     title_font = gui_app.font(FontWeight.BOLD)
-    rl.draw_text_ex(title_font, title, rl.Vector2(x + 60, y + 30), 50 * FONT_SCALE, 0, rl.Color(200, 200, 200, 255))
+    rl.draw_text_ex(title_font, title, rl.Vector2(x + 60, y + 30), 50 * FONT_SCALE, 0, Console.TEXT_SECONDARY)
 
     # Internal content area
     # Center the content block (Icon + Value + Unit) vertically
@@ -98,7 +99,7 @@ class TripsLayout(Widget):
     unit_base_size = 55
     number_size = number_base_size * FONT_SCALE
     unit_size = unit_base_size * FONT_SCALE
-    color_unit = rl.Color(160, 160, 160, 255)
+    color_unit = Console.TEXT_MUTED
 
     routes = int(data.get("routes", 0))
     distance = data.get("distance", 0)
@@ -114,11 +115,11 @@ class TripsLayout(Widget):
       # Icon
       icon_x = center_x - (icon.width / 2)
       icon_y = content_y + 60
-      rl.draw_texture_ex(icon, rl.Vector2(icon_x, icon_y), 0.0, 1.0, rl.WHITE)
+      rl.draw_texture_ex(icon, rl.Vector2(icon_x, icon_y), 0.0, 1.0, Console.TEXT_PRIMARY)
 
       # Value
       val_size = measure_text_cached(number_font, value, number_base_size)
-      rl.draw_text_ex(number_font, value, rl.Vector2(center_x - val_size.x / 1.65, content_y + 145 * FONT_SCALE), number_size, 0, rl.WHITE)
+      rl.draw_text_ex(number_font, value, rl.Vector2(center_x - val_size.x / 1.65, content_y + 145 * FONT_SCALE), number_size, 0, Console.TEXT_PRIMARY)
 
       # Unit
       unit_size_vec = measure_text_cached(unit_font, unit, unit_base_size)

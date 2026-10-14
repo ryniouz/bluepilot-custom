@@ -8,10 +8,11 @@ import pyray as rl
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.ui.ui_state import UIStatus, ui_state
 from openpilot.system.ui.lib.application import gui_app
+from bluepilot.ui.lib.theme import Console, Onroad, with_alpha  # Custom: Console theme
 
 BORDER_COLORS_SP = {
-  UIStatus.LAT_ONLY: rl.Color(0x00, 0xC8, 0xC8, 0xFF),  # Cyan for lateral-only state
-  UIStatus.LONG_ONLY: rl.Color(0x96, 0x1C, 0xA8, 0xFF),  # Purple for longitudinal-only state
+  UIStatus.LAT_ONLY: Onroad.BORDER_LAT_ONLY,  # Cyan for lateral-only state
+  UIStatus.LONG_ONLY: Onroad.BORDER_LONG_ONLY,  # Purple for longitudinal-only state
 }
 
 
@@ -28,4 +29,4 @@ class AugmentedRoadViewSP:
       rl.draw_texture_pro(self._fade_texture,
                           rl.Rectangle(0, 0, self._fade_texture.width, self._fade_texture.height),
                           _content_rect, rl.Vector2(0, 0), 0.0,
-                          rl.Color(255, 255, 255, int(255 * fade_alpha)))
+                          with_alpha(Console.TEXT_PRIMARY, int(255 * fade_alpha)))

@@ -16,7 +16,7 @@
   color: var(--bp-accent-blue);
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 2px solid rgba(33, 150, 243, 0.3);
+  border-bottom: 2px solid rgba(var(--accent-rgb), 0.3);
 }
 
 .date-group-cards {
@@ -44,8 +44,8 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: rgba(33, 150, 243, 0.12);
-  border-bottom: 1px solid rgba(33, 150, 243, 0.25);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.25);
   font-size: 12px;
   color: var(--bp-accent-blue);
   animation: pulse-processing 2s ease-in-out infinite;
@@ -81,14 +81,14 @@
 
 .route-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(33, 150, 243, 0.5);
+  border-color: rgba(var(--accent-rgb), 0.5);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .route-thumbnail {
   height: 160px;
   position: relative;
-  background: linear-gradient(135deg, #1a1a1a 0%, #252525 100%);
+  background: var(--bg-panel);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -124,7 +124,7 @@
   top: 12px;
   right: 12px;
   background: var(--bp-warning);
-  color: #000;
+  color: var(--bg-page);
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
@@ -162,8 +162,8 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 8px;
-  background: rgba(33, 150, 243, 0.16);
-  border: 1px solid rgba(33, 150, 243, 0.3);
+  background: rgba(var(--accent-rgb), 0.16);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   color: var(--bp-accent-blue);
   font-size: 12px;
   font-weight: 600;
@@ -179,19 +179,19 @@
 }
 
 .route-preserve-btn:hover {
-  background: rgba(33, 150, 243, 0.25);
-  border-color: rgba(33, 150, 243, 0.45);
+  background: rgba(var(--accent-rgb), 0.25);
+  border-color: rgba(var(--accent-rgb), 0.45);
 }
 
 .route-preserve-btn.active {
-  background: rgba(255, 152, 0, 0.2);
-  border-color: rgba(255, 152, 0, 0.45);
+  background: rgba(var(--warning-rgb), 0.2);
+  border-color: rgba(var(--warning-rgb), 0.45);
   color: var(--bp-warning);
-  box-shadow: 0 8px 20px rgba(255, 152, 0, 0.2);
+  box-shadow: 0 8px 20px rgba(var(--warning-rgb), 0.2);
 }
 
 .route-preserve-btn.active:hover {
-  background: rgba(255, 152, 0, 0.28);
+  background: rgba(var(--warning-rgb), 0.28);
 }
 
 .route-actions {
@@ -209,9 +209,9 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 8px;
-  background: rgba(76, 175, 80, 0.16);
-  border: 1px solid rgba(76, 175, 80, 0.3);
-  color: #4CAF50;
+  background: rgba(var(--success-rgb), 0.16);
+  border: 1px solid rgba(var(--success-rgb), 0.3);
+  color: var(--success);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -226,8 +226,8 @@
 }
 
 .route-export-btn:hover {
-  background: rgba(76, 175, 80, 0.25);
-  border-color: rgba(76, 175, 80, 0.45);
+  background: rgba(var(--success-rgb), 0.25);
+  border-color: rgba(var(--success-rgb), 0.45);
 }
 
 .route-delete-btn {
@@ -236,8 +236,8 @@
   justify-content: center;
   padding: 6px;
   border-radius: 8px;
-  background: rgba(244, 67, 54, 0.16);
-  border: 1px solid rgba(244, 67, 54, 0.3);
+  background: rgba(var(--danger-rgb), 0.16);
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
   color: var(--bp-error);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -249,8 +249,8 @@
 }
 
 .route-delete-btn:hover {
-  background: rgba(244, 67, 54, 0.25);
-  border-color: rgba(244, 67, 54, 0.45);
+  background: rgba(var(--danger-rgb), 0.25);
+  border-color: rgba(var(--danger-rgb), 0.45);
 }
 
 .route-location {
@@ -306,22 +306,22 @@
 
 /* Engagement stat - green color */
 .route-stat-engagement {
-  color: #4caf50;
+  color: var(--success);
   font-weight: 500;
 }
 
 .route-stat-engagement svg {
-  stroke: #4caf50;
+  stroke: var(--success);
 }
 
 /* Alerts stat - orange/amber color */
 .route-stat-alerts {
-  color: #ff9800;
+  color: var(--warning);
   font-weight: 500;
 }
 
 .route-stat-alerts svg {
-  stroke: #ff9800;
+  stroke: var(--warning);
 }
 
 /* Loading and Empty States */

@@ -3,6 +3,7 @@ import pyray as rl
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.lib.application import FontWeight
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 # Match list item width; height for bold section title
 SECTION_HEADER_WIDTH = 600
@@ -11,8 +12,11 @@ SECTION_HEADER_FONT_SIZE = 52
 
 COLLAPSIBLE_HEADER_HEIGHT = 105
 COLLAPSIBLE_HEADER_FONT_SIZE = 52
-COLLAPSIBLE_PRESS_COLOR = rl.Color(255, 255, 255, 18)
-COLLAPSIBLE_ARROW_COLOR = rl.Color(220, 220, 220, 255)
+# Custom: Console tokens (7.0 collapsible headers were hardcoded light-on-dark)
+COLLAPSIBLE_PRESS_COLOR = Console.BG_HIGH
+COLLAPSIBLE_ARROW_COLOR = Console.TEXT_MUTED
+COLLAPSIBLE_TITLE_COLOR = Console.TEXT_PRIMARY
+# Custom: end
 COLLAPSIBLE_ARROW_SIZE = 14   # half-width / half-height of the drawn triangle
 COLLAPSIBLE_TITLE_INDENT = 46  # px indent to leave room for arrow
 
@@ -31,7 +35,7 @@ class SectionHeader(Widget):
       self._title,
       font_size=SECTION_HEADER_FONT_SIZE,
       font_weight=FontWeight.BOLD,
-      color=rl.Color(220, 220, 220, 255),
+      color=Console.TEXT_SECONDARY,
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
       elide_right=True,
@@ -136,7 +140,7 @@ class CollapsibleSectionHeader(Widget):
       self._title,
       font_size=COLLAPSIBLE_HEADER_FONT_SIZE,
       font_weight=FontWeight.BOLD,
-      color=rl.Color(220, 220, 220, 255),
+      color=COLLAPSIBLE_TITLE_COLOR,  # Custom: Console
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
       elide_right=True,

@@ -9,6 +9,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import Label
+from bluepilot.ui.lib.theme import Onroad  # Custom: Console theme
 
 AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
@@ -32,9 +33,9 @@ SELFDRIVE_UNRESPONSIVE_TIMEOUT = 10  # Seconds
 
 # Constants
 ALERT_COLORS = {
-  AlertStatus.normal: rl.Color(0x15, 0x15, 0x15, 0xF1),      # #151515 with alpha 0xF1
-  AlertStatus.userPrompt: rl.Color(0xDA, 0x6F, 0x25, 0xF1),  # #DA6F25 with alpha 0xF1
-  AlertStatus.critical: rl.Color(0xC9, 0x22, 0x31, 0xF1),    # #C92231 with alpha 0xF1
+  AlertStatus.normal: Onroad.ALERT_NORMAL,      # #151515 with alpha 0xF1
+  AlertStatus.userPrompt: Onroad.ALERT_PROMPT,  # #DA6F25 with alpha 0xF1
+  AlertStatus.critical: Onroad.ALERT_CRITICAL,    # #C92231 with alpha 0xF1
 }
 
 
@@ -77,9 +78,9 @@ class AlertRenderer(Widget):
 
     # font size is set dynamically
     self._full_text1_label = Label("", font_size=0, font_weight=FontWeight.BOLD, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP, text_color=Onroad.ALERT_TEXT)
     self._full_text2_label = Label("", font_size=ALERT_FONT_BIG, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP, text_color=Onroad.ALERT_TEXT)
 
   def get_alert(self, sm: messaging.SubMaster) -> Alert | None:
     """Generate the current alert based on selfdrive state."""
@@ -175,7 +176,7 @@ class AlertRenderer(Widget):
       self._full_text2_label.set_text(alert.text2)
       self._full_text2_label.render(subtitle_rect)
 
-  def _draw_centered(self, text, rect, font, font_size, center_y=True, color=rl.WHITE) -> None:
+  def _draw_centered(self, text, rect, font, font_size, center_y=True, color=Onroad.ALERT_TEXT) -> None:
     text_size = measure_text_cached(font, text, font_size)
     x = rect.x + (rect.width - text_size.x) / 2
     y = rect.y + ((rect.height - text_size.y) / 2 if center_y else 0)

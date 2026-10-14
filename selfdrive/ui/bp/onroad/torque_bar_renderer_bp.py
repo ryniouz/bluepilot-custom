@@ -25,6 +25,7 @@ from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_state_bp import TorqueBarStateBP
 # BluePilot: seasonal theme packs (Accent recolors the active fill)
 from openpilot.selfdrive.ui.bp.lib import theme_pack
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 def _accent_or(default: rl.Color, alpha: int) -> rl.Color:
@@ -41,15 +42,15 @@ TORQUE_ANGLE_SPAN = 12.7
 
 # Crown strip geometry (horizontal torque bar inside shared container)
 STRIP_HEIGHT = 11            # Pixels tall for the torque strip
-STRIP_TRACK_COLOR = rl.Color(52, 73, 94, 140)    # Subtle dark track (matches power flow BAR_BG_COLOR)
-STRIP_DIVIDER_COLOR = rl.Color(100, 100, 100, 80) # 1px separator below strip
-STRIP_CENTER_TICK_COLOR = rl.Color(200, 200, 200, 140)
+STRIP_TRACK_COLOR = Console.BG_TRACK  # Custom: Console bar track
+STRIP_DIVIDER_COLOR = Console.BORDER_SUBTLE  # Custom: Console divider
+STRIP_CENTER_TICK_COLOR = Console.TEXT_MUTED  # Custom: Console
 STRIP_CORNER_SEGMENTS = 10
 
 # Arched strip (same data as flat strip, drawn on top of arched powerflow meter)
 STRIP_ARCH_THICKNESS = 12
 STRIP_ARCH_GAP = 2  # Gap above powerflow outer edge
-STRIP_ARCH_TRACK_COLOR = rl.Color(52, 73, 94, 180)
+STRIP_ARCH_TRACK_COLOR = Console.BG_TRACK  # Custom: Console bar track
 
 
 def _quantized_lru_cache(maxsize=128):
@@ -210,9 +211,9 @@ class TorqueBarRendererBP(TorqueBarStateBP):
     is_active = ui_state.status in (UIStatus.ENGAGED, UIStatus.LAT_ONLY)
 
     if is_active:
-      bg_color = rl.Color(255, 255, 255, int(255 * bg_alpha * alpha))
+      bg_color = with_alpha(Console.TEXT_PRIMARY, int(255 * bg_alpha * alpha * 0.6))
     else:
-      bg_color = rl.Color(255, 255, 255, int(255 * 0.15 * alpha))
+      bg_color = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.15 * alpha))
 
     # Arc center and radius
     torque_line_radius = 1200 * self._scale
@@ -246,19 +247,19 @@ class TorqueBarRendererBP(TorqueBarStateBP):
     if is_active:
       # Smooth color transition: base (white or theme Accent) → yellow/orange at high torque
       high_blend = max(0.0, abs_torque - 0.75) * 4
-      base = _accent_or(rl.Color(255, 255, 255, int(255 * 0.9 * alpha)), int(255 * 0.9 * alpha))
+      base = _accent_or(with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9 * alpha)), int(255 * 0.9 * alpha))
       start_color = blend_colors(
         base,
-        rl.Color(255, 200, 0, int(255 * alpha)),
+        with_alpha(Console.WARNING, int(255 * alpha)),
         high_blend,
       )
       end_color = blend_colors(
         base,
-        rl.Color(255, 115, 0, int(255 * alpha)),
+        with_alpha(Console.WARNING, int(255 * alpha)),
         high_blend,
       )
     else:
-      start_color = end_color = _accent_or(rl.Color(255, 255, 255, int(255 * 0.35 * alpha)), int(255 * 0.35 * alpha))
+      start_color = end_color = _accent_or(with_alpha(Console.TEXT_PRIMARY, int(255 * 0.35 * alpha)), int(255 * 0.35 * alpha))
 
     gradient = Gradient(
       start=(start_grad_pt, 0),
@@ -272,7 +273,7 @@ class TorqueBarRendererBP(TorqueBarStateBP):
     if abs_torque < 0.5:
       dot_y = effective_rect.y + effective_rect.height - torque_line_offset - torque_line_height / 2
       rl.draw_circle(int(cx), int(dot_y), 10 // 2 * self._scale,
-                     rl.Color(182, 182, 182, int(255 * 0.9 * alpha)))
+                     with_alpha(Console.TEXT_MUTED, int(255 * 0.9 * alpha)))
 
   def render_strip(self, strip_rect: rl.Rectangle):
     """Render the torque bar as a horizontal crown strip inside a container.
@@ -312,12 +313,12 @@ class TorqueBarRendererBP(TorqueBarStateBP):
       if is_active:
         high_blend = max(0.0, abs_torque - 0.75) * 4
         fill_color = blend_colors(
-          rl.Color(255, 255, 255, int(255 * 0.9 * alpha)),
-          rl.Color(255, 200, 0, int(255 * alpha)),
+          with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9 * alpha)),
+          with_alpha(Console.WARNING, int(255 * alpha)),
           high_blend,
         )
       else:
-        fill_color = rl.Color(255, 255, 255, int(255 * 0.35 * alpha))
+        fill_color = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.35 * alpha))
 
       # Scissor + overshoot for flat inner edge, rounded outer edge (same as PowerFlowGauge)
       overshoot = strip_rect.height
@@ -400,12 +401,12 @@ class TorqueBarRendererBP(TorqueBarStateBP):
       if is_active:
         high_blend = max(0.0, abs_torque - 0.75) * 4
         fill_color = blend_colors(
-          rl.Color(255, 255, 255, int(255 * 0.9 * alpha)),
-          rl.Color(255, 200, 0, int(255 * alpha)),
+          with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9 * alpha)),
+          with_alpha(Console.WARNING, int(255 * alpha)),
           high_blend,
         )
       else:
-        fill_color = rl.Color(255, 255, 255, int(255 * 0.35 * alpha))
+        fill_color = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.35 * alpha))
       if torque < 0:
         bar_start_angle = center + (start_angle - center) * abs_torque
         bar_end_angle = center

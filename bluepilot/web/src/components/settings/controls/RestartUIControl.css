@@ -26,13 +26,13 @@
 }
 
 .restart-ui-result.success {
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(var(--success-rgb), 0.1);
   color: var(--success-color);
-  border-color: rgba(76, 175, 80, 0.35);
+  border-color: rgba(var(--success-rgb), 0.35);
 }
 
 .restart-ui-result.error {
-  background: rgba(244, 67, 54, 0.12);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--error-color);
-  border-color: rgba(244, 67, 54, 0.35);
+  border-color: rgba(var(--danger-rgb), 0.35);
 }

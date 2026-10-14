@@ -101,7 +101,7 @@
 }
 
 .modal-body::-webkit-scrollbar-thumb:hover {
-  background: #404040;
+  background: var(--border-default);
 }
 
 /* Modal Footer */
@@ -136,17 +136,17 @@
 }
 
 .modal-action-btn--secondary {
-  background: var(--bp-bg-tertiary, #333);
+  background: var(--bp-bg-tertiary, var(--bg-high));
   color: var(--bp-text-primary);
   border: 1px solid var(--bp-border);
 }
 
 .modal-action-btn--secondary:hover {
-  background: var(--bp-bg-hover, #3a3a3a);
+  background: var(--bp-bg-hover, var(--bg-high));
 }
 
 .modal-action-btn--danger {
-  background: var(--error-color, #f44336);
+  background: var(--error-color, var(--danger));
   color: white;
 }
 

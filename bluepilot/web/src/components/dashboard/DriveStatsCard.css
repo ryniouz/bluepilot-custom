@@ -50,18 +50,18 @@
 }
 
 .stats-badge.cached {
-  background: rgba(76, 175, 80, 0.15);
-  color: #4caf50;
+  background: rgba(var(--success-rgb), 0.15);
+  color: var(--success);
 }
 
 .stats-badge.info {
   background: rgba(158, 158, 158, 0.15);
-  color: #9e9e9e;
+  color: var(--text-muted);
 }
 
 .stats-badge.warning {
-  background: rgba(255, 152, 0, 0.15);
-  color: #ff9800;
+  background: rgba(var(--warning-rgb), 0.15);
+  color: var(--warning);
 }
 
 .drive-stats-loading,
@@ -111,8 +111,8 @@
 }
 
 .stat-item.all-time {
-  background: linear-gradient(135deg, rgba(33, 150, 243, 0.1) 0%, rgba(33, 150, 243, 0.05) 100%);
-  border: 1px solid rgba(33, 150, 243, 0.2);
+  background: var(--accent-tint);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
 }
 
 @media (max-width: 480px) {
@@ -145,7 +145,7 @@
 }
 
 .stat-item.all-time .stat-value {
-  color: var(--bp-accent-blue, #2196f3);
+  color: var(--bp-accent-blue, var(--accent));
 }
 
 @media (max-width: 768px) {

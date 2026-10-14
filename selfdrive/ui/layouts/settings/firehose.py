@@ -6,6 +6,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from openpilot.system.ui.lib.wrap_text import wrap_text
 from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayoutBase
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 TITLE = tr_noop("Firehose Mode")
 DESCRIPTION = tr_noop(
@@ -49,11 +50,11 @@ class FirehoseLayout(FirehoseLayoutBase):
     title_font = gui_app.font(FontWeight.MEDIUM)
     text_width = measure_text_cached(title_font, title_text, 100).x
     title_x = rect.x + (rect.width - text_width) / 2
-    rl.draw_text_ex(title_font, title_text, rl.Vector2(title_x, y), 100, 0, rl.WHITE)
+    rl.draw_text_ex(title_font, title_text, rl.Vector2(title_x, y), 100, 0, Console.TEXT_PRIMARY)
     y += 200
 
     # Description
-    y = self._draw_wrapped_text(x, y, w, tr(DESCRIPTION), gui_app.font(FontWeight.NORMAL), 45, rl.WHITE)
+    y = self._draw_wrapped_text(x, y, w, tr(DESCRIPTION), gui_app.font(FontWeight.NORMAL), 45, Console.TEXT_PRIMARY)
     y += 40 + 20
 
     # Separator
