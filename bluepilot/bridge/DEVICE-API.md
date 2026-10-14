@@ -27,11 +27,11 @@ Latest snapshot (offroad: only `device` and `onroad:false`, everything else null
   "car": { "speed": 12.1, "aEgo": 0.2, "gear": "drive", "steeringDeg": -3.5, "brake": false, "gasPressed": false,
            "leftBlinker": false, "rightBlinker": false, "standstill": false,
            "cruise": { "enabled": true, "speed": 27.8 } },
-  "ev": { "available": true, "socPct": 81.5, "packV": 384.0, "packA": -31.5, "powerKw": -12.1 },
+  "ev": { "available": true, "socPct": 81.5, "packV": 384.0, "packA": 31.5, "powerKw": 12.1, "rangeKm": 301.0, "packTempC": 24.5, "coolantTempC": 21.0 },
   "engaged": true, "latActive": true, "experimental": false,
   "device": { "cpuTempC": 61.0, "freeSpacePct": 22.5, "network": "wifi", "memPct": 48.0 } }
 ```
-`car.speed`, `gps.speed`, `cruise.speed` are m/s. `ev.powerKw` = V×A/1000, negative = discharge (driving), positive = charge/regen. `ev.available` follows `carStateBP.hybridBattery.dataAvailable`.
+`car.speed`, `gps.speed`, `cruise.speed` are m/s. `ev` comes from `carStateBP.evBattery` (Lightning, ungated) when present, adding `rangeKm`, `packTempC`, `coolantTempC`; otherwise from `hybridBattery` with `powerKw` = V×A/1000. `powerKw` positive = drawing from the pack (driving), negative = charging/regen.
 
 ### `GET /v1/live/stream?hz=1`
 Server-Sent Events. `event: live` with the `/v1/live` JSON, at `hz` (0.2..5, default 1). `event: drive` with each new event from `/v1/events`. Comment line `: ping` every 15 s.

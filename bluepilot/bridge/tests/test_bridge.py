@@ -195,6 +195,15 @@ def test_snapshot_ev_unavailable_and_nan():
   assert snap["gps"]["alt"] is None
 
 
+def test_snapshot_prefers_ev_battery():
+  v = onroad_view()
+  v["carStateBP"].evBattery = SimpleNamespace(dataAvailable=True, socPercent=64.2, packVoltage=380.0, packCurrent=52.0,
+                                              powerKw=19.8, rangeKm=301.0, packTempC=24.5, coolantTempC=21.0)
+  snap = build_snapshot(v, "gpsLocationExternal", True, None, None)
+  assert snap["ev"] == {"available": True, "socPct": 64.2, "packV": 380.0, "packA": 52.0, "powerKw": 19.8,
+                        "rangeKm": 301.0, "packTempC": 24.5, "coolantTempC": 21.0}
+
+
 def test_drive_tracker_events(tmp_path):
   log = EventLog(str(tmp_path / "s"))
   tr = DriveTracker(log)

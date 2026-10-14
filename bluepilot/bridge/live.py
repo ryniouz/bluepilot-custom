@@ -77,16 +77,7 @@ def build_snapshot(sm, gps_service: str, onroad: bool, route: str | None, segmen
     }
 
   if seen("carStateBP"):
-    hb = get("carStateBP").hybridBattery
-    available = bool(hb.dataAvailable)
-    v, a = _num(hb.voltActual, 1), _num(hb.ampsActual, 2)
-    snap["ev"] = {
-      "available": available,
-      "socPct": _num(hb.socActual, 2) if available else None,
-      "packV": v if available else None,
-      "packA": a if available else None,
-      "powerKw": round(v * a / 1000.0, 2) if available and v is not None and a is not None else None,
-    }
+    snap["ev"] = _ev_snapshot(get("carStateBP"))
 
   if seen("selfdriveState"):
     ss = get("selfdriveState")
@@ -95,6 +86,26 @@ def build_snapshot(sm, gps_service: str, onroad: bool, route: str | None, segmen
   if seen("carControl"):
     snap["latActive"] = bool(get("carControl").latActive)
   return snap
+
+
+def _ev_snapshot(bp) -> dict:
+  """Prefer stream B's ungated evBattery; fall back to the HEV-gated hybridBattery."""
+  try:
+    ev = bp.evBattery
+  except (AttributeError, KeyError):
+    ev = None
+  if ev is not None and bool(getattr(ev, "dataAvailable", False)):
+    out = {"available": True, "socPct": _num(ev.socPercent, 2), "packV": _num(ev.packVoltage, 1),
+           "packA": _num(ev.packCurrent, 2), "powerKw": _num(ev.powerKw, 2)}
+    for src, dst, d in (("rangeKm", "rangeKm", 1), ("packTempC", "packTempC", 1), ("coolantTempC", "coolantTempC", 1)):
+      out[dst] = _num(getattr(ev, src, None), d)
+    return out
+  hb = bp.hybridBattery
+  if not bool(hb.dataAvailable):
+    return {"available": False, "socPct": None, "packV": None, "packA": None, "powerKw": None}
+  v, a = _num(hb.voltActual, 1), _num(hb.ampsActual, 2)
+  return {"available": True, "socPct": _num(hb.socActual, 2), "packV": v, "packA": a,
+          "powerKw": round(v * a / 1000.0, 2) if v is not None and a is not None else None}
 
 
 class _View(dict):
