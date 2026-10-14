@@ -1037,7 +1037,8 @@ def fake_obd(link_state: str):
             V("LvV", 13.8, "V", 5.0), V("LvSoc", 86.0, "percent", 12.0), V("TireLF", 248.0, "kPa", 20.0),
             V("TireRF", 251.0, "kPa", 20.0), V("TireLR", 262.0, "kPa", 20.0), V("TireRR", 259.0, "kPa", 20.0),
             V("HvbSoh", 97.0, "percent", 300.0 / 10), V("HvbCapAh", 306.2, "Ah", 30.0), V("HvbCHP", 2.7, "kW", 2.0),
-            V("ChgInPwr", 151.0, "kW", 2.0), V("ChgMaxP", 155.0, "kW", 10.0), V("ChgACT", 29.0, "degC", 5.0)]
+            V("ChgInPwr", 151.0, "kW", 2.0), V("ChgMaxP", 155.0, "kW", 10.0), V("ChgACT", 29.0, "degC", 5.0),
+            V("ACInV", 240.0, "V", 2.0), V("ACInA", 47.0, "A", 2.0), V("ACInF", 60.0, "Hz", 5.0), V("PilotDC", 80.0, "percent", 5.0)]
   if link_state == "setup":
     link.available = lambda: False
   snap = ol.ObdSnapshot(received=link_state != "setup", enabled=True, transport="wifi", link=link_state, adapter="ELM327 v1.5",

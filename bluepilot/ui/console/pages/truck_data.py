@@ -27,8 +27,8 @@ ROW = 64
 BATTERY = [("HvbSoh", "Health"), ("HvbCapAh", "Capacity"), ("HvbSocD", "Charge"), ("HvbEte", "Energy left"),
            ("HvbT", "Temperature"), ("HvbCit", "Coolant in"), ("HvbCHP", "Coolant heater"), ("HvbAvgModV", "Modules avg"),
            ("HvbMinModV", "Modules low"), ("HvbAge", "Age"), ("HvbSoc", "Charge (cells)")]
-CHARGER = [("HvbV", "Pack"), ("HvbA", "Current"), ("ChgOV", "Output"), ("ChgInPwr", "Input power"), ("ChgMaxP", "Max power"),
-           ("ChgACT", "Port temp"), ("ACInV", "AC voltage"), ("ACInA", "AC current"), ("ACInF", "AC frequency"),
+CHARGER = [("HvbV", "Pack"), ("HvbA", "Current"), ("ChgOV", "Output"), ("ChgInPwr", "Input"), ("ChgMaxP", "Maximum"),
+           ("ChgACT", "Port temp"), ("ACInV", "AC volts"), ("ACInA", "AC amps"), ("ACInF", "AC Hz"),
            ("PilotDC", "Pilot duty")]
 LOW_VOLT = [("LvV", "Voltage"), ("LvSoc", "Charge")]
 TIRES = [("TireLF", "Front left"), ("TireRF", "Front right"), ("TireLR", "Rear left"), ("TireRR", "Rear right")]
@@ -79,7 +79,8 @@ class TruckDataPage(CardPage):
     self._group(c1, tr("HV battery"), "battery", BATTERY, vals, extra=self._spread_row(vals))
     self._stack(c2, [(tr("Charger"), "plug", CHARGER)], vals)
     others = [(v.name, v.label or v.name) for k, v in sorted(vals.items()) if k not in KNOWN]
-    col3 = [(tr("Tires"), "gauge", TIRES), (tr("12 V battery"), "bolt", LOW_VOLT)] + ([(tr("Other"), "list", others)] if others else [])
+    low_volt = tr("12 V battery") if D.text_w(tr("12 V battery"), D.H2, semi=True) + 64 + 2 * D.CARD_PAD <= c3.width else tr("12 V")
+    col3 = [(tr("Tires"), "gauge", TIRES), (low_volt, "bolt", LOW_VOLT)] + ([(tr("Other"), "list", others)] if others else [])
     self._stack(c3, col3, vals)
 
   # -- connected ------------------------------------------------------------------------------
