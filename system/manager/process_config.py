@@ -105,6 +105,11 @@ def route_preprocessor_enabled(started: bool, params: Params, CP: car.CarParams)
   """Route preprocessor - only run when portal enabled and offroad"""
   return params.get_bool("EnableWebRoutesServer") and only_offroad(started, params, CP)
 
+# Custom: data export bridge
+def bridge_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("BPBridgeEnabled")
+# End Custom
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -193,6 +198,8 @@ procs += [
   PythonProcess("bp_portal", "bluepilot.backend.bp_portal", portal_enabled),
   # Route preprocessor (runs in background during idle time)
   PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", route_preprocessor_enabled),
+  # Custom: data export bridge (drives, live state, keep-until-synced) for the home server
+  PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
 ]
 
 if os.path.exists("./github_runner.sh"):

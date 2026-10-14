@@ -321,4 +321,21 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // WiFi Management
     {"WifiFavoriteSSID", {PERSISTENT | BACKUP, STRING}},
+
+    // Custom: data export bridge (bluepilot/bridge)
+    {"BPBridgeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPBridgePort", {PERSISTENT | BACKUP, INT, "8090"}},
+    {"BPBridgeToken", {PERSISTENT, STRING}},
+    {"BPBridgeNotifyUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPKeepUntilSynced", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadTripMode", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPRoadTripVideo", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPServerUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPCellLimitMB", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellLimitAction", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellResetDay", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPRoadTripCellular", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPCommaConnectWifiOnly", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRemoteLink", {PERSISTENT | BACKUP, BOOL, "1"}},             // Citadel can reach the bridge API from away
+    // End Custom
 };
