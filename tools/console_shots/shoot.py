@@ -139,12 +139,16 @@ SCENES.update({
   "drive_obd": "Dense layout with the OBD adapter connected: OBD rows in the details card",
   "drive_qc_handle": "Minimal layout with the collapsed Quick controls bar at the bottom",
   "drive_qc_drag": "Minimal layout, Quick controls sheet half way up (mid swipe)",
+  "drive_lc_chevrons": "Lane change to the left: chevrons cue (frames over one loop)",
+  "drive_lc_lane": "Lane change to the left: lane glow cue (frames over one loop)",
+  "drive_lc_arrow": "Lane change to the left: arrow cue (frames over one loop)",
   "drive_guest": "Guest Mode drive: factory assist banner, no path, no engage prompts",
 })
 ALIASES["drive"] = ["onroad_ev", "drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt",
                     "drive_critical", "drive_popup", "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                     "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
                     "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd",
+                    "drive_lc_chevrons", "drive_lc_lane", "drive_lc_arrow",
                     "onroad_override", "sidebar", "alert_full_prompt", "alert_full_critical"]
 # --- end stream B --------------------------------------------------------------------------
 
@@ -390,6 +394,7 @@ def default_drive() -> dict:
     speed_limit_mph=None,
     steer_torque=0.25,
     curvature=0.0,
+    lane_change=None,  # "left" / "right": modelV2.meta in laneChangeStarting
   )
 
 
@@ -814,6 +819,9 @@ class Scene:
     mv.roadEdgeStds = [0.25, 0.25]
     mv.confidence = self.log.ModelDataV2.ConfidenceClass.green
     mv.meta.engagedProb = 0.99
+    if d.get("lane_change"):
+      mv.meta.laneChangeState = self.log.LaneChangeState.laneChangeStarting
+      mv.meta.laneChangeDirection = getattr(self.log.LaneChangeDirection, d["lane_change"])
     dp = mv.meta.disengagePredictions
     dp.t = [2.0, 4.0, 6.0, 8.0, 10.0]
     dp.brakeDisengageProbs = [0.02] * 5
@@ -926,7 +934,8 @@ def scene_params(name: str) -> dict:
 DRIVE_SCENES = ("drive_minimal", "drive_dense", "drive_notify", "drive_signals", "drive_prompt", "drive_critical", "drive_popup",
                 "drive_lead", "drive_road_settings", "drive_steer_only", "drive_off",
                 "drive_guest", "drive_qc_handle", "drive_qc_drag", "drive_lead_bracket", "drive_lead_floor",
-                "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd")
+                "drive_lead_corners", "drive_lead_chevron", "drive_plugged", "drive_obd",
+                "drive_lc_chevrons", "drive_lc_lane", "drive_lc_arrow")
 
 
 def drive_scene_params(name: str) -> dict:
@@ -947,6 +956,9 @@ def drive_scene_params(name: str) -> dict:
     from openpilot.selfdrive.ui.bp.onroad.road_view import LEAD_STYLES, MARKER_SHIFT
     # default with the speed tag on, the lead card off and this marker style
     p.update({"BPRoadView": 0xF7 | (LEAD_STYLES.index(name.split("_")[-1]) << MARKER_SHIFT)})
+  if name.startswith("drive_lc_"):
+    from openpilot.selfdrive.ui.bp.onroad.road_view import DEFAULT_SHOW, LC_SHIFT, LC_STYLES
+    p.update({"BPRoadView": DEFAULT_SHOW | (LC_STYLES.index(name.split("_")[-1]) << LC_SHIFT)})
   return p
 
 
@@ -977,6 +989,8 @@ def setup_drive_scene(name: str, d: dict):
     _inject_charge("charging_dc")
   elif name.startswith("drive_lead_"):
     d.update(lead_d=24.0, lead_v_rel=-4.2)
+  elif name.startswith("drive_lc_"):
+    d.update(lane_change="left", left_blinker=True, lead_d=55.0, alert=("small", "normal", "Changing Lanes", ""))
   elif name == "drive_steer_only":
     d.update(enabled=False, state="disabled", mads=(True, True))
   elif name == "drive_off":
@@ -1380,6 +1394,13 @@ def run_scene(sc: Scene):
     if name == "onroad_debug_panel":
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
+    if name.startswith("drive_lc_"):  # stream B: one full loop of the cue, every 3rd frame (20 fps)
+      from openpilot.selfdrive.ui.bp.onroad.lane_change_fx import PERIOD
+      n = round(PERIOD[name.split("_")[-1]] * 60 / 3)
+      for k in range(n):
+        sc.shot(f"{name}_{k:02d}")
+        sc.step(2)
+      return
     sc.shot()
 
 

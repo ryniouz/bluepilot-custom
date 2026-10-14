@@ -40,12 +40,16 @@ SHOW_SPEED_TAG = 1 << 7   # lead speed beside the car (off by default)
 SHOW_LEAD_CARD = 1 << 8
 MARKER_SHIFT = 9          # bits 9-10: lead marker style, an index into LEAD_STYLES
 MARKER_MASK = 0b11 << MARKER_SHIFT
+LC_SHIFT = 11             # bits 11-12: lane change cue, an index into LC_STYLES
+LC_MASK = 0b11 << LC_SHIFT
 
 DEFAULT_SHOW = (SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_EDGES | SHOW_NEIGHBOURS |
                 SHOW_LEAD_CARD)
 PARAM = "BPRoadView"
 
 LEAD_STYLES = ("floor", "bracket", "corners", "chevron")
+LC_STYLES = ("chevrons", "lane", "arrow", "off")  # lane_change_fx.py; index 0 is the default
+LC_STYLE_LABELS = {"chevrons": "Chevrons", "lane": "Lane glow", "arrow": "Arrow", "off": "Off"}
 
 # (bit, label) in the order the settings sheet lists them
 OPTIONS = (
@@ -94,6 +98,14 @@ class RoadViewPrefs:
   def next_marker(self):
     i = ((self.value & MARKER_MASK) >> MARKER_SHIFT) + 1
     self._write((self.value & ~MARKER_MASK) | ((i % len(LEAD_STYLES)) << MARKER_SHIFT))
+
+  @property
+  def lane_change(self) -> str:
+    return LC_STYLES[(self.value & LC_MASK) >> LC_SHIFT]
+
+  def next_lane_change(self):
+    i = ((self.value & LC_MASK) >> LC_SHIFT) + 1
+    self._write((self.value & ~LC_MASK) | ((i % len(LC_STYLES)) << LC_SHIFT))
 
   def _write(self, value: int):
     self._value = value
