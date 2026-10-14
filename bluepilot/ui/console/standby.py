@@ -1,7 +1,8 @@
 """
 Console parked standby: the splash shown when the comma is offroad and idle.
 
-Big clock and date, last known charge and range, and readiness chips. Any tap opens Home.
+Brand line and status chips on top, a large clock with the date, the battery gauge with
+range, and a Citadel stat strip of readiness facts. Any tap opens Home.
 """
 
 from __future__ import annotations
@@ -15,12 +16,12 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
+from bluepilot.ui.console import kit as K
+from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, temp, truck_snapshot
 from bluepilot.ui.lib.ev_data import finite
 from bluepilot.ui.lib.theme import Console, roundness
 
-KM_TO_MI = 0.621371
-KPA_TO_PSI = 0.145038
-MARGIN = 144
+MARGIN = 80
 
 
 class ConsoleStandby(Widget):
@@ -30,53 +31,80 @@ class ConsoleStandby(Widget):
 
   def _render(self, rect: rl.Rectangle):
     rl.draw_rectangle_rec(rect, Console.BG_PAGE)
-    now = time.localtime()
-    clock = time.strftime("%-I:%M", now)
-    D.text(clock, rect.x + MARGIN, rect.y + 110, 300, light=True)
-    D.text(time.strftime("%A, %B %-d", now), rect.x + MARGIN, rect.y + 430, 44, Console.TEXT_MUTED)
+    left, right = rect.x + MARGIN, rect.x + rect.width - MARGIN
+    s, live = truck_snapshot()
 
-    s = getattr(ui_state, "ev", None)
-    if s is None or not s.available:
-      src = getattr(ui_state, "ev_source", None)
-      s = getattr(src, "last_good", None) if src is not None else None
-
-    right = rect.x + rect.width - MARGIN
-    col_w = 680
-    if s is not None and finite(s.soc):
-      vw = D.text_w(f"{s.soc:.0f}", 128, semi=True) + 10 + D.text_w("%", 48)
-      D.value_unit(f"{s.soc:.0f}", "%", right - vw, rect.y + 150, 128, 48)
-      fill = Console.DANGER if s.soc < 10 else (Console.WARNING if s.soc < 20 else Console.SUCCESS)
-      D.bar(rl.Rectangle(right - col_w, rect.y + 320, col_w, 24), s.soc / 100.0, fill)
-      if finite(s.range_km):
-        rng = s.range_km if ui_state.is_metric else s.range_km * KM_TO_MI
-        D.text(f"{rng:.0f} {'km' if ui_state.is_metric else 'mi'} " + tr("range"), right - col_w, rect.y + 372, 32, Console.TEXT_SECONDARY)
-      plug = tr("Charging") if getattr(ui_state, "charging_screen", False) else tr("Not plugged in")
-      D.text_right(plug, right, rect.y + 372, 32, Console.TEXT_SECONDARY)
-
-    # Readiness chips
-    x, y = rect.x + MARGIN, rect.y + 640
-    ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
-    chips = [(tr("Ready to drive") if ready else tr("Waiting for the truck"), Console.SUCCESS if ready else Console.TEXT_GHOST)]
-    if s is not None and len(s.tire_kpa) == 4 and all(finite(t) and t > 0 for t in s.tire_kpa):
-      psi = [t * KPA_TO_PSI for t in s.tire_kpa]
-      chips.append((tr("Tires") + f" {min(psi):.0f}-{max(psi):.0f} psi", Console.WARNING if s.tire_low else Console.SUCCESS))
-    if s is not None and finite(s.lv_volts):
-      chips.append((f"12 V {s.lv_volts:.1f}", Console.WARNING if s.lv_low else Console.SUCCESS))
+    # Brand line and status
+    mark = rl.Rectangle(left, rect.y + 56, 60, 60)
+    rl.draw_rectangle_rounded(mark, roundness(mark, 14), 8, Console.ACCENT_FILL)
+    D.text_center("BP", mark.x + 30, mark.y + 16, 24, Console.ON_ACCENT, semi=True)
+    x = mark.x + 60 + 20
+    x += D.text("BLUEPILOT", x, mark.y + 15, 28, semi=True) + 20
+    D.text(tr("F-150 Lightning"), x, mark.y + 15, 28, Console.TEXT_MUTED)
+    chips = []
     try:
       if self._params.get_bool("UpdateAvailable"):
-        chips.append((tr("Update ready"), Console.ACCENT))
+        chips.append((tr("Update ready"), Console.ACCENT, True))
     except Exception:
       pass
-    for label, color in chips:
-      r = D.chip(x, y, label, color, h=80, size=32)
-      x += r.width + 24
+    try:
+      nt = str(ui_state.sm["deviceState"].networkType)
+      chips.append((tr("Offline") if nt in ("none", "") else ("Wi-Fi" if nt == "wifi" else tr("Cellular")),
+                    Console.TEXT_GHOST if nt in ("none", "") else Console.SUCCESS, False))
+    except Exception:
+      pass
+    cx = right
+    for label, color, accent in chips:
+      w = 18 + 28 + D.text_w(label, K.CAP, semi=True) + 18
+      cx -= w
+      K.chip(cx, mark.y + 6, label, color, accent=accent)
+      cx -= 16
 
-    # Brand line
-    by = rect.y + rect.height - 160
-    rl.draw_rectangle_rec(rl.Rectangle(rect.x + MARGIN, by, rect.width - 2 * MARGIN, 2), Console.BORDER_SUBTLE)
-    b = rl.Rectangle(rect.x + MARGIN, by + 40, 64, 64)
-    rl.draw_rectangle_rounded(b, roundness(b, 12), 8, Console.ACCENT_FILL)
-    D.text_center("BP", b.x + 32, b.y + 17, 26, Console.ON_ACCENT, semi=True)
-    D.text("BluePilot", b.x + 88, b.y + 12, 36, semi=True)
-    D.text("6.0 · Lightning", b.x + 88 + D.text_w("BluePilot", 36, semi=True) + 20, b.y + 14, 32, Console.TEXT_GHOST)
-    D.text_right(tr("Tap anywhere to open Home"), rect.x + rect.width - MARGIN, b.y + 14, 32, Console.TEXT_MUTED)
+    # Clock and date
+    now = time.localtime()
+    D.text(time.strftime("%-I:%M", now), left - 8, rect.y + 170, 300, light=True)
+    D.text(time.strftime("%A, %B %-d", now), left, rect.y + 500, 40, Console.TEXT_SECONDARY)
+
+    # Battery gauge and range
+    if s is not None and finite(s.soc):
+      fill = Console.DANGER if s.soc < 10 else (Console.WARNING if s.soc < 20 else Console.SUCCESS)
+      gx, gy, gr = right - 560 + 132, rect.y + 340, 132
+      K.gauge(gx, gy, gr, s.soc / 100.0, fill, f"{s.soc:.0f}%", tr("Battery"))
+      tx = gx + gr + 56
+      if finite(s.range_km):
+        rng = s.range_km if ui_state.is_metric else s.range_km * KM_TO_MI
+        D.text(tr("Range"), tx, gy - 110, K.CAP, Console.TEXT_MUTED)
+        D.value_unit(f"{rng:.0f}", "km" if ui_state.is_metric else "mi", tx, gy - 76, 60, K.CAP)
+      D.text(tr("Plug"), tx, gy + 24, K.CAP, Console.TEXT_MUTED)
+      plugged = getattr(ui_state, "charging_screen", False)
+      D.text(tr("Charging") if plugged else tr("Not plugged in"), tx, gy + 58, K.KV)
+
+    # Readiness strip
+    ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
+    dash = "–"
+    cells = [K.Stat(tr("Truck"), tr("Ready") if ready else tr("Waiting"), "", tr("Car and camera OK") if ready else tr("Start the truck"),
+                    Console.SUCCESS if ready else Console.TEXT_GHOST)]
+    if s is not None and len(s.tire_kpa) == 4 and all(finite(t) and t > 0 for t in s.tire_kpa):
+      psi = [t * KPA_TO_PSI for t in s.tire_kpa]
+      cells.append(K.Stat(tr("Tires"), f"{min(psi):.0f}–{max(psi):.0f}", "psi", tr("One is low") if s.tire_low else tr("All four OK"),
+                          Console.WARNING if s.tire_low else None))
+    else:
+      cells.append(K.Stat(tr("Tires"), dash))
+    cells.append(K.Stat(tr("12 V"), f"{s.lv_volts:.1f}" if s is not None and finite(s.lv_volts) else dash,
+                        "V" if s is not None and finite(s.lv_volts) else ""))
+    if s is not None and finite(s.pack_temp_c):
+      v, u = temp(s.pack_temp_c)
+      cells.append(K.Stat(tr("Pack"), v, u))
+    else:
+      cells.append(K.Stat(tr("Pack"), dash))
+    if s is not None and finite(s.outside_temp_c):
+      v, u = temp(s.outside_temp_c)
+      cells.append(K.Stat(tr("Outside"), v, u))
+    else:
+      cells.append(K.Stat(tr("Outside"), dash))
+    cells.append(K.Stat(tr("Data"), tr("Live") if live else tr("Last known"), ""))
+    K.stat_strip(rl.Rectangle(left, rect.y + rect.height - 132 - K.STRIP_H, right - left, K.STRIP_H), cells)
+
+    by = rect.y + rect.height - 84
+    D.text("BluePilot 6.0 · bp-6.0 · Lightning", left, by, K.CAP, Console.TEXT_MUTED)
+    D.text_right(tr("Tap anywhere to open Home"), right, by, K.CAP, Console.TEXT_MUTED)

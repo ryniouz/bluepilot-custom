@@ -2,7 +2,7 @@
 Console main layout for the comma 3X.
 
   STANDBY   parked splash (clock, charge, readiness); any tap opens the shell
-  SHELL     rail navigation: Home, Drive, Energy, Screen, Connect, System
+  SHELL     Citadel layout: section tabs across the top, page rail on the left
   ONROAD    full-camera driving view; a tap opens the quick-controls sheet
   CHARGING  charging page; takes over while the truck is plugged in
 
@@ -26,7 +26,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP
 from openpilot.selfdrive.ui.bp.onroad.charging_view import ChargingView
 from bluepilot.ui.widgets.debug import ControlsDebugPanel
-from bluepilot.ui.console.home import ConsoleHome
+from bluepilot.ui.console.home import AlertsPage, ConsoleHome, active_alerts
 from bluepilot.ui.console.quick_controls import QuickControls
 from bluepilot.ui.console.shell import ConsoleShell, Dest
 from bluepilot.ui.console.standby import ConsoleStandby
@@ -54,7 +54,12 @@ class ConsoleMainLayout(Widget):
 
     self._settings = SettingsLayout()
     self._home = ConsoleHome()
-    self._shell = ConsoleShell(self._settings, self._home)
+    self._shell = ConsoleShell(self._settings, self._home, AlertsPage())
+    home_page = self._shell.pages(Dest.HOME)[0]
+    home_page.subtitle = self._home.subtitle
+    home_page.sub_dot = self._home.sub_dot
+    self._shell.alert_count = lambda: len(active_alerts(self._home._params))
+    # The Energy pages (thread C) replace this full-screen charging view with Energy > Charging in the shell
     self._layouts = {
       MainState.STANDBY: ConsoleStandby(),
       MainState.SHELL: self._shell,
@@ -102,7 +107,7 @@ class ConsoleMainLayout(Widget):
     if ui_state.started != self._prev_onroad or charging != self._prev_charging:
       self._prev_onroad = ui_state.started
       self._prev_charging = charging
-      if not (self._current_mode == MainState.SHELL and not ui_state.started and not charging):
+      if charging or not (self._current_mode == MainState.SHELL and not ui_state.started):
         self._set_mode_for_state()
 
   def _set_mode_for_state(self):

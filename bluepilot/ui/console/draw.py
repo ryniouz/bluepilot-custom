@@ -244,6 +244,100 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
   elif name == "search":
     _ring(11, 11, 7, x, y, s, w, color)
     _line([(16, 16), (20, 20)], x, y, s, w, color)
+  elif name == "grid":
+    for gx, gy in ((3, 3), (14, 3), (3, 14), (14, 14)):
+      rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + gx * s, y + gy * s, 7 * s, 7 * s), 0.25, 6, w, color)
+  elif name == "route":
+    _ring(6, 19, 2, x, y, s, w, color)
+    _ring(18, 5, 2, x, y, s, w, color)
+    _line([(8, 19), (16.5, 19)], x, y, s, w, color)
+    _arc(16.5, 15.5, 3.5, -90, 90, x, y, s, w, color)
+    _line([(16.5, 12), (7.5, 12)], x, y, s, w, color)
+    _arc(7.5, 8.5, 3.5, 90, 270, x, y, s, w, color)
+    _line([(7.5, 5), (16, 5)], x, y, s, w, color)
+  elif name == "bell":
+    _arc(12, 9, 6, 180, 360, x, y, s, w, color)
+    _line([(6, 9), (6, 13), (3.5, 17), (20.5, 17), (18, 13), (18, 9)], x, y, s, w, color)
+    _line([(10.3, 20.5), (13.7, 20.5)], x, y, s, w, color)
+  elif name == "plug":
+    _line([(9, 2), (9, 8)], x, y, s, w, color)
+    _line([(15, 2), (15, 8)], x, y, s, w, color)
+    _line([(6, 8), (18, 8), (18, 12)], x, y, s, w, color)
+    _line([(6, 8), (6, 12)], x, y, s, w, color)
+    _arc(12, 12, 6, 0, 180, x, y, s, w, color)
+    _line([(12, 18), (12, 22)], x, y, s, w, color)
+  elif name == "list":
+    for ly in (6, 12, 18):
+      _line([(8, ly), (21, ly)], x, y, s, w, color)
+      rl.draw_circle_v(rl.Vector2(x + 3.5 * s, y + ly * s), w * 0.75, color)
+  elif name == "thermo":
+    _line([(10, 15), (10, 4)], x, y, s, w, color)
+    _line([(14, 15), (14, 4)], x, y, s, w, color)
+    _arc(12, 4, 2, 180, 360, x, y, s, w, color)
+    _ring(12, 17.5, 3.5, x, y, s, w, color)
+  elif name == "steer":
+    _line([(4, 19), (12, 4), (20, 19)], x, y, s, w, color)
+    _line([(8, 12.5), (16, 12.5)], x, y, s, w, color)
+  elif name == "gauge":
+    _arc(12, 14, 9, 150, 390, x, y, s, w, color)
+    _line([(12, 14), (16, 10)], x, y, s, w, color)
+  elif name == "cpu":
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 5 * s, y + 5 * s, 14 * s, 14 * s), 0.2, 6, w, color)
+    rl.draw_rectangle_lines_ex(rl.Rectangle(x + 9 * s, y + 9 * s, 6 * s, 6 * s), w, color)
+    for p in (9, 15):
+      _line([(p, 2), (p, 5)], x, y, s, w, color)
+      _line([(p, 19), (p, 22)], x, y, s, w, color)
+      _line([(2, p), (5, p)], x, y, s, w, color)
+      _line([(19, p), (22, p)], x, y, s, w, color)
+  elif name == "tune":
+    _ring(12, 12, 6, x, y, s, w, color)
+    for a, b in (((12, 2), (12, 6)), ((12, 18), (12, 22)), ((2, 12), (6, 12)), ((18, 12), (22, 12))):
+      _line([a, b], x, y, s, w, color)
+  elif name == "palette":
+    _ring(12, 12, 9, x, y, s, w, color)
+    for px, py in ((8, 10), (12, 7), (16, 10)):
+      rl.draw_circle_v(rl.Vector2(x + px * s, y + py * s), w, color)
+  elif name == "eye":
+    _arc(12, 20, 11, 215, 325, x, y, s, w, color)
+    _arc(12, 4, 11, 35, 145, x, y, s, w, color)
+    _ring(12, 12, 3, x, y, s, w, color)
+  elif name == "cloud":
+    _arc(9, 13, 5, 120, 280, x, y, s, w, color)
+    _arc(15, 11, 5.5, 200, 380, x, y, s, w, color)
+    _line([(6.5, 17.5), (17.5, 17.5)], x, y, s, w, color)
+  elif name == "flame":
+    _line([(12, 3), (17, 10), (18, 15)], x, y, s, w, color)
+    _line([(12, 3), (7, 10), (6, 15)], x, y, s, w, color)
+    _arc(12, 15, 6, 0, 180, x, y, s, w, color)
+  elif name == "export":
+    _line([(12, 3), (12, 15)], x, y, s, w, color)
+    _line([(7, 8), (12, 3), (17, 8)], x, y, s, w, color)
+    _line([(4, 14), (4, 21), (20, 21), (20, 14)], x, y, s, w, color)
+  elif name == "phone":
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 6 * s, y + 2 * s, 12 * s, 20 * s), 0.25, 6, w, color)
+    _line([(11, 18), (13, 18)], x, y, s, w, color)
+  elif name == "car":
+    _line([(3, 16), (3, 12), (6, 6), (18, 6), (21, 12), (21, 16), (3, 16)], x, y, s, w, color)
+    _ring(7.5, 17, 2, x, y, s, w, color)
+    _ring(16.5, 17, 2, x, y, s, w, color)
+  elif name == "download":
+    _line([(12, 3), (12, 15)], x, y, s, w, color)
+    _line([(7, 10), (12, 15), (17, 10)], x, y, s, w, color)
+    _line([(4, 21), (20, 21)], x, y, s, w, color)
+  elif name == "map":
+    _line([(3, 6), (9, 3), (15, 6), (21, 3), (21, 18), (15, 21), (9, 18), (3, 21), (3, 6)], x, y, s, w, color)
+    _line([(9, 3), (9, 18)], x, y, s, w, color)
+    _line([(15, 6), (15, 21)], x, y, s, w, color)
+  elif name == "code":
+    _line([(8, 7), (3, 12), (8, 17)], x, y, s, w, color)
+    _line([(16, 7), (21, 12), (16, 17)], x, y, s, w, color)
+  elif name == "layout":
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 3 * s, y + 3 * s, 18 * s, 18 * s), 0.12, 6, w, color)
+    _line([(3, 9), (21, 9)], x, y, s, w, color)
+    _line([(9, 9), (9, 21)], x, y, s, w, color)
+  elif name == "battery":
+    rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 2 * s, y + 7 * s, 17 * s, 10 * s), 0.25, 6, w, color)
+    _line([(21.5, 10.5), (21.5, 13.5)], x, y, s, w, color)
   else:
     _ring(12, 12, 9, x, y, s, w, color)
 
