@@ -105,6 +105,8 @@ _services: dict[str, tuple] = {
   # bluepilot
   "controllerStateBP": (True, 100., 10),
   "carStateBP": (True, 100., 10),
+  "chargingStateBP": (True, 2., 1),  # Custom: offroad charging monitor
+  "obdStateBP": (True, 1., 1),  # Custom: OBD adapter link
 
   # debug
   "uiDebug": (True, 0., 1),

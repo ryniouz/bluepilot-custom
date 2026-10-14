@@ -9,6 +9,11 @@ from cereal import messaging
 # from bluepilot.logger.bp_logger import debug, info, warning, error, critical
 from opendbc.sunnypilot.car.ford.mads import MadsCarState
 from opendbc.sunnypilot.car.ford.carstate_ext import CarStateExt
+# Custom: Lightning EV state, vehicle mode and alerts
+from opendbc.car import DT_CTRL
+from opendbc.sunnypilot.car.ford.lightning import EV_PT_MESSAGES, HEV_BATTERY_MESSAGES, EvSettings, LightningState, \
+                                                  fill_car_state_bp
+# Custom: end
 
 # from opendbc.car.ford.fordcanparser import FordCanParser
 from opendbc.car.ford.helpers import get_hev_power_flow_text, get_hev_engine_on_reason_text
@@ -45,6 +50,31 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
     self.params.put_bool("FordPrefHevDataAvailable", True if CP.flags & FordFlags.HEV_CLUSTER_DATA else False)
     self.params.put_bool("FordPrefHevBattDataAvailable", True if CP.flags & FordFlags.HEV_BATTERY_DATA else False)
     self.hev_data_available = CP.flags & FordFlags.HEV_CLUSTER_DATA
+
+    # Custom: Lightning EV state. Read by carcontroller for tune profile selection.
+    self.lightning = LightningState()
+    self.ev_settings = EvSettings()
+    self.bp_drive_mode = "unknown"
+    self.bp_trailer_connected = False
+    self.bp_one_pedal = False
+    self.bp_tune_state = None
+    self._bp_frame = 0
+    self._update_ev_settings()
+    # Custom: end
+
+  # Custom: settings are read once a second, not every 100 Hz frame
+  def _update_ev_settings(self):
+    try:
+      self.ev_settings = EvSettings(
+        low_soc_pct=float(self.params.get("BPLowSocAlertPct", return_default=True)),
+        critical_soc_pct=float(self.params.get("BPCriticalSocAlertPct", return_default=True)),
+        tire_low_kpa=float(self.params.get("BPTireLowPressureKpa", return_default=True)),
+        low_volt_v=float(self.params.get("BPLowVoltAlertV", return_default=True)),
+        one_pedal_mode=int(self.params.get("BPOnePedalMode", return_default=True)),
+      )
+    except (TypeError, ValueError):
+      self.ev_settings = EvSettings()
+  # Custom: end
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -180,10 +210,10 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
       *self.button_events,
     ]
 
-    self.car_state_bp_msg = self.update_car_state_bp(cp, cp_cam)
+    self.car_state_bp_msg = self.update_car_state_bp(cp, cp_cam, ret)
     return ret, ret_sp
 
-  def update_car_state_bp(self, cp, cp_cam):
+  def update_car_state_bp(self, cp, cp_cam, ret=None):
     """Update the CarStateBP message for HEV/PHEV data
 
     Args:
@@ -307,6 +337,29 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
     except (KeyError, AttributeError):
         pass
 
+    # Custom: Lightning EV state, tire, 12 V, ambient, drive mode, trailer and alerts
+    if self.CP.flags & FordFlags.CANFD and ret is not None:
+      self._bp_frame += 1
+      if self._bp_frame % 100 == 0:
+        self._update_ev_settings()
+      try:
+        values = self.lightning.update(cp, self.ev_settings, ret.vEgo, ret.aEgo, ret.gasPressed, ret.brakePressed,
+                                       ret.cruiseState.enabled, DT_CTRL)
+        fill_car_state_bp(dat.carStateBP, values)
+        self.bp_drive_mode = values["vehicleMode.driveMode"]
+        self.bp_trailer_connected = values["vehicleMode.trailerConnected"]
+        self.bp_one_pedal = values["vehicleMode.onePedalActive"]
+        # BattTrac_I_Actl is stuck at -750 A on the Lightning: give the existing gauge the working current
+        if hybrid_battery.dataAvailable and values["evBattery.packCurrentSource"] not in ("none", "battTracActl"):
+          hybrid_battery.ampsActual = values["evBattery.packCurrent"]
+      except (KeyError, AttributeError, TypeError, ValueError) as e:
+        print(f"Lightning EV state error: {e}")
+      # (platformTuneActive, profile, accelMaxScale, latAccelScale), set by carcontroller
+      if self.bp_tune_state is not None:
+        tune = dat.carStateBP.tune
+        tune.platformTuneActive, tune.profile, tune.accelMaxScale, tune.latAccelScale = self.bp_tune_state
+    # Custom: end
+
     return dat
 
   def update_traffic_signals(self, cp_cam):
@@ -349,6 +402,13 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
       pt_messages.append(("Battery_Traction_1_FD1", float('nan')))
       pt_messages.append(("Battery_Traction_3_FD1", float('nan')))
       pt_messages.append(("Battery_Traction_4_FD1", float('nan')))
+
+    # Custom: Lightning EV, tire, 12 V, ambient, drive mode and trailer messages (non-critical)
+    if CP.flags & FordFlags.CANFD:
+      pt_messages += [(m, float('nan')) for m in EV_PT_MESSAGES]
+      if not CP.flags & FordFlags.HEV_BATTERY_DATA:
+        pt_messages += [(m, float('nan')) for m in HEV_BATTERY_MESSAGES]
+    # Custom: end
 
     if CP.flags & FordFlags.ALT_STEER_ANGLE:
       pt_messages += [

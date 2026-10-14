@@ -312,6 +312,36 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlinkerPauseLaneChange", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Custom: Lightning control and CAN (stream B)
+    {"BPLightningTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // Lightning tune profile, selected by fingerprint
+    {"BPTowProfile", {PERSISTENT | BACKUP, INT, "0"}},              // 0 auto (trailer or Tow/Haul), 1 off, 2 always on
+    {"BPDriveModeTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // follow the drive mode (sport, off-road, slippery)
+    {"BPOnePedalMode", {PERSISTENT | BACKUP, INT, "2"}},            // 0 off, 1 on, 2 estimate from coast-down
+    {"BPLowSocAlertPct", {PERSISTENT | BACKUP, INT, "20"}},
+    {"BPCriticalSocAlertPct", {PERSISTENT | BACKUP, INT, "10"}},
+    {"BPTireLowPressureKpa", {PERSISTENT | BACKUP, INT, "240"}},
+    {"BPLowVoltAlertV", {PERSISTENT | BACKUP, FLOAT, "11.8"}},
+    {"BPChargeKeepAwake", {PERSISTENT | BACKUP, BOOL, "1"}},        // stay on offroad while the truck charges
+    {"BPChargeSleepDelayMin", {PERSISTENT | BACKUP, INT, "30"}},    // power down this long after an offroad charge ends; 0 = use MaxTimeOffroad
+    {"BPChargingActive", {CLEAR_ON_MANAGER_START, BOOL, "0"}},      // written by charging_monitor
+    {"BPChargeLastActiveTs", {CLEAR_ON_MANAGER_START, FLOAT}},      // time.monotonic() of the last charging sample
+    {"BPGuestMode", {PERSISTENT, BOOL, "0"}},                        // factory driver assist: card goes passive (noOutput) at the next car start
+    {"BPGuestModeOneTrip", {PERSISTENT | BACKUP, BOOL, "1"}},       // turn Guest Mode off again after one drive
+    {"BPGuestModeActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},  // this drive is running as Guest Mode (UI)
+    {"BPGuestModeUsed", {PERSISTENT, BOOL, "0"}},                    // set by card on a guest drive; cleared at the next offroad start
+    {"BPLockedPlatform", {PERSISTENT | BACKUP, STRING, "FORD_F_150_LIGHTNING_MK1"}},  // only control this platform; anything else stays passive. Empty = any car
+    {"BPPlatformMismatch", {CLEAR_ON_MANAGER_START, STRING}},       // fingerprint of a car the lock refused (for the UI)
+    {"BPObdEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},             // OBD adapter link on/off (read-only PID polling)
+    {"BPObdTransport", {PERSISTENT | BACKUP, STRING, "wifi"}},      // wifi, usb, bluetooth or simulated
+    {"BPObdAddress", {PERSISTENT | BACKUP, STRING, ""}},            // wifi host[:port], usb /dev path, bluetooth MAC[#channel]
+    {"BPObdPollWhenOff", {PERSISTENT | BACKUP, BOOL, "0"}},         // also poll while the truck is off and not charging (keeps modules awake)
+    {"BPLvSaver", {PERSISTENT | BACKUP, BOOL, "0"}},                // 12 V power saving: short offroad time, higher 12 V cutoffs
+    {"BPLvSaverOffroadMin", {PERSISTENT | BACKUP, INT, "10"}},      // power-saving offroad time, minutes
+    {"BPLvShutdownSoc", {PERSISTENT | BACKUP, INT, "0"}},           // power down offroad below this 12 V SOC (%); 0 = off
+    {"BPLvWakeFilter", {PERSISTENT | BACKUP, BOOL, "1"}},           // a Lightning 12 V top-up wake is not a drive
+    {"BPLvState", {CLEAR_ON_MANAGER_START, JSON}},                   // written by charging_monitor: 12 V SOC/voltage, top-up wake, timestamps
+    // Custom: end
+
     // BluePilot: Portal (Web Routes Server)
     {"EnableWebRoutesServer", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPPortalPort", {PERSISTENT | BACKUP, INT, "8088"}},

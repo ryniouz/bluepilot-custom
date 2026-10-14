@@ -20,6 +20,7 @@ from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.selfdrive.car.helpers import convert_carControlSP, convert_to_capnp
+from openpilot.selfdrive.car.guest_mode import guest_mode_requested, mark_drive_start, platform_allowed  # Custom: Guest Mode, platform lock
 
 from openpilot.sunnypilot.mads.helpers import set_alternative_experience, set_car_specific_params
 from openpilot.sunnypilot.selfdrive.car import interfaces as sunnypilot_interfaces
@@ -131,6 +132,11 @@ class Car:
     self.dynamic_experimental_control = self.params.get_bool("DynamicExperimentalControl")
 
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
+    # Custom: Guest Mode and the platform lock reuse the passive path, so the panda opens the relay and the car runs its factory driver assist
+    guest_mode = guest_mode_requested(self.params)
+    openpilot_enabled_toggle = openpilot_enabled_toggle and not guest_mode and platform_allowed(self.params, self.CP.carFingerprint)
+    mark_drive_start(self.params, guest_mode)
+    # Custom: end
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
     self.CP.passive = not controller_available or self.CP.dashcamOnly
     if self.CP.passive:

@@ -17,6 +17,9 @@ from common.pid import PIDController # PID control of lateral
 from opendbc.car.ford.helpers import compute_dm_msg_values
 from openpilot.common.params import Params
 from opendbc.sunnypilot.car.ford.icbm import IntelligentCruiseButtonManagementInterface
+# Custom: Lightning tune, tow and drive-mode profiles
+from opendbc.sunnypilot.car.ford.lightning import STOCK_TUNE, TuneBlender, TuneSettings, select_profile
+# Custom: end
 
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -48,7 +51,8 @@ def anti_overshoot(apply_curvature, apply_curvature_last, v_ego):
 
   return float(np.interp(v_ego, [5, 10], [apply_curvature, output_curvature]))
 
-def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_curvature, v_ego_raw, steering_angle, lat_active, CP):
+def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_curvature, v_ego_raw, steering_angle, lat_active, CP,
+                                lat_accel_scale=1.0):  # Custom: lat_accel_scale (<= 1, profile)
   max_curvature = 1 # large initial value
   # No blending at low speed due to lack of torque wind-up and inaccurate current curvature
   if v_ego_raw > 9:
@@ -69,15 +73,16 @@ def apply_ford_curvature_limits(apply_curvature, apply_curvature_last, current_c
   # Safety is not aware of the road roll so we subtract a conservative amount at all times
   if CP.flags & FordFlags.CANFD:
     # Limit curvature to conservative max lateral acceleration
-    curvature_accel_limit = MAX_LATERAL_ACCEL / (max(v_ego_raw, 1) ** 2)
+    # Custom: profiles may only lower the cap
+    curvature_accel_limit = MAX_LATERAL_ACCEL * min(lat_accel_scale, 1.0) / (max(v_ego_raw, 1) ** 2)
     apply_curvature = float(np.clip(apply_curvature, -curvature_accel_limit, curvature_accel_limit))
     max_curvature = np.minimum(max_curvature, abs(curvature_accel_limit))
 
   return apply_curvature, max_curvature
 
 
-def apply_creep_compensation(accel: float, v_ego: float) -> float:
-  creep_accel = np.interp(v_ego, [1., 3.], [0.6, 0.])
+def apply_creep_compensation(accel: float, v_ego: float, creep_max: float = 0.6) -> float:  # Custom: creep_max
+  creep_accel = np.interp(v_ego, [1., 3.], [creep_max, 0.])
   creep_accel = np.interp(accel, [0., 0.2], [creep_accel, 0.])
   accel -= creep_accel
   return float(accel)
@@ -238,6 +243,39 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
     self.hands = 0
     self._update_params()
 
+    # Custom: Lightning tune profile, selected by fingerprint; tow/drive-mode profiles blend in over 3 s
+    self.tune_settings = TuneSettings()
+    self.tune_blender = TuneBlender()
+    self.tune = STOCK_TUNE
+    self._update_tune_params()
+    # Custom: end
+
+  # Custom: tune settings are read once a second
+  def _update_tune_params(self):
+    try:
+      self.tune_settings = TuneSettings(
+        lightning_tune=bool(self.params.get("BPLightningTune", return_default=True)),
+        tow_profile=int(self.params.get("BPTowProfile", return_default=True)),
+        drive_mode_tune=bool(self.params.get("BPDriveModeTune", return_default=True)),
+      )
+    except (TypeError, ValueError):
+      self.tune_settings = TuneSettings()
+
+  def _update_tune(self, CS):
+    if self.frame % 100 == 0:
+      self._update_tune_params()
+    profile = select_profile(self.CP.carFingerprint, self.tune_settings,
+                             getattr(CS, "bp_drive_mode", "unknown"), getattr(CS, "bp_trailer_connected", False))
+    self.tune = self.tune_blender.update(profile, DT_CTRL)
+    t = self.tune
+    self.following_accel_ROC = t.following_accel_roc
+    self.brake_actuate_target = t.brake_actuate_target
+    self.brake_actuate_release = t.brake_actuate_release
+    self.precharge_actuate_target = t.precharge_actuate_target
+    self.precharge_actuate_release = t.precharge_actuate_release
+    CS.bp_tune_state = (profile != "stock", profile, float(t.accel_max_scale), float(t.lat_accel_scale))
+  # Custom: end
+
   def _update_params(self):
     self.send_hands_free_cluster_msg = self.params.get_bool("send_hands_free_cluster_msg")
     # Block hands-free UI on CAN vehicles - only CAN-FD supports the cluster message
@@ -338,6 +376,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
       self.VM.update_params(x, sr)
 
     self._update_params()
+    self._update_tune(CS)  # Custom
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -394,7 +433,8 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
 
     # send steer msg at 20Hz
     if (self.frame % CarControllerParams.STEER_STEP) == 0:
-      if CC.latActive:
+      # Custom: no BP lateral until the first modelV2 arrives (it reads model meta, lanes and orientation)
+      if CC.latActive and self.model is not None:
         self.precision_type = 1
         steeringPressed = CS.out.steeringPressed
         steeringAngleDeg_PV = CS.out.steeringAngleDeg
@@ -437,6 +477,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
 
         # determine lane_change_factor based on speed
         lane_change_factor = interp(CS.out.vEgoRaw, self.lane_change_factor_bp, [self.lane_change_factor_low, self.lane_change_factor_high])
+        lane_change_factor *= min(self.tune.lane_change_factor_scale, 1.0)  # Custom: profile
 
         # if changing lanes, modify curvature to smooth out the lane change
         if self.lane_change and (self.model.meta.laneChangeDirection == 1): # if we are changing lanes to the left
@@ -479,7 +520,8 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
                                                                 CS.out.vEgoRaw,
                                                                 0,
                                                                 CC.latActive,
-                                                                self.CP)
+                                                                self.CP,
+                                                                self.tune.lat_accel_scale)  # Custom
 
         # lateral uncertianty is needed for the torque bar on curvature vehicles.
         lateralUncertainty = self.calculate_lateral_uncertainty(requested_curvature, apply_curvature, max_curvature)
@@ -599,6 +641,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
 
         # rate limit path_angle_low_c for comfort
         path_angle_roc = interp(abs(CS.out.vEgoRaw), self.LC_path_angle_ROC_bp, self.LC_path_angle_ROC_v)
+        path_angle_roc *= min(self.tune.path_angle_roc_scale, 1.0)  # Custom: profile
         path_angle_low_c = clip(path_angle_low_c, self.path_angle_last - path_angle_roc, self.path_angle_last + path_angle_roc)
 
         # if the driver is applying consistent pressure to the steering wheel, reset the path_angle_low_c PID controller
@@ -648,7 +691,8 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
           current_curvature = -CS.out.yawRate / max(CS.out.vEgoRaw, 0.1)
 
           self.apply_curvature_last, max_curvature = apply_ford_curvature_limits(apply_curvature, self.apply_curvature_last, current_curvature,
-                                                              CS.out.vEgoRaw, 0., CC.latActive, self.CP)
+                                                              CS.out.vEgoRaw, 0., CC.latActive, self.CP,
+                                                              self.tune.lat_accel_scale)  # Custom
 
           #rem bluepilot sends apply_curvature, and at some point openpilot swapped to sending apply_curvature_last.
           apply_curvature = self.apply_curvature_last
@@ -727,7 +771,9 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
         # Compensate for engine creep at low speed.
         # Either the ABS does not account for engine creep, or the correction is very slow
         # TODO: verify this applies to EV/hybrid
-        op_accel = apply_creep_compensation(op_accel, CS.out.vEgo)
+        # Custom: Lightning creep amount; no creep compensation with One-Pedal Drive (the truck does not creep)
+        creep_max = 0.0 if getattr(CS, "bp_one_pedal", False) else self.tune.creep_comp_max
+        op_accel = apply_creep_compensation(op_accel, CS.out.vEgo, creep_max)
 
         # The stock system has been seen rate limiting the brake accel to 5 m/s^3,
         # however even 3.5 m/s^3 causes some overshoot with a step response.
@@ -836,7 +882,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
 
         # limits when gaining
         if gaining:
-          if lead_time_sec < 1.5:
+          if lead_time_sec < self.tune.lead_gas_cut_s:  # Custom: profile (stock 1.5 s)
               max_follow_gas = 0.0 # if we are within 1.5 seconds and gaining, why press the gas?
               min_follow_gas = 0.0
           else:
@@ -920,9 +966,11 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
         gas = CarControllerParams.INACTIVE_GAS
 
       # Clip to ford.h ACCDATA safety limits
-      accel = float(clip(accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+      # Custom: profiles may lower the positive limit (tow, off-road, slippery), never raise it
+      accel_max = CarControllerParams.ACCEL_MAX * float(np.clip(self.tune.accel_max_scale, 0.1, 1.0))
+      accel = float(clip(accel, CarControllerParams.ACCEL_MIN, accel_max))
       if gas != CarControllerParams.INACTIVE_GAS:
-        gas = float(clip(gas, CarControllerParams.MIN_GAS, CarControllerParams.ACCEL_MAX))
+        gas = float(clip(gas, CarControllerParams.MIN_GAS, accel_max))
       accel_pred_send = CarControllerParams.INACTIVE_GAS
 
       can_sends.append(fordcan.create_acc_msg(
