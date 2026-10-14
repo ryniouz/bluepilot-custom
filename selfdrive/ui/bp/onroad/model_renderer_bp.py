@@ -15,6 +15,7 @@ from openpilot.selfdrive.ui.bp.onroad.road_view import (LeadInfo, SHOW_EDGES, SH
                                                         lead_level, road_prefs)
 from openpilot.system.ui.lib.shader_polygon import Gradient
 from bluepilot.ui.lib.theme import Console, Onroad, mix, with_alpha
+from openpilot.selfdrive.ui.bp.onroad.lane_change_fx import LaneChangeFx
 
 # BluePilot: Lane line colors by status (upstream removed LANE_LINE_COLORS dict)
 # Custom: Console status hues; disengaged lines go ghost grey instead of black
@@ -55,6 +56,7 @@ class ModelRendererBP(ModelRenderer):
 
   def __init__(self):
     super().__init__()
+    self._lc_fx = LaneChangeFx()
     self._bp_params = Params()
 
     # BluePilot: Replace SP chevron metrics with BP version (horizontal boxed layout)
@@ -152,6 +154,8 @@ class ModelRendererBP(ModelRenderer):
     self._draw_lane_lines()
     self._draw_blindspot_lanes(sm)
     self._draw_path(sm)
+    # Custom: looping lane change cue toward the target lane
+    self._lc_fx.render(self, sm, road_prefs.lane_change)
 
     # Custom: Console lead marker; the numbers go to the lead card (drawn by the road view)
     has_lead = bool(render_lead_indicator and radar_state and radar_state.leadOne.status)
