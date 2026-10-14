@@ -74,6 +74,12 @@ SCENES: dict[str, str] = {
   "automations": "Connect > Home automations: at home on a home network, after joining it",
   "automations_large": "Connect > Home automations at UI size Large",
   "upload_settings": "Drives > Upload settings: comma connect, Citadel uploads, LTE data limit",
+  "vehicle": "System > Vehicle: the Lightning, platform lock, Driving tab",
+  "vehicle_alerts": "System > Vehicle: Alerts tab (battery %, tire PSI, 12 V)",
+  "vehicle_guest": "System > Vehicle: Guest Mode tab",
+  "vehicle_power": "System > Vehicle: Power tab",
+  "vehicle_mismatch": "System > Vehicle: the comma refused another car",
+  "steering": "Drive > Steering: torque and NNLC rows hidden",
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
   "boot_progress": "Start-up spinner with a progress number",
   "boot_error": "Error window (system/ui/text.py) with a build log",
@@ -1019,7 +1025,8 @@ def run_scene(sc: Scene):
               "drives", "drives_offload", "drives_storage", "connectivity", "updates", "home_guest",
               "calibration", "onboarding_terms", "onboarding_guide", "onboarding_welcome",
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
-              "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings", "boot_spinner", "boot_progress", "boot_error"):
+              "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
+              "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner", "boot_progress", "boot_error"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1160,6 +1167,20 @@ def run_scene(sc: Scene):
     sc.put("BPCellLimitMB", 5000)
     sc.main._open_shell()
     sc.main._shell.open_panel("upload_settings")
+    sc.settle()
+    sc.shot()
+  elif name.startswith("vehicle"):
+    sc.put("BPPlatformMismatch", "FORD_BRONCO_SPORT_MK1" if name == "vehicle_mismatch" else "")
+    sc.main._open_shell()
+    sc.main._shell.open_panel("vehicle")
+    page = sc.main._shell.current_page().widget
+    page._tab = {"vehicle_alerts": 1, "vehicle_guest": 2, "vehicle_power": 3}.get(name, 0)
+    sc.settle()
+    sc.shot()
+  elif name == "steering":
+    sc.main._open_shell()
+    from openpilot.selfdrive.ui.layouts.settings.settings import PanelType
+    sc.main._shell.open_panel(PanelType.STEERING)
     sc.settle()
     sc.shot()
   elif name.startswith("boot_"):
