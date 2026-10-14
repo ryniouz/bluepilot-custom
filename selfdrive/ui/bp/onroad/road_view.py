@@ -38,10 +38,14 @@ SHOW_EDGES = 1 << 5
 SHOW_NEIGHBOURS = 1 << 6
 SHOW_SPEED_TAG = 1 << 7   # lead speed beside the car (off by default)
 SHOW_LEAD_CARD = 1 << 8
+MARKER_SHIFT = 9          # bits 9-10: lead marker style, an index into LEAD_STYLES
+MARKER_MASK = 0b11 << MARKER_SHIFT
 
 DEFAULT_SHOW = (SHOW_DISTANCE | SHOW_LEAD_SPEED | SHOW_GAP | SHOW_LANES | SHOW_EDGES | SHOW_NEIGHBOURS |
                 SHOW_LEAD_CARD)
 PARAM = "BPRoadView"
+
+LEAD_STYLES = ("floor", "bracket", "corners", "chevron")
 
 # (bit, label) in the order the settings sheet lists them
 OPTIONS = (
@@ -81,7 +85,18 @@ class RoadViewPrefs:
     return bool(self.value & bit)
 
   def toggle(self, bit: int):
-    self._value = self.value ^ bit
+    self._write(self.value ^ bit)
+
+  @property
+  def marker(self) -> str:
+    return LEAD_STYLES[(self.value & MARKER_MASK) >> MARKER_SHIFT]
+
+  def next_marker(self):
+    i = ((self.value & MARKER_MASK) >> MARKER_SHIFT) + 1
+    self._write((self.value & ~MARKER_MASK) | ((i % len(LEAD_STYLES)) << MARKER_SHIFT))
+
+  def _write(self, value: int):
+    self._value = value
     try:
       self._params.put(PARAM, int(self._value))
     except Exception:
@@ -134,9 +149,8 @@ def gap_color(gap: float) -> rl.Color:
 # -- lead marker -------------------------------------------------------------------------------
 
 MARK_T = 10           # stroke thickness
-# Marker style. "bracket" is the default; the others are candidates shown to Lucas (2026-10-14)
-LEAD_STYLES = ("bracket", "floor", "corners", "chevron")
-LEAD_STYLE = "bracket"
+# Marker styles in settings order; index 0 (floor pad) is the default. Lucas 2026-10-14: offer all.
+LEAD_STYLE_LABELS = {"floor": "Floor", "bracket": "Bracket", "corners": "Corners", "chevron": "Chevron"}
 
 
 def _keyed(parts: list[rl.Rectangle], color: rl.Color, alpha: float):
@@ -153,7 +167,7 @@ def draw_lead_marker(x: float, y: float, w: float, color: rl.Color, alpha: float
   """Mark the lead at its ground contact (x, y) with width w. Camera-only leads draw lighter
   (open bracket, hollow pad, thinner corners) so radar and camera read differently without
   another colour."""
-  style = style or LEAD_STYLE
+  style = style or road_prefs.marker
   x0, x1 = x - w / 2, x + w / 2
   if style == "floor":
     # A flat pad on the road under the car, like a highlighted parking spot
