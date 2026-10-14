@@ -57,6 +57,10 @@ def sentence(text: str) -> str:
 
 def alert_icon(alert) -> str:
   t = f"{alert.text1} {alert.text2}".lower()
+  if "calibrat" in t:
+    return "calibrate"
+  if "experimental" in t:
+    return "flask"
   if "wheel" in t or "steer" in t or "take control" in t or "hands" in t:
     return "hands"
   if "attention" in t or "distract" in t or "eyes" in t or "road" in t or "driver" in t:
