@@ -28,6 +28,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from bluepilot.ui.lib.ev_data import EvDataSource, EvSnapshot, finite, temp_range_factor, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
 from bluepilot.ui.lib.layout_presets import LayoutPreset
+from bluepilot.ui.lib.obd_link import obd_link
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.console.home import soc_color
 from bluepilot.ui.lib.theme import Console, Onroad, roundness
@@ -60,6 +61,9 @@ DOCK_CAPTION = 30       # kit CAP
 DOCK_BAR_H = 28         # thick squared Console bar (kit K.bar)
 DOCK_RADIUS = 24        # kit PANEL_R
 
+OBD_HEAD_H = 48
+CELL_SPREAD_WARN_MV = 50.0   # min module voltage this far below the average is worth a look
+
 TIRE_LOW_PSI = 30.0  # Lightning placard is 42 psi; the TPMS warning sits near 32
 
 
@@ -70,8 +74,21 @@ class EvHudRenderer:
     self._font_semi = gui_app.font(FontWeight.SEMI_BOLD)
     self.last_rect: rl.Rectangle | None = None
     self.dock_last_rect: rl.Rectangle | None = None
+    self._obd: dict[str, float] = {}
 
   # -- data -----------------------------------------------------------------
+
+  def _obd_values(self) -> dict[str, float] | None:
+    """Fresh OBD values by short name while the adapter is connected; None otherwise, so the OBD
+    rows simply are not there (no greyed-out or error rows) when it is off, asleep or failing."""
+    try:
+      snap = obd_link().snapshot()
+    except Exception:
+      return None
+    if not (snap.received and snap.link == "connected"):
+      return None
+    vals = {v.name: v.value for v in snap.values if finite(v.value)}
+    return vals or None
 
   def update(self) -> EvSnapshot:
     shared = getattr(ui_state, "ev", None)
@@ -90,6 +107,19 @@ class EvHudRenderer:
         rows.append(("trip", ROW_H))
       if len(s.tire_kpa) == 4 and all(finite(t) and t > 0 for t in s.tire_kpa):
         rows.append(("tires", ROW_H + 36))
+      # OBD sits above the 12 V and outside rows, which drop first when the card runs out of room
+      obd = self._obd_values()
+      if obd is not None:
+        self._obd = obd
+        obd_rows = []
+        if "HvbEte" in obd:
+          obd_rows.append(("obd_energy", ROW_H))
+        if "HvbAvgModV" in obd and "HvbMinModV" in obd:
+          obd_rows.append(("obd_cells", ROW_H))
+        if "LvSoc" in obd:
+          obd_rows.append(("obd_lv", ROW_H))
+        if obd_rows:
+          rows += [("obd_head", OBD_HEAD_H)] + obd_rows
       if finite(s.lv_volts):
         rows.append(("lv", ROW_H))
       if finite(s.outside_temp_c):
@@ -136,7 +166,7 @@ class EvHudRenderer:
     cy = y + PAD
     inner = rl.Rectangle(x + PAD_X, 0, CARD_W - 2 * PAD_X, 0)
     for k, (name, rh) in enumerate(rows):
-      if k:
+      if k and rows[k - 1][0] != "obd_head":
         rl.draw_rectangle(int(inner.x), int(cy), int(inner.width), 2, Console.BORDER_SUBTLE)
       inner.y, inner.height = cy, rh
       getattr(self, f"_row_{name}")(inner, s)
@@ -322,6 +352,24 @@ class EvHudRenderer:
     impact = (f - 1.0) * 100.0 if finite(f) else 0.0
     label = "Outside" if abs(impact) < 2 else f"Outside · {impact:+.0f}%"
     self._row(r, label, self._temp(s.outside_temp_c), self._temp_unit(), dot=Console.WARNING if impact <= -15 else None)
+
+  # -- OBD rows (only while the adapter is connected) ----------------------------------------
+
+  def _row_obd_head(self, r: rl.Rectangle, s: EvSnapshot):
+    rl.draw_circle(int(r.x + 6), int(r.y + r.height / 2 + 2), 6, Console.SUCCESS)
+    rl.draw_text_ex(self._font_semi, "OBD", rl.Vector2(r.x + 22, r.y + (r.height - SMALL) / 2 + 2), SMALL, 0, Console.TEXT_SECONDARY)
+
+  def _row_obd_energy(self, r: rl.Rectangle, s: EvSnapshot):
+    self._row(r, "Energy left", f"{self._obd['HvbEte']:.1f}", "kWh")
+
+  def _row_obd_cells(self, r: rl.Rectangle, s: EvSnapshot):
+    spread = (self._obd["HvbAvgModV"] - self._obd["HvbMinModV"]) * 1000.0
+    warn = spread > CELL_SPREAD_WARN_MV
+    self._row(r, "Cell spread", f"{max(0.0, spread):.0f}", "mV", dot=Console.WARNING if warn else None)
+
+  def _row_obd_lv(self, r: rl.Rectangle, s: EvSnapshot):
+    soc = self._obd["LvSoc"]
+    self._row(r, "12 V charge", f"{soc:.0f}", "%", dot=Console.WARNING if soc < 60 else None)
 
   def _row_warn(self, r: rl.Rectangle, s: EvSnapshot):
     parts = []
