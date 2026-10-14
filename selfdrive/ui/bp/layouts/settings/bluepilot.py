@@ -1021,7 +1021,8 @@ class BluePilotLayout(Widget):
     self._hybrid_gauge_size_btn.action_item.set_selected_button(gauge_size - 1)
     style_idx = GaugeStyle(ui_state.params.get("FordPrefGaugeStyle", return_default=True) or 0)
     self._hybrid_gauge_style_btn.action_item.set_selected_button(style_idx)
-    plat_idx = PrimaryLateralControl(ui_state.params.get("FordPrefLateralControl", return_default=True) or 0)
+    plat_idx = PrimaryLateralControl(fresh["FordPrefLateralControl"] if "FordPrefLateralControl" in fresh
+                                     else ui_state.params.get("FordPrefLateralControl", return_default=True) or 0)  # Custom: the selector passes its value (put is non-blocking)
     self._primary_lateral_control_btn.action_item.set_selected_button(plat_idx)
     custom_prof = fresh.get("custom_profile_curv") if "custom_profile_curv" in fresh else self._safe_get_bool(ui_state.params, "custom_profile_curv")
     lane_pos = fresh.get("enable_lane_positioning_curv") if "enable_lane_positioning_curv" in fresh else self._safe_get_bool(ui_state.params, "enable_lane_positioning_curv")
@@ -1356,7 +1357,9 @@ class BluePilotLayout(Widget):
       self._params.put("FordPrefLateralControl", int(PrimaryLateralControl(button_index)))
     except UnknownKeyName:
       pass
-    self._update_toggles()
+    # Custom: 7.0's Params.put is non-blocking, so reading the key straight back still returns the old scheme
+    # and snapped the highlight back to Curvature. Hand the new value over, as the toggles do.
+    self._update_toggles(just_toggled={"FordPrefLateralControl": int(PrimaryLateralControl(button_index))})
 
   def _render(self, rect):
     # Process WiFi manager callbacks
