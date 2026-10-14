@@ -83,6 +83,7 @@ SCENES: dict[str, str] = {
   "steering": "Drive > Steering: torque and NNLC rows hidden",
   "boot_spinner": "Start-up spinner (system/ui/spinner.py) with a status line",
   "boot_progress": "Start-up spinner with a progress number",
+  "about": "System > About: Citadel Auto OS name, logo and version",
   "boot_error": "Error window (system/ui/text.py) with a build log",
   "tap_large": "UI size Large: a tap on the rail's Connect item (screen px) must open Connect",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
@@ -1066,7 +1067,7 @@ def run_scene(sc: Scene):
               "onboarding_safety", "onboarding_sunnylink", "cellular", "bluetooth", "bluetooth_obd", "bluetooth_phone",
               "bluetooth_obd_bt", "bluetooth_obd_live", "theme", "tap", "automations", "upload_settings",
               "vehicle", "vehicle_alerts", "vehicle_guest", "vehicle_power", "vehicle_mismatch", "steering", "boot_spinner",
-              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error"):
+              "truck_data", "truck_data_off", "truck_data_asleep", "home_mismatch", "boot_progress", "boot_error", "about"):
     sc.drive = None
   else:
     sc.drive = d
@@ -1289,6 +1290,16 @@ def run_scene(sc: Scene):
     home = sc.main._layouts[sc.MainState.HOME]
     if hasattr(home, "last_refresh"):
       home.last_refresh = 0
+    sc.settle()
+    sc.shot()
+  elif name == "about":
+    sc.put("Version", "6.0.0")
+    sc.put("GitBranch", "lightning-console")
+    sc.put("GitCommit", "9aafaf151e2b")
+    sc.put("GitCommitDate", "2026-10-14 20:30:00")
+    sc.put("DongleId", "a1b2c3d4e5f60718")
+    sc.main._open_shell()
+    sc.main._shell.open_panel("about")
     sc.settle()
     sc.shot()
   elif name == "home_mismatch":
