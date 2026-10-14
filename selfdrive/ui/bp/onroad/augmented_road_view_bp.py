@@ -29,6 +29,10 @@ from bluepilot.ui.lib.theme import Console
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
 
+# Custom: space between a theme's bottom cluster and the Quick controls pill above it
+QC_CLUSTER_GAP = 8
+
+
 class GaugeStyle(IntEnum):
   flat = 0
   arched = 1
@@ -122,6 +126,10 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
       self._render_rad_racer_scene(rect)
       ui_state.qc_dock = None
       ui_state.qc_blocked = self._guest
+      # Custom: the 8-Bit Racer gauge cluster owns the bottom centre (SPEED LIMIT readout), so the
+      # Minimal Quick controls pill sits above the cluster instead of on top of it
+      cluster_top = self._rad_racer_theme.cluster_top(self._content_rect)
+      ui_state.qc_bottom_inset = max(0.0, rect.y + rect.height - cluster_top) + QC_CLUSTER_GAP
       return
     if _scene is not None:
       _scene.draw_background(self._content_rect, getattr(self, "_bp_hide_camera_view", False))
