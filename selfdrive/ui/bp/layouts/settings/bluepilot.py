@@ -173,8 +173,8 @@ class BluePilotLayout(Widget):
 
     # Hybrid battery status toggle
     self._show_hybrid_battery_status = toggle_item(
-      lambda: tr("Show Hybrid/EV Battery Status"),
-      lambda: tr("Display hybrid battery gauge with SOC, voltage, and amps."),
+      lambda: tr("Battery gauge"),
+      lambda: tr("Battery charge, voltage and current while driving."),
       initial_state=self._safe_get_bool(self._params, "FordPrefHybridBatteryStatus"),
       callback=lambda state: self._toggle_callback(state, "FordPrefHybridBatteryStatus"),
       icon="warning.png"
@@ -182,8 +182,8 @@ class BluePilotLayout(Widget):
 
     # Hybrid power flow toggle
     self._show_hybrid_power_flow = toggle_item(
-      lambda: tr("Show Hybrid/EV Power Flow"),
-      lambda: tr("Display power flow gauge showing throttle demand and regenerative braking."),
+      lambda: tr("Power flow gauge"),
+      lambda: tr("Power to the motors and regen back to the battery."),
       initial_state=self._safe_get_bool(self._params, "FordPrefHybridPowerFlow"),
       callback=lambda state: self._toggle_callback(state, "FordPrefHybridPowerFlow"),
       icon="warning.png"
@@ -204,7 +204,7 @@ class BluePilotLayout(Widget):
       pass
     # Map 1/2 to button index 0/1
     self._hybrid_gauge_size_btn = multiple_button_item(
-      lambda: tr("Hybrid/EV Gauge Size"),
+      lambda: tr("Battery and power flow size"),
       lambda: tr("Set the size of the battery and power flow gauges."),
       buttons=[lambda: tr("Small"), lambda: tr("Large")],
       button_width=225,
@@ -224,7 +224,7 @@ class BluePilotLayout(Widget):
     except UnknownKeyName:
       pass
     self._hybrid_gauge_style_btn = multiple_button_item(
-      lambda: tr("Hybrid Gauge Style"),
+      lambda: tr("Battery and power flow style"),
       lambda: tr("Flat: horizontal bar in shared container. Arched: arch above torque bar (older style)."),
       buttons=[lambda: tr("Flat"), lambda: tr("Arched")],
       button_width=225,

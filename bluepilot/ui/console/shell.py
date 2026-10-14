@@ -130,6 +130,7 @@ class ConsoleShell(Widget):
     drive = tr("Drive") + " | " + tr("Changes apply on the next drive")
     panel(Dest.DRIVE, tr("Assist"), "gauge", "TOGGLES", drive)
     panel(Dest.DRIVE, tr("Steering"), "steer", "STEERING", drive)
+    self._hide_torque_rows(PT)
     panel(Dest.DRIVE, tr("Speed and cruise"), "pulse", "CRUISE", drive)
     panel(Dest.DRIVE, tr("Driving model"), "cpu", "MODELS", tr("Drive"))
     panel(Dest.DRIVE, tr("BluePilot tuning"), "tune", "BLUEPILOT", drive)
@@ -185,9 +186,25 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.calibration import CalibrationPage
     self.register_page(Dest.SYSTEM, Page(tr("Calibration"), "calibrate", CalibrationPage(), key="calibration", framed=False))
     panel(Dest.SYSTEM, tr("Software"), "list", "SOFTWARE", tr("System"))
-    panel(Dest.SYSTEM, tr("Vehicle"), "car", "VEHICLE", tr("System"))
+    # This build only drives the F-150 Lightning: its own page instead of sunnypilot's all-makes vehicle panel
+    from bluepilot.ui.console.pages.vehicle import VehiclePage
+    vehicle = VehiclePage()
+    vehicle.on_open_obd = lambda: self.open_panel("bluetooth")
+    self.register_page(Dest.SYSTEM, Page(tr("Vehicle"), "car", vehicle, key="vehicle", framed=False))
     panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
     panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
+
+  def _hide_torque_rows(self, PT):
+    """The Lightning steers by curvature: torque control, torque tuning and NNLC never apply, so hide them
+    (and the separators above them) instead of showing them greyed out."""
+    info = self._panels.get(getattr(PT, "STEERING", None))
+    inst = getattr(info, "instance", None)
+    scroller = getattr(inst, "_scroller", None)
+    hide = [getattr(inst, n, None) for n in ("_torque_control_toggle", "_torque_customization_button", "_nnlc_toggle")]
+    items = getattr(scroller, "_items", [])
+    for i, item in enumerate(items):
+      if item in hide or (i + 1 < len(items) and items[i + 1] in hide and type(item).__name__.startswith("LineSeparator")):
+        item.set_visible(False)
 
   # -- pages ------------------------------------------------------------------------
 
