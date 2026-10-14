@@ -80,8 +80,13 @@ def reassemble(frames: list[Frame], can_id: int) -> bytes | None:
   return None
 
 
-def response_id(header: str) -> int:
-  return int(header, 16) + 8
+FUNCTIONAL = "7DF"
+
+
+def response_ids(header: str) -> tuple[int, ...]:
+  if header.upper() == FUNCTIONAL:  # broadcast: any engine-range module may answer
+    return tuple(range(0x7E8, 0x7F0))
+  return (int(header, 16) + 8,)
 
 
 class Elm327:
@@ -127,18 +132,23 @@ class Elm327:
     req = check_request(request)
     self.set_header(header)
     raw = self.command(req)
-    rid = response_id(header)
+    rids = response_ids(header)
     frames = parse_lines(raw)
-    payload = reassemble(frames, rid)
-    if payload is None:
-      if any(f.can_id == rid for f in frames):
-        raise ElmError(f"incomplete response to {req}")
-      raise NoData(raw.strip()[:40] or "no response")
-    sid = int(req[:2], 16)
-    if payload[0] == 0x7F:
-      raise Negative(payload[2] if len(payload) > 2 else 0)
-    echo = bytes.fromhex(req)
-    expect = bytes([sid + 0x40]) + echo[1:]
-    if not payload.startswith(expect):
-      raise ElmError(f"unexpected response {payload[:6].hex()} to {req}")
-    return payload[len(expect):]
+    expect = bytes([int(req[:2], 16) + 0x40]) + bytes.fromhex(req)[1:]
+    negative = None
+    for rid in rids:  # functional requests: the first module with a positive answer wins
+      payload = reassemble(frames, rid)
+      if payload is None:
+        continue
+      if payload[0] == 0x7F:
+        negative = negative or Negative(payload[2] if len(payload) > 2 else 0)
+        continue
+      if payload.startswith(expect):
+        return payload[len(expect):]
+      if len(rids) == 1:
+        raise ElmError(f"unexpected response {payload[:6].hex()} to {req}")
+    if negative is not None:
+      raise negative
+    if any(f.can_id in rids for f in frames):
+      raise ElmError(f"incomplete response to {req}")
+    raise NoData(raw.strip()[:40] or "no response")

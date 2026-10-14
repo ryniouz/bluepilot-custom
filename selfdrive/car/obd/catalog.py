@@ -18,7 +18,7 @@ from openpilot.selfdrive.car.obd.formula import Formula
 
 USER_CATALOG = "/data/bp_obd/pids.csv"
 READ_SERVICES = (0x01, 0x09, 0x22)
-DEFAULT_HEADER = "7E0"
+DEFAULT_HEADER = "7DF"  # functional (broadcast) request: whichever module owns the DID answers on 7E8-7EF
 
 # unit normalisation: everything published is metric, like carStateBP
 _UNIT_FIX = {
@@ -102,6 +102,21 @@ BUILTIN = [
   _p("7E2", "22484D", "ChgSt", "HV charger status", "none", "A", 5, 0, 6),
   _p("7E2", "224851", "Evse", "EVSE type", "none", "A", 5, 0, 12),
   _p("7E2", "22484A", "ChgOV", "HV charger output voltage", "volts", "INT16(A,B)*0.01", 5, 0, 600),
+  _p("7E4", "22490C", "HvbSoh", "HV battery state of health", "percent", "A*0.5", 600, 0, 100),
+  _p("7E4", "22485C", "HvbCapAh", "HV battery capacity", "Ah", "INT16(A,B)*0.1", 600, 0, 1000),
+  _p("7E6", "2248DE", "HvbCHP", "Coolant heater power", "kW", "INT16(A,B)*0.001", 5, 0, 20),
+  _p("7E6", "2248DF", "HvbCHOp", "Coolant heater mode", "none", "A", 10, 0, 200),
+  _p("7E2", "22484E", "ChgInPwr", "Charger input power available", "kW", "INT16(A,B)*0.005", 5, 0, 600),
+  _p("7E2", "2248C4", "ChgMaxP", "Charger maximum power", "kW", "INT16(A,B)*0.05", 30, 0, 500),
+  _p("7E2", "224888", "ChgACT", "AC charge port temperature", "degC", "A-40", 10, -40, 150),
+  _p("7E2", "22489E", "DCChgSt", "DC charger status", "none", "A", 5, 0, 18),
+  # AC side of the on-board charger: functional requests, as the old EVTel agent sent them. Never seen
+  # answered on this truck yet (no charge has been logged), so treat them as unverified until one is.
+  _p("7DF", "22485E", "ACInV", "AC charger input voltage", "volts", "INT16(A,B)*0.01", 5, 0, 300),
+  _p("7DF", "22485F", "ACInA", "AC charger input current", "A", "A", 5, 0, 100),
+  _p("7DF", "224860", "ACInF", "AC charger input frequency", "Hz", "A*0.5", 30, 30, 90),
+  _p("7DF", "224861", "PilotDC", "Charge pilot duty cycle", "percent", "A*0.5", 10, 0, 100),
+  _p("7DF", "224862", "ProxSt", "Charge plug proximity status", "none", "A", 10, 0, 18),
   _p("726", "22402A", "LvV", "12 V battery voltage", "volts", "A/20+6", 10, 0, 20),
   _p("726", "224028", "LvSoc", "12 V battery state of charge", "percent", "A", 30, 0, 100),
   _p("726", "222813", "TireLF", "Tire pressure left front", "psi", "(((256*A)+B)/3+22/3)*0.145", 30),
