@@ -114,7 +114,7 @@ class ConsoleMainLayout(Widget):
     self._home.on_open_charging = self.open_charging
     self._home.on_open_alerts = lambda: self._shell.open_panel("alerts")
 
-    self._layouts[MainState.STANDBY].set_click_callback(lambda: self._open_shell(Dest.HOME))
+    self._layouts[MainState.STANDBY].set_click_callback(lambda: self._open_shell(Dest.HOME, 0))  # Home overview, not the last sub-page
     self._layouts[MainState.ONROAD].set_click_callback(self._on_onroad_clicked)
     self._layouts[MainState.CHARGING].set_click_callback(self._on_charging_clicked)
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
@@ -173,13 +173,13 @@ class ConsoleMainLayout(Widget):
   def _on_interactive_timeout(self):
     # Parked and idle: back to the standby splash (driving and charging keep their screens)
     if not ui_state.started and not getattr(ui_state, "charging_screen", False):
-      self._shell.go(Dest.HOME)
+      self._shell.go(Dest.HOME, 0)
       self._set_current_layout(MainState.STANDBY)
 
   # -- navigation -----------------------------------------------------------------
 
-  def _open_shell(self, dest: Dest = Dest.HOME):
-    self._shell.go(dest)
+  def _open_shell(self, dest: Dest = Dest.HOME, sub: int | None = None):
+    self._shell.go(dest, sub)
     self._set_current_layout(MainState.SHELL)
 
   def open_settings(self, panel_type):
