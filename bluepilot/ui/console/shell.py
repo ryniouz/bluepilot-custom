@@ -212,8 +212,11 @@ class ConsoleShell(Widget):
     self.register_page(Dest.SYSTEM, Page(tr("Calibration"), "calibrate", CalibrationPage(), key="calibration", framed=False))
     from bluepilot.ui.console.pages.storage import StoragePage
     self.register_page(Dest.SYSTEM, Page(tr("Storage"), "storage", StoragePage(), key="drives_storage", framed=False))
-    panel(Dest.SYSTEM, tr("Maps"), "map", "OSM", tr("System"))
-    panel(Dest.SYSTEM, tr("Developer"), "code", "DEVELOPER", tr("System"))
+    from bluepilot.ui.console.pages.maps import MapsPage
+    self.register_page(Dest.SYSTEM, Page(tr("Maps"), "map", MapsPage(), key=getattr(PT, "OSM", "maps"), framed=False))
+    from bluepilot.ui.console.pages.developer import DeveloperPage
+    self.register_page(Dest.SYSTEM, Page(tr("Developer"), "code", DeveloperPage(), key=getattr(PT, "DEVELOPER", "developer"),
+                                         framed=False))
     from bluepilot.ui.console.pages.about import AboutPage
     self.register_page(Dest.SYSTEM, Page(tr("About"), "info", AboutPage(), key="about", subtitle=tr("System"), framed=False))
 
