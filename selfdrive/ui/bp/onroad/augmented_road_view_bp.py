@@ -2,6 +2,7 @@ import time
 import pyray as rl
 from cereal import log, messaging
 from openpilot.common.params import Params
+from openpilot.common.params_pyx import UnknownKeyName
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
@@ -11,13 +12,13 @@ from openpilot.selfdrive.ui.bp.onroad.alert_renderer_bp import AlertRendererBP
 from openpilot.selfdrive.ui.bp.onroad.model_renderer_bp import ModelRendererBP
 from openpilot.selfdrive.ui.bp.onroad.torque_bar_renderer_bp import TorqueBarRendererBP
 from openpilot.selfdrive.ui.bp.onroad.ev_hud import EvHudRenderer
-from openpilot.selfdrive.ui.bp.mici.onroad.confidence_ball_bp import ConfidenceBallTiciBP
+from openpilot.selfdrive.ui.bp.onroad.console_cues import ConsoleConfidence, draw_blindspot_edge
 from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui import DeveloperUiState, get_bottom_dev_ui_offset
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 from openpilot.selfdrive.ui.onroad.colors import BORDER_COLORS
 from openpilot.selfdrive.ui.ui_state import UIStatus
-from bluepilot.ui.lib.theme import Console, Onroad
+from bluepilot.ui.lib.theme import Console
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 
 # BluePilot: Margin to keep confidence ball inside the colored border
@@ -46,7 +47,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     self._ev_hud = EvHudRenderer()
 
     # BluePilot: Add confidence ball on left side (MADS beam + enhanced coloring)
-    self._confidence_ball = ConfidenceBallTiciBP()
+    # Custom: Console confidence bar (same signal and zones as the ball)
+    self._confidence_ball = ConsoleConfidence()
     self._show_confidence_ball = self._bp_params.get_bool("BPShowConfidenceBall")
     self._param_counter = 0
 
@@ -83,7 +85,7 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     )
 
     # BluePilot: Offset rect pushes HUD/driver state/alerts right of the confidence ball
-    ball_offset = (ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
+    ball_offset = (ConsoleConfidence.BALL_WIDTH + BALL_BORDER_MARGIN) if show_ball else 0
     ui_rect = rl.Rectangle(
       self._content_rect.x + ball_offset,
       self._content_rect.y,
@@ -112,23 +114,8 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
 
     # BluePilot: Render confidence ball on left side (narrow rect = ball strip only, not full width)
     if show_ball:
-      ball_strip_width = ConfidenceBallTiciBP.BALL_WIDTH + BALL_BORDER_MARGIN
-      # Semi-transparent dark backdrop so ball is visible against bright camera feed
-      rl.draw_rectangle_gradient_h(
-        int(self._content_rect.x),
-        int(self._content_rect.y),
-        int(ball_strip_width),
-        int(self._content_rect.height),
-        Onroad.BAND,                # Console bg-page at the left edge
-        Console.TRANSPARENT,        # fades out so the camera stays readable
-      )
-      ball_rect = rl.Rectangle(
-        self._content_rect.x + BALL_BORDER_MARGIN,
-        self._content_rect.y,
-        ball_strip_width,
-        self._content_rect.height,
-      )
-      self._confidence_ball.render(ball_rect)
+      self._confidence_ball.render(rl.Rectangle(self._content_rect.x + BALL_BORDER_MARGIN, self._content_rect.y,
+                                                ConsoleConfidence.BALL_WIDTH, self._content_rect.height))
 
     # Custom: a prompt or critical alert owns the bottom of the screen, so the dock steps aside
     alert = self.alert_renderer.get_alert(ui_state.sm)
@@ -192,6 +179,22 @@ class AugmentedRoadViewBP(AugmentedRoadView, BlindspotRendererMixin):
     msg = messaging.new_message('uiDebug')
     msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
     self._pm.send('uiDebug', msg)
+
+  def _draw_blindspot_screen_edges(self, rect: rl.Rectangle, blind_spot_width: int = 250):
+    """Custom: Console blind-spot edges, squared danger bars instead of a red gradient.
+    Same toggle (ShowBlindspotOverlay) and fade as BluePilot's."""
+    try:
+      if not self._blindspot_params.get_bool("ShowBlindspotOverlay"):
+        return
+    except UnknownKeyName:
+      return
+    sm = ui_state.sm
+    if not sm.valid['carState']:
+      return
+    cs = sm['carState']
+    self._blindspot_left_alpha_filter.update(1.0 if cs.leftBlindspot else 0.0)
+    self._blindspot_right_alpha_filter.update(1.0 if cs.rightBlindspot else 0.0)
+    draw_blindspot_edge(rect, self._blindspot_left_alpha_filter.x, self._blindspot_right_alpha_filter.x)
 
   def _draw_border(self, rect: rl.Rectangle):
     """Console: page-ground outer frame, status-coloured inner frame."""

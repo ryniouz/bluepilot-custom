@@ -63,10 +63,6 @@ DOCK_RADIUS = 24        # kit PANEL_R
 TIRE_LOW_PSI = 30.0  # Lightning placard is 42 psi; the TPMS warning sits near 32
 
 
-def _c_to_f(c: float) -> float:
-  return c * 9.0 / 5.0 + 32.0
-
-
 class EvHudRenderer:
   def __init__(self):
     self.data = EvDataSource()
@@ -243,8 +239,8 @@ class EvHudRenderer:
     rng = s.range_km if metric else s.range_km * KM_TO_MI
     self._dock_value(r, f"{rng:.0f}", "km" if metric else "mi", "Range")
     if finite(s.wh_per_km) and s.wh_per_km > 1:
-      eff = f"{s.wh_per_km:.0f} Wh/km" if metric else f"{1000.0 / (s.wh_per_km / KM_TO_MI):.1f} mi/kWh"
-      text = f"Trip {eff}"
+      eff = f"{s.wh_per_km / 10.0:.1f} kWh/100 km" if metric else f"{1000.0 / (s.wh_per_km / KM_TO_MI):.1f} mi/kWh"
+      text = eff
     else:
       text = "Estimated" if s.range_estimated else "Efficiency soon"
     rl.draw_text_ex(self._font, text, rl.Vector2(r.x, r.y + r.height - DOCK_BAR_H / 2 - SMALL / 2 - 2), SMALL, 0, Console.TEXT_MUTED)
@@ -268,13 +264,13 @@ class EvHudRenderer:
       rl.draw_text_ex(self._font, unit, rl.Vector2(r.x + r.width - unit_w, vy + ROW_VALUE * 0.8 - SMALL * 0.8), SMALL, 0,
                       Console.TEXT_MUTED)
 
+  # Units are Canadian: temperatures always in °C and tire pressure always in psi; distance and
+  # speed follow the IsMetric setting (km and km/h on the truck).
   def _temp(self, c: float) -> str:
-    if not finite(c):
-      return "–"
-    return f"{c:.0f}°" if ui_state.is_metric else f"{_c_to_f(c):.0f}°"
+    return f"{c:.0f}°" if finite(c) else "–"
 
   def _temp_unit(self) -> str:
-    return "C" if ui_state.is_metric else "F"
+    return "C"
 
   def _row_pack(self, r: rl.Rectangle, s: EvSnapshot):
     cold, hot = s.pack_temp_c < PACK_TEMP_LOW_C, s.pack_temp_c > PACK_TEMP_HIGH_C
@@ -288,14 +284,13 @@ class EvHudRenderer:
     self._row(r, "Trip used", f"{s.trip_used_kwh:.1f}", "kWh")
 
   def _row_tires(self, r: rl.Rectangle, s: EvSnapshot):
-    metric = ui_state.is_metric
-    vals = [t if metric else t * KPA_TO_PSI for t in s.tire_kpa]
+    vals = [t * KPA_TO_PSI for t in s.tire_kpa]
     low = [(t * KPA_TO_PSI) < TIRE_LOW_PSI for t in s.tire_kpa]
     any_low = s.tire_low or any(low)
     rl.draw_circle(int(r.x + 8), int(r.y + r.height / 2), 8, Console.DANGER if any_low else Console.SUCCESS)
     rl.draw_text_ex(self._font, "Tires · Low" if any_low else "Tires", rl.Vector2(r.x + 26, r.y + (r.height - LABEL) / 2), LABEL, 0,
                     Console.TEXT_MUTED)
-    unit = "kPa" if metric else "psi"
+    unit = "psi"
     unit_w = measure_text_cached(self._font, unit, SMALL).x
     # 2x2 grid in truck layout (front row on top), right-aligned before the unit
     col_w = 76

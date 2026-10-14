@@ -9,6 +9,8 @@ from bluepilot.ui.lib.theme import Console, Onroad, Radius, draw_panel, roundnes
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from openpilot.selfdrive.ui.bp.onroad.console_cues import (CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
+                                                          notice, notice_size)
 
 # BluePilot: Y center for speed display (matching upstream hardcoded values)
 SPEED_CENTER_Y = 180  # stock values, kept for importers
@@ -21,13 +23,13 @@ CLUSTER_PAD = 28
 CLUSTER_H = 252
 CLUSTER_MIN_W = 300
 CLUSTER_RADIUS = 24         # kit PANEL_R
-CLUSTER_GAP = 20             # card to speed-limit sign
+CLUSTER_GAP = 16             # between top-row items
 CLUSTER_LABEL = 30           # state word, MAX caption (kit CAP)
-CLUSTER_SPEED = 150          # current speed numeral
-CLUSTER_UNIT = 40
-CLUSTER_SET = 76             # set speed numeral
-CLUSTER_SET_W = 116
-TURN_SIGNAL_DROP = 60
+CLUSTER_SPEED = 140          # current speed numeral
+CLUSTER_UNIT = 36
+CLUSTER_SET = 72             # set speed numeral
+CLUSTER_SET_W = 108
+NOTICE_TOP = 24              # notification cards sit level with the speed card
 
 
 class HudRendererBP(HudRendererSP):
@@ -45,6 +47,9 @@ class HudRendererBP(HudRendererSP):
     self.speed_right = 0
     self._gradient_rect = None  # BluePilot: Full-width rect for header gradient
     self.cluster_rect = rl.Rectangle(0, 0, 0, 0)  # Custom: Console speed card, for neighbours to avoid
+    # Custom: Console cues replace SP's sign art, turn-signal icons and circular pop-ups
+    self.speed_limit_renderer = CanadianSpeedLimit()
+    self._signals = SignalTiles()
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -94,21 +99,36 @@ class HudRendererBP(HudRendererSP):
       self.developer_ui.render(rect)
       self.road_name_renderer.render(rect)
     self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
+
+    # Custom: turn signals and blind spot as tiles at the ends of the top band
+    outer_l, outer_r = self._outer_band(rect)
+    self._signals.render(outer_l, outer_r, self.cluster_rect.y)
+
     if preset != LayoutPreset.MINIMAL:
-      self.smart_cruise_control_renderer.render(rect)
-    # Signals sit lower than stock so a top notification never covers them
-    self.turn_signal_controller.render(rl.Rectangle(rect.x, rect.y + TURN_SIGNAL_DROP, rect.width, rect.height))
-    if preset != LayoutPreset.MINIMAL:
-      self.circular_alerts_renderer.render(rect)
+      scc = self.smart_cruise_control_renderer
+      if scc.vision_enabled or scc.map_enabled:
+        cruise_chips(scc, self.cluster_rect.x, self.cluster_rect.y + self.cluster_rect.height + 16)
+      # SP green light / lead departing / stopped timer, as a notification card
+      pop = e2e_notice(self.circular_alerts_renderer)
+      if pop is not None:
+        title, sub, bar, icon = pop
+        band_l, band_r = self.notify_band(rect)
+        w, h = notice_size(title, sub, band_r - band_l)
+        notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, rect.y + NOTICE_TOP, w, h), title, sub, bar, icon)
       self.rocket_fuel.render(rect, ui_state.sm)
 
-  def notify_band(self, rect: rl.Rectangle) -> tuple[float, float]:
-    """Free horizontal band right of the speed card and sign, left of the experimental button."""
+  def _outer_band(self, rect: rl.Rectangle) -> tuple[float, float]:
+    """Top band between the speed card (and sign) and the experimental button."""
     left = self.cluster_rect.x + self.cluster_rect.width + CLUSTER_GAP
     if ui_state.speed_limit_mode != SpeedLimitMode.off:
       left += (UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial) + CLUSTER_GAP
     right = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size - CLUSTER_GAP
     return left, right
+
+  def notify_band(self, rect: rl.Rectangle) -> tuple[float, float]:
+    """Where notification cards centre: the top band minus the two signal-tile slots."""
+    left, right = self._outer_band(rect)
+    return left + TILE + CLUSTER_GAP, right - TILE - CLUSTER_GAP
 
   def _speed_limit_anchor(self, rect: rl.Rectangle) -> rl.Rectangle:
     """SpeedLimitRenderer places its sign at rect.x + 60 + w + 24; shift rect so the sign sits
