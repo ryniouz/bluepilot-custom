@@ -6,7 +6,8 @@ Console Statistics page: an OBD-scanner-style live view of every value the truck
   right  one graph. Each picked signal gets its own lane and scale. The window buttons zoom
          (30 s to 24 h); dragging the graph sideways pans back in time; "Live" jumps back to now.
 
-A functional first version; the layout gets a design pass later.
+  sets   one-tap graph sets (Battery, Charging, Driving) above the list
+  quiet  values the truck isn't sending right now sit folded at the bottom, never as a column of dashes
 """
 
 from __future__ import annotations
@@ -36,6 +37,15 @@ LABEL = 28
 CAP = 24
 GUTTER = 96           # left of each lane, for its scale
 DRAG_PX = 16          # movement before a press counts as a drag instead of a tap
+SETS_H = 84
+GROUP_ICONS = {"Battery": "battery", "Driving": "wheel", "Charging": "plug", "Vehicle": "car", "Tires": "gauge",
+               "Thermal": "thermo", "Other": "list"}
+# One-tap graph sets: the first few of these that the truck is sending
+GRAPH_SETS = [
+  ("Battery", ["ev.soc", "ev.power_kw", "ev.pack_temp_c", "ev.voltage"]),
+  ("Charging", ["ev.charge_power_kw", "ev.soc", "ev.pack_temp_c", "ev.coolant_temp_c"]),
+  ("Driving", ["ev.power_kw", "ev.wh_per_km", "ev.range_km", "ev.motor_torque_nm"]),
+]
 
 
 def series_colors() -> list[rl.Color]:
@@ -68,6 +78,9 @@ class StatsPage(Widget):
     self._press_offset = 0.0
     self._dragging = False
     self._content_h = 0.0
+    self._set_rects: list[tuple[rl.Rectangle, list[str]]] = []
+    self.show_quiet = False
+    self._quiet_rect: rl.Rectangle | None = None
 
   # -- data ---------------------------------------------------------------------------------
 
@@ -115,8 +128,34 @@ class StatsPage(Widget):
     self._draw_list(self._list_rect, h)
     self._draw_graph(self._graph_rect, h)
 
+  def _live(self, h, key: str) -> bool:
+    v = h.latest.get(key)
+    return v is not None and math.isfinite(v)
+
+  def _draw_sets(self, r: rl.Rectangle, h) -> float:
+    """One-tap graph sets along the top of the list. Returns the y below them."""
+    self._set_rects = []
+    x, y = r.x + PAD, r.y + 18
+    D.text(tr("Graph"), x, y + (60 - CAP) / 2 - 1, CAP, Console.TEXT_MUTED)
+    x += D.text_w(tr("Graph"), CAP) + 20
+    for label, keys in GRAPH_SETS:
+      picks = [k for k in keys if k in h.keys() and self._live(h, k)][:MAX_PICKS - 1]
+      if not picks:
+        continue
+      w = D.text_w(tr(label), K.CAP, semi=True) + 44
+      if x + w > r.x + r.width - PAD:
+        break
+      on = self.picks == picks
+      c = K.chip(x, y, tr(label), accent=on)
+      self._set_rects.append((c, picks))
+      x += c.width + 12
+    K.hline(r.x + PAD, r.x + r.width - PAD, r.y + SETS_H - K.HAIR)
+    return r.y + SETS_H
+
   def _draw_list(self, r: rl.Rectangle, h):
     self._rows = []
+    self._set_rects = []
+    self._quiet_rect = None
     if h is None or not h.keys():
       D.text(tr("No values yet"), r.x + PAD, r.y + PAD, LABEL + 4, semi=True)
       for i, line in enumerate(D.wrap(tr("Values appear here as soon as the truck is awake: ignition on, or charging."),
@@ -125,36 +164,65 @@ class StatsPage(Widget):
       return
     latest = h.latest
     colors = series_colors()
-    inner = rl.Rectangle(r.x, r.y + 8, r.width, r.height - 16)
+    top = self._draw_sets(r, h)
+    inner = rl.Rectangle(r.x, top + 4, r.width, r.y + r.height - top - 12)
+    live = [k for k in h.keys() if self._live(h, k) or k in self.picks]
+    quiet = [k for k in h.keys() if k not in live]
     rl.begin_scissor_mode(int(inner.x), int(inner.y), int(inner.width), int(inner.height))
     y = inner.y - self._scroll
     group = None
-    for key in h.keys():
+
+    def row(key: str, y: float, dim: bool = False):
+      info = h.info(key)
+      rr = rl.Rectangle(r.x, y, r.width, ROW_H)
+      if y + ROW_H > inner.y and y < inner.y + inner.height:
+        picked = key in self.picks
+        if picked:
+          c = colors[self.picks.index(key) % len(colors)]
+          bg = rl.Rectangle(r.x + 12, y + 6, r.width - 24, ROW_H - 12)
+          rl.draw_rectangle_rounded(bg, 0.3, 8, Console.BG_RAISED)
+          D.dot(r.x + PAD + 6, y + ROW_H / 2, 7, c)
+        lx = r.x + PAD + (24 if picked else 0)
+        v = latest.get(key)
+        has = v is not None and math.isfinite(v)
+        val = fmt_value(v, info.digits, info.unit) if has else tr("No data")
+        unit = info.unit if has and val not in (tr("On"), tr("Off")) else ""
+        vsize = VALUE if has else CAP
+        vw = D.text_w(val, vsize, semi=has) + (10 + D.text_w(unit, CAP) if unit else 0)
+        D.text(D.fit(info.label, LABEL, r.x + r.width - PAD - vw - 24 - lx), lx, y + (ROW_H - LABEL) / 2 - 2, LABEL,
+               Console.TEXT_GHOST if dim else (Console.TEXT_PRIMARY if picked else Console.TEXT_SECONDARY))
+        if has:
+          D.value_unit(val, unit, r.x + r.width - PAD - vw, y + (ROW_H - VALUE) / 2 - 2, VALUE, CAP)
+        else:
+          D.text_right(val, r.x + r.width - PAD, y + (ROW_H - CAP) / 2 - 2, CAP, Console.TEXT_GHOST)
+        if not picked:
+          K.hline(r.x + PAD, r.x + r.width - PAD, y + ROW_H - K.HAIR)
+        self._rows.append((rr, key))
+      return y + ROW_H
+
+    for key in live:
       info = h.info(key)
       if info.group != group:
         group = info.group
         if y + GROUP_H > inner.y and y < inner.y + inner.height:
-          D.text(D.fit(group.upper(), CAP - 2, r.width - 2 * PAD, semi=True), r.x + PAD, y + GROUP_H - CAP - 10, CAP - 2,
-                 Console.TEXT_GHOST, semi=True)
+          gy = y + GROUP_H - CAP - 12
+          D.icon(GROUP_ICONS.get(group, "list"), r.x + PAD, gy - 2, CAP + 4, Console.TEXT_MUTED)
+          D.text(D.fit(tr(group), CAP, r.width - 2 * PAD - 44, semi=True), r.x + PAD + 40, gy, CAP, Console.TEXT_MUTED, semi=True)
         y += GROUP_H
-      row = rl.Rectangle(r.x, y, r.width, ROW_H)
-      if y + ROW_H > inner.y and y < inner.y + inner.height:
-        picked = key in self.picks
-        if picked:
-          rl.draw_rectangle_rec(rl.Rectangle(r.x + 8, y + 4, r.width - 16, ROW_H - 8), Console.ACCENT_TINT)
-          c = colors[self.picks.index(key) % len(colors)]
-          rl.draw_rectangle_rec(rl.Rectangle(r.x + 8, y + 4, 6, ROW_H - 8), c)
-        v = latest.get(key)
-        val = fmt_value(v, info.digits, info.unit) if v is not None else "--"
-        unit = info.unit if val not in ("--", tr("On"), tr("Off")) else ""
-        vw = D.text_w(val, VALUE, semi=True) + (10 + D.text_w(unit, CAP) if unit else 0)
-        D.text(D.fit(info.label, LABEL, r.width - 2 * PAD - vw - 24), r.x + PAD, y + (ROW_H - LABEL) / 2 - 2, LABEL,
-               Console.TEXT_PRIMARY if picked else Console.TEXT_SECONDARY)
-        D.value_unit(val, unit, r.x + r.width - PAD - vw, y + (ROW_H - VALUE) / 2 - 2, VALUE, CAP,
-                     Console.TEXT_GHOST if val == "--" else None)
-        K.hline(r.x + PAD, r.x + r.width - PAD, y + ROW_H - K.HAIR)
-        self._rows.append((row, key))
-      y += ROW_H
+      y = row(key, y)
+
+    if quiet:
+      qr = rl.Rectangle(r.x + PAD, y + 16, r.width - 2 * PAD, 72)
+      if y + 88 > inner.y and y < inner.y + inner.height:
+        rl.draw_rectangle_rounded(qr, 0.3, 8, Console.BG_RAISED)
+        label = (tr("Hide") if self.show_quiet else tr("Show")) + f" {len(quiet)} " + tr("not reporting now")
+        D.text(D.fit(label, CAP, qr.width - 80), qr.x + 24, qr.y + (72 - CAP) / 2 - 2, CAP, Console.TEXT_MUTED, semi=True)
+        D.icon("chevron", qr.x + qr.width - 52, qr.y + 20, 32, Console.TEXT_MUTED)
+      self._quiet_rect = qr
+      y += 104
+      if self.show_quiet:
+        for key in quiet:
+          y = row(key, y, dim=True)
     rl.end_scissor_mode()
     self._content_h = y + self._scroll - inner.y
     max_scroll = max(0.0, self._content_h - inner.height)
@@ -223,9 +291,12 @@ class StatsPage(Widget):
     # Same live value as the list (blank when the truck stops sending), not the last one in the window
     cur = h.latest.get(key, float("nan"))
     D.text(D.fit(head, CAP + 2, lane.width * 0.6, semi=True), lane.x + 8, lane.y + 10, CAP + 2, color, semi=True)
-    val = fmt_value(float(cur), info.digits, info.unit)
-    D.text_right(val + (f" {info.unit}" if info.unit and val not in ("--", tr("On"), tr("Off")) else ""),
-                 lane.x + lane.width - 8, lane.y + 10, CAP + 2, Console.TEXT_PRIMARY, semi=True)
+    if math.isfinite(float(cur)):
+      val = fmt_value(float(cur), info.digits, info.unit)
+      D.text_right(val + (f" {info.unit}" if info.unit and val not in (tr("On"), tr("Off")) else ""),
+                   lane.x + lane.width - 8, lane.y + 10, CAP + 2, Console.TEXT_PRIMARY, semi=True)
+    else:
+      D.text_right(tr("Not reporting now"), lane.x + lane.width - 8, lane.y + 12, CAP, Console.TEXT_GHOST)
     area = rl.Rectangle(lane.x + GUTTER, lane.y + CAP + 30, lane.width - GUTTER, lane.height - CAP - 40)
     if ok.sum() < 2:
       D.text_center(tr("No data in this window"), area.x + area.width / 2, area.y + area.height / 2 - CAP / 2, CAP,
@@ -294,6 +365,13 @@ class StatsPage(Widget):
         self.window_i = i
         self.end_offset = self._clamp_offset(self.end_offset)
         return True
+    for sr, picks in self._set_rects:
+      if D.hit(sr, pos):
+        self.picks = list(picks)
+        return True
+    if self._quiet_rect is not None and D.hit(self._quiet_rect, pos) and D.hit(self._list_rect, pos):
+      self.show_quiet = not self.show_quiet
+      return True
     if self._live_rect is not None and D.hit(self._live_rect, pos):
       self.end_offset = 0.0
       return True

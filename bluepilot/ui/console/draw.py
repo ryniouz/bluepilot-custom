@@ -370,6 +370,14 @@ def icon(name: str, x: float, y: float, size: float, color: rl.Color):
   elif name == "battery":
     rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x + 2 * s, y + 7 * s, 17 * s, 10 * s), 0.25, 6, w, color)
     _line([(21.5, 10.5), (21.5, 13.5)], x, y, s, w, color)
+  elif name == "sun":  # screen brightness: a disc with eight rays
+    _ring(12, 12, 4, x, y, s, w, color)
+    for a, b in (((12, 2), (12, 4.5)), ((12, 19.5), (12, 22)), ((2, 12), (4.5, 12)), ((19.5, 12), (22, 12)),
+                 ((4.9, 4.9), (6.7, 6.7)), ((17.3, 17.3), (19.1, 19.1)), ((4.9, 19.1), (6.7, 17.3)), ((17.3, 6.7), (19.1, 4.9))):
+      _line([a, b], x, y, s, w, color)
+  elif name == "clock":  # timers and delays: a dial with two hands
+    _ring(12, 12, 9, x, y, s, w, color)
+    _line([(12, 7), (12, 12), (15.5, 14)], x, y, s, w, color)
   else:
     _ring(12, 12, 9, x, y, s, w, color)
 
