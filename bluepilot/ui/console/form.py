@@ -33,6 +33,11 @@ Rows (all heights fixed, so layout never jumps):
 
 Section(title, icon, rows, note="", wide=False): one card. `wide` spans both columns.
 FormPage.confirm(title, body, label, fn, danger=False): a Console confirm sheet over the page.
+
+Basic and Advanced modes (BPSettingsMode, switched at the bottom of the page list): any row or Section takes
+adv=True to show in Advanced mode only. In Basic mode FormPage leaves those out and ends the page with one
+"N more settings" link that switches to Advanced. Settings search still finds them, and opening a result shows
+the whole page. Whole pages are marked with Page(level="advanced") in shell.py.
 Typography and spacing come from draw.py (H1 52, H2 38, BODY 34, LABEL 28, CAPTION 24; CARD_PAD 32, GAP 32).
 """
 
@@ -141,6 +146,27 @@ class ParamCache:
     return lambda i: self.put(key, values[i] if values is not None else int(i))
 
 
+# -- Basic and Advanced modes --------------------------------------------------------------------
+
+MODE_KEY = "BPSettingsMode"   # 0 Basic, 1 Advanced
+_mode_cache: ParamCache | None = None
+
+
+def _mode_params() -> ParamCache:
+  global _mode_cache
+  if _mode_cache is None:
+    _mode_cache = ParamCache()
+  return _mode_cache
+
+
+def advanced_mode() -> bool:
+  return _mode_params().int(MODE_KEY, 0) == 1
+
+
+def set_advanced(on: bool) -> None:
+  _mode_params().put(MODE_KEY, 1 if on else 0)
+
+
 # -- rows -----------------------------------------------------------------------------------------
 
 @dataclass
@@ -151,6 +177,7 @@ class Toggle:
   fn: Callable[[], None] | None
   enabled: bool = True
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_SET
 
@@ -167,6 +194,7 @@ class Choice:
   radio: bool | None = None     # force the radio list (True) or segmented (False)
   unifont: bool = False         # option labels in scripts the UI font lacks (language names)
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def is_radio(self, w: float) -> bool:
     if self.radio is not None:
       return self.radio
@@ -190,6 +218,7 @@ class Stepper:
   sub: str = ""
   enabled: bool = True
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_SET
 
@@ -202,6 +231,7 @@ class Nav:
   value: str = ""
   back: bool = False            # a "Back" row: chevron on the left, pointing back
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_SET
 
@@ -216,6 +246,7 @@ class Action:
   danger: bool = False
   enabled: bool = True
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_SET
 
@@ -226,6 +257,7 @@ class Info:
   value: str
   dot: rl.Color | None = None
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_INFO
 
@@ -238,6 +270,7 @@ class Meter:
   color: rl.Color | None = None
   target: float | None = None
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return ROW_METER
 
@@ -261,6 +294,7 @@ class Stack:
   cols: int = 0             # legend columns; 0 picks 3 on a wide card, 2 otherwise
   hide_empty: bool = False
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def _legend(self) -> list[StackPart]:
     return [p for p in self.parts if p.amount > 0 or not self.hide_empty]
 
@@ -278,6 +312,7 @@ class Note:
   color: rl.Color | None = None
   lines: int = 4
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return 16 + NOTE_LINE * len(D.wrap(self.text, D.LABEL, w, self.lines))
 
@@ -287,6 +322,7 @@ class Custom:
   h: float
   draw: Callable[[rl.Rectangle], list[tuple[rl.Rectangle, Callable[[], None]]] | None]
 
+  adv: bool = False             # Advanced mode only (see FormPage.visible_sections)
   def height(self, w: float) -> float:
     return self.h
 
@@ -302,6 +338,7 @@ class Section:
   note: str = ""
   wide: bool = False
 
+  adv: bool = False             # the whole card is Advanced mode only
   def height(self, w: float) -> float:
     inner = w - 2 * D.CARD_PAD
     h = D.CARD_PAD + TITLE_H + sum(r.height(inner) for r in self.rows if r is not None)
@@ -335,6 +372,7 @@ class FormPage(Widget):
     self._press_offset = 0.0
     self._dragging = False
     self._confirm: _Confirm | None = None
+    self.reveal = False   # show Advanced rows in Basic mode (opened from a search result)
 
   # -- to override --
   def sections(self) -> list[Section]:
@@ -352,6 +390,51 @@ class FormPage(Widget):
     self.p.invalidate()
     self._offset = 0.0
     self._confirm = None
+
+  def hide_event(self):
+    super().hide_event()
+    self.reveal = False
+
+  def visible_sections(self) -> list[Section]:
+    """sections() for the current mode: Basic leaves out adv rows and cards and links to the rest."""
+    sections = [s for s in self.sections() if s is not None]
+    if self.reveal or advanced_mode():
+      return sections
+    hidden = 0
+    out = []
+    for s in sections:
+      counted = [r for r in s.rows if r is not None and not isinstance(r, Note)]
+      if s.adv:
+        hidden += len(counted)
+        continue
+      hidden += sum(1 for r in counted if r.adv)
+      out.append(Section(s.title, s.icon, [r for r in s.rows if r is not None and not r.adv], s.note, s.wide))
+    if hidden:
+      out.append(Section(tr("Advanced"), "sliders", [
+        Nav(tr("Show advanced settings"), (tr("1 more setting on this page") if hidden == 1 else
+                                            f"{hidden} " + tr("more settings on this page")), lambda: set_advanced(True))]))
+    return out
+
+  def search_entries(self) -> list[tuple[str, str, str, bool]]:
+    """(card title, row title, row sub, advanced) for settings search; every row, whatever the mode."""
+    out = []
+    try:
+      sections = [s for s in self.sections() if s is not None]
+    except Exception:
+      return out
+    for s in sections:
+      for r in s.rows:
+        if r is None or isinstance(r, (Note, Stack, Custom)):
+          continue
+        if isinstance(r, Nav) and r.back:
+          continue
+        title = getattr(r, "title", None) or getattr(r, "label", "")
+        sub = r.sub if isinstance(getattr(r, "sub", None), str) else ""
+        if isinstance(r, Choice) and not sub:
+          sub = ", ".join(str(o) for o in list(r.options)[:4])
+        if title:
+          out.append((s.title, str(title), sub, s.adv or r.adv))
+    return out
 
   # -- layout --
   def _columns(self, rect: rl.Rectangle, sections: list[Section]) -> list[tuple[Section, rl.Rectangle]]:
@@ -380,7 +463,7 @@ class FormPage(Widget):
     top = self.header(rect)
     view = rl.Rectangle(rect.x, rect.y + top, rect.width, rect.height - top)
     self._view = view
-    sections = [s for s in self.sections() if s is not None]
+    sections = self.visible_sections()
     placed = self._columns(rl.Rectangle(view.x, view.y, view.width - 16, view.height), sections)
     self._offset = max(0.0, min(self._offset, max(0.0, self._content_h - view.height)))
     rl.begin_scissor_mode(int(view.x), int(view.y), int(view.width), int(view.height))

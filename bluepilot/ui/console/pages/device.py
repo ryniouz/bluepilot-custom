@@ -68,7 +68,7 @@ class DevicePage(FormPage):
     ]
     if self.p.has("DeviceBootMode"):
       rows.append(Choice(tr("After waking up"), [tr("Ready to drive"), tr("Parked mode")],
-                         max(0, min(1, self.p.int("DeviceBootMode"))), self.p.setter("DeviceBootMode")))
+                         max(0, min(1, self.p.int("DeviceBootMode"))), self.p.setter("DeviceBootMode"), adv=True))
     if self.p.has("MaxTimeOffroad"):
       m = self.p.int("MaxTimeOffroad", 1800)
       i = min(range(len(OFFROAD_MIN)), key=lambda k: abs(OFFROAD_MIN[k] - m))
@@ -88,7 +88,7 @@ class DevicePage(FormPage):
       quiet = self.p.bool("QuietMode")
       rows.append(Toggle(tr("Quiet mode"), tr("Only warnings make a sound"), quiet, self.p.flip("QuietMode")))
     rows.append(Action(tr("Driver camera"), tr("Check the driver monitoring view") if offroad else tr("Only while parked"),
-                       tr("Preview"), self._driver_camera, enabled=offroad))
+                       tr("Preview"), self._driver_camera, enabled=offroad, adv=True))
     lang = multilang.codes.get(multilang.language, multilang.language)
     rows.append(Nav(tr("Language"), tr("For menus and alerts"), self._open_languages, value=str(lang)))
     return Section(tr("Sound, camera and language"), "eye", rows)
@@ -97,14 +97,14 @@ class DevicePage(FormPage):
     offroad = ui_state.is_offroad()
     return Section(tr("Help"), "list", [
       Action(tr("Training guide"), tr("How the driver assist works"), tr("Open"), self._training, enabled=offroad),
-      Action(tr("Regulatory"), tr("Certifications and notices"), tr("Open"), self._regulatory, enabled=offroad),
+      Action(tr("Regulatory"), tr("Certifications and notices"), tr("Open"), self._regulatory, enabled=offroad, adv=True),
     ])
 
   def _reset(self) -> Section:
     return Section(tr("Reset"), "warning", [
       Action(tr("Reset all settings"), tr("Back to defaults, then restarts") if ui_state.is_offroad() else tr("Only while parked"),
              tr("Reset"), self._ask_reset, danger=True, enabled=ui_state.is_offroad()),
-    ])
+    ], adv=True)
 
   def _language_list(self) -> Section:
     names = list(multilang.languages.keys())   # display name -> code

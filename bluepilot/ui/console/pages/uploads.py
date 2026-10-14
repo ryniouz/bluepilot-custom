@@ -86,7 +86,7 @@ class UploadsPage(FormPage):
     if self.p.has("BPRoadTripVideo"):
       video = self.p.int("BPRoadTripVideo", 1)
       rows.append(Toggle(tr("Low-res video"), tr("Off: logs only"), bool(video) and on,
-                         lambda: self.p.put("BPRoadTripVideo", 0 if video else 1), enabled=on))
+                         lambda: self.p.put("BPRoadTripVideo", 0 if video else 1), enabled=on, adv=True))
     if self.p.has("BPRemoteLink"):
       link = self.p.bool("BPRemoteLink", True)
       rows.append(Toggle(tr("Remote access"), link_text(link), link and configured, self.p.flip("BPRemoteLink", True),
@@ -105,12 +105,13 @@ class UploadsPage(FormPage):
                          self.p.setter("BPCellLimitMB", LIMITS_MB))]
     if self.p.has("BPCellLimitAction"):
       rows.append(Choice(tr("When it's reached"), [tr("Logs only"), tr("Stop uploads")],
-                         1 if self.p.int("BPCellLimitAction") else 0, self.p.setter("BPCellLimitAction"), enabled=cur > 0))
+                         1 if self.p.int("BPCellLimitAction") else 0, self.p.setter("BPCellLimitAction"), enabled=cur > 0,
+                         adv=True))
     if self.p.has("BPCellResetDay"):
       day = max(1, min(31, self.p.int("BPCellResetDay", 1)))
       rows.append(Stepper(tr("Month starts on day"), str(day),
                           lambda: self.p.put("BPCellResetDay", max(1, day - 1)),
-                          lambda: self.p.put("BPCellResetDay", min(31, day + 1))))
+                          lambda: self.p.put("BPCellResetDay", min(31, day + 1)), adv=True))
     return Section(tr("LTE data limit"), "cell", rows,
                    note=tr("Counts this comma's LTE use, not your whole plan. comma connect's small logs count too."))
 

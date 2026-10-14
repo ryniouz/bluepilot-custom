@@ -173,7 +173,7 @@ class CalibrationPage(FormPage):
     engaged = ui_state.engaged
     return [
       Section(tr("Camera"), "calibrate", camera),
-      Section(tr("Steering"), "wheel", steering, note=tr("Keeps learning while you drive.")),
+      Section(tr("Steering"), "wheel", steering, note=tr("Keeps learning while you drive."), adv=True),
       Section(tr("Recalibrate"), "close", [
         Action(tr("Reset calibration"), tr("Disengage first") if engaged else tr("After moving the comma or the mount"),
                tr("Reset"), self._ask_reset, danger=True, enabled=not engaged),

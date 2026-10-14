@@ -25,6 +25,8 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
+from bluepilot.ui.console.form import FormPage, advanced_mode, set_advanced
+from bluepilot.ui.console.search import Hit, SearchPage
 from bluepilot.ui.console.home import network_status
 from bluepilot.ui.lib.theme import Console, is_day, roundness
 
@@ -34,6 +36,7 @@ SUBNAV_W = 480
 SUBNAV_STEP = 104      # Custom: page-list row pitch, and the smallest it may shrink to
 SUBNAV_MIN_STEP = 72
 GUTTER = 32
+MODE_H = 76            # Custom: the Basic | Advanced switch under the page list
 
 
 class Dest(IntEnum):
@@ -69,6 +72,7 @@ class Page:
   on_action: Callable[[], None] | None = None
   framed: bool = True                                   # draw the page body inside one panel
   aliases: tuple = ()                                   # older keys that open this page (merged pages)
+  level: str = "basic"                                  # "advanced": listed only in Advanced mode (search still finds it)
 
 
 class ItemsPage(Widget):
@@ -107,6 +111,11 @@ class ConsoleShell(Widget):
     self._action_rect: rl.Rectangle | None = None
     self._current: Widget | None = None
     self.alert_count: Callable[[], int] = lambda: 0
+    self._search = SearchPage(self._search_index, self.ask_search)
+    self._searching = False
+    self._search_rect: rl.Rectangle | None = None
+    self._mode_rects: list[rl.Rectangle] = []
+    self._sub_index: list[int] = []
 
     bp_items = {}
     bp = self._panels.get(PT.BLUEPILOT) if hasattr(PT, "BLUEPILOT") else None
@@ -121,9 +130,9 @@ class ConsoleShell(Widget):
       if info is not None:
         self.register_page(dest, Page(title, icon, info.instance, key=pt, subtitle=sub))
 
-    def item_page(dest, title, icon, name, sub=""):
+    def item_page(dest, title, icon, name, sub="", level="basic"):
       if name in items:
-        self.register_page(dest, Page(title, icon, items[name], key=name, subtitle=sub))
+        self.register_page(dest, Page(title, icon, items[name], key=name, subtitle=sub, level=level))
 
     self.register_page(Dest.HOME, Page(tr("Overview"), "grid", home, key="overview", framed=False))
     if alerts is not None:
@@ -138,7 +147,8 @@ class ConsoleShell(Widget):
                                       (tr("Speed and cruise"), "pulse", SpeedPage(), "CRUISE"),
                                       (tr("Steering"), "steer", SteeringPage(), "STEERING"),
                                       (tr("Driving model"), "cpu", DrivingModelPage(), "MODELS")):
-      self.register_page(Dest.DRIVE, Page(title, icon, widget, key=getattr(PT, name, name.lower()), framed=False))
+      self.register_page(Dest.DRIVE, Page(title, icon, widget, key=getattr(PT, name, name.lower()), framed=False,
+                                          level="advanced" if name == "MODELS" else "basic"))
 
     # Energy (stream B): Console pages instead of the BluePilot rows and sunnypilot's Trips panel. sunnypilot's
     # TripsLayout still exists inside the settings layout and keeps ApiCache_DriveStats fresh for TripsPage.
@@ -170,7 +180,8 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.display import DisplayPage
     old_keys = lambda *names: tuple(k for k in (getattr(PT, n, None) for n in names) if k is not None)  # noqa: E731
     self.register_page(Dest.SCREEN, Page(tr("Onroad display"), "eye", OnroadDisplayPage(), key="onroad_display",
-                                         subtitle=tr("Screen"), framed=False, aliases=old_keys("VISUALS")))
+                                         subtitle=tr("Screen"), framed=False, aliases=old_keys("VISUALS"),
+                                         level="advanced"))
     self.register_page(Dest.SCREEN, Page(tr("Display"), "sun", DisplayPage(), key="display",
                                          subtitle=tr("Screen"), framed=False, aliases=old_keys("DISPLAY")))
     # Road view and the BluePilot driving-view rows (Onroad display has the sunnypilot ones)
@@ -204,9 +215,10 @@ class ConsoleShell(Widget):
     from bluepilot.ui.console.pages.firehose import FirehosePage
     fh = self._panels.get(getattr(PT, "FIREHOSE", None))
     self.register_page(Dest.CONNECT, Page(tr("Firehose"), "flame", FirehosePage(getattr(fh, "instance", None)),
-                                          key=getattr(PT, "FIREHOSE", "firehose"), framed=False))
+                                          key=getattr(PT, "FIREHOSE", "firehose"), framed=False, level="advanced"))
     # Custom: 7.0 Connect Backend selector (comma connect / Konik / Offline) and dongle ID recovery
-    item_page(Dest.CONNECT, tr("Connect backend"), "cloud", "backend", tr("Connect") + " | " + tr("Reboot to apply"))
+    item_page(Dest.CONNECT, tr("Connect backend"), "cloud", "backend", tr("Connect") + " | " + tr("Reboot to apply"),
+              level="advanced")
 
     # System: Updates (the old Software page merged in), Truck, Device, Calibration, Storage, Maps, Developer, About
     from bluepilot.ui.console.pages.updates import UpdatesPage
@@ -227,10 +239,10 @@ class ConsoleShell(Widget):
     self.register_page(Dest.SYSTEM, Page(tr("Maps"), "map", MapsPage(), key=getattr(PT, "OSM", "maps"), framed=False))
     from bluepilot.ui.console.pages.developer import DeveloperPage
     self.register_page(Dest.SYSTEM, Page(tr("Developer"), "code", DeveloperPage(), key=getattr(PT, "DEVELOPER", "developer"),
-                                         framed=False))
+                                         framed=False, level="advanced"))
     from bluepilot.ui.console.pages.more import MorePage
     self.register_page(Dest.SYSTEM, Page(tr("More settings"), "sliders", MorePage(getattr(bp, "instance", None)), key="bp_misc",
-                                         subtitle=tr("System"), framed=False))
+                                         subtitle=tr("System"), framed=False, level="advanced"))
     from bluepilot.ui.console.pages.about import AboutPage
     self.register_page(Dest.SYSTEM, Page(tr("About"), "info", AboutPage(), key="about", subtitle=tr("System"), framed=False))
 
@@ -254,6 +266,7 @@ class ConsoleShell(Widget):
     return pages[min(self._sub[self._dest], len(pages) - 1)]
 
   def go(self, dest: Dest, sub: int | None = None):
+    self._searching = False
     if sub is not None:
       self._sub[dest] = max(0, min(sub, len(self._pages[dest]) - 1))
     self._dest = dest
@@ -280,6 +293,65 @@ class ConsoleShell(Widget):
           self.go(dest, i)
           return True
     return False
+
+  # -- Basic / Advanced and search ---------------------------------------------------
+
+  def listed(self, dest: Dest) -> list[int]:
+    """Indices of the pages the page list shows: all in Advanced mode; in Basic the basic ones and the open one."""
+    pages = self._pages[dest]
+    if advanced_mode():
+      return list(range(len(pages)))
+    cur = min(self._sub[dest], len(pages) - 1)
+    return [i for i, p in enumerate(pages) if p.level != "advanced" or i == cur]
+
+  def set_mode(self, advanced: bool):
+    set_advanced(advanced)
+    page = self.current_page()
+    if not advanced and page is not None and page.level == "advanced" and self._dest != Dest.HOME:
+      first = next((i for i, p in enumerate(self._pages[self._dest]) if p.level != "advanced"), 0)
+      self.go(self._dest, first)
+
+  def ask_search(self):
+    try:
+      from openpilot.system.ui.sunnypilot.widgets.input_dialog import InputDialogSP
+      from openpilot.system.ui.widgets import DialogResult
+    except Exception:
+      return
+
+    def done(result, text):
+      if result == DialogResult.CONFIRM and (text or "").strip():
+        self.search(text)
+    InputDialogSP(tr("Search settings"), tr("A setting, a page or a word in its description"),
+                  current_text=self._search.query if self._searching else "", callback=done).show()
+
+  def search(self, query: str):
+    self._search.run(query)
+    self._searching = True
+    self._switch_to(self._search)
+
+  def close_search(self):
+    self._searching = False
+    p = self.current_page()
+    self._switch_to(p.widget if p else None)
+
+  def _search_index(self) -> list[Hit]:
+    hits = []
+    for dest, label, icon in SECTIONS:
+      if dest == Dest.HOME:
+        continue
+      for i, page in enumerate(self._pages[dest]):
+        def opener(dest=dest, i=i, reveal=False):
+          def fn():
+            self.go(dest, i)
+            if reveal and isinstance(self._pages[dest][i].widget, FormPage):
+              self._pages[dest][i].widget.reveal = True
+          return fn
+        page_adv = page.level == "advanced"
+        hits.append(Hit(tr(label), icon, page.title, "", page.title, tr(label), page_adv, opener()))
+        entries = page.widget.search_entries() if hasattr(page.widget, "search_entries") else []
+        for card, title, sub, adv in entries:
+          hits.append(Hit(tr(label), icon, page.title, card, title, sub, adv or page_adv, opener(reveal=adv)))
+    return hits
 
   def _switch_to(self, w: Widget | None):
     if w is self._current:
@@ -311,20 +383,30 @@ class ConsoleShell(Widget):
     page = self.current_page()
     self._draw_header(rl.Rectangle(body.x, body.y, body.width, HEADER_H), page)
     content = rl.Rectangle(body.x + GUTTER, body.y + HEADER_H, body.width - GUTTER * 2, body.height - HEADER_H - GUTTER)
+    self._sub_rects = []
+    self._sub_index = []
+    self._mode_rects = []
+    if self._searching:
+      self._switch_to(self._search)
+      self._search.render(content)
+      return
     if page is None:
       return
     self._switch_to(page.widget)
     pages = self._pages[self._dest]
-    self._sub_rects = []
 
     if len(pages) > 1 and self._dest != Dest.HOME:
       y = content.y
+      listed = self.listed(self._dest)
       # Custom: Connect has nine or more pages; rows shrink (down to 64 px) so the last one stays on screen
-      # at every UI size instead of running off the bottom
-      step = max(SUBNAV_MIN_STEP, min(SUBNAV_STEP, content.height / len(pages)))
-      for i, p in enumerate(pages):
+      # at every UI size instead of running off the bottom. The Basic | Advanced switch sits under the list.
+      list_h = content.height - MODE_H - 24
+      step = max(SUBNAV_MIN_STEP, min(SUBNAV_STEP, list_h / max(1, len(listed))))
+      for i in listed:
+        p = pages[i]
         r = rl.Rectangle(content.x, y, SUBNAV_W - GUTTER, step - 8)
         self._sub_rects.append(r)
+        self._sub_index.append(i)
         on = i == self._sub[self._dest]
         if on:
           rl.draw_rectangle_rounded(r, roundness(r, 16), 8, Console.ACCENT_TINT)
@@ -332,6 +414,9 @@ class ConsoleShell(Widget):
         D.icon(p.icon, r.x + 24, r.y + (r.height - 40) / 2, 40, Console.ACCENT if on else Console.TEXT_MUTED)
         D.text(D.fit(p.title, D.BODY, r.width - 112, semi=on), r.x + 88, r.y + (r.height - D.BODY) / 2 - 2, D.BODY, color, semi=on)
         y += step
+      adv = advanced_mode()
+      mode = rl.Rectangle(content.x, content.y + content.height - MODE_H, SUBNAV_W - GUTTER, MODE_H)
+      self._mode_rects = D.segmented(mode, [tr("Basic"), tr("Advanced")], 1 if adv else 0)
       content = rl.Rectangle(content.x + SUBNAV_W, content.y, content.width - SUBNAV_W, content.height)
 
     if page.framed:
@@ -363,7 +448,9 @@ class ConsoleShell(Widget):
                   Console.TEXT_MUTED, semi=True)
 
   def _draw_header(self, r: rl.Rectangle, page: Page | None):
-    if self._dest == Dest.HOME and page is not None and page.key == "alerts":
+    if self._searching:
+      title = tr("Search")
+    elif self._dest == Dest.HOME and page is not None and page.key == "alerts":
       title = tr("Alerts")
     elif self._dest == Dest.HOME:
       title = tr("F-150 Lightning")
@@ -376,11 +463,21 @@ class ConsoleShell(Widget):
     right -= D.text_right(clock, right, r.y + (r.height - D.BODY) / 2 - 2, D.BODY, semi=True) + 28
     self._action_rect = None
     action = page.action() if page is not None and page.action else None
+    if self._searching:
+      action = tr("Close")
     if action:
       w = D.text_w(action, D.LABEL, semi=True) + 64
       b = rl.Rectangle(right - w, r.y + (r.height - 72) / 2, w, 72)
       D.button(b, action, primary=False, size=D.LABEL)
       self._action_rect = b
+      right = b.x - 16
+    # Custom: settings search, on every settings section
+    self._search_rect = None
+    if self._dest != Dest.HOME or self._searching:
+      b = rl.Rectangle(right - 72, r.y + (r.height - 72) / 2, 72, 72)
+      rl.draw_rectangle_rounded(b, roundness(b, 16), 8, Console.ACCENT_TINT if self._searching else Console.BG_RAISED)
+      D.icon("search", b.x + 16, b.y + 16, 40, Console.ACCENT if self._searching else Console.TEXT_SECONDARY)
+      self._search_rect = b
       right = b.x - 16
     self._chip_rects = []
     cy = r.y + (r.height - 60) / 2
@@ -413,10 +510,20 @@ class ConsoleShell(Widget):
         dest = SECTIONS[i][0]
         self.go(dest, 0 if dest == Dest.HOME else None)
         return True
-    for i, r in enumerate(self._sub_rects):
+    for i, r in zip(self._sub_index, self._sub_rects, strict=True):
       if D.hit(r, mouse_pos):
         self.go(self._dest, i)
         return True
+    for i, r in enumerate(self._mode_rects):
+      if D.hit(r, mouse_pos):
+        self.set_mode(i == 1)
+        return True
+    if self._search_rect is not None and D.hit(self._search_rect, mouse_pos):
+      self.ask_search()
+      return True
+    if self._searching and self._action_rect is not None and D.hit(self._action_rect, mouse_pos):
+      self.close_search()
+      return True
     for r, key in self._chip_rects:
       if D.hit(r, mouse_pos):
         self.open_panel(key)

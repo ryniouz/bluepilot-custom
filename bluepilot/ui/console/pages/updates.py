@@ -130,15 +130,15 @@ class UpdatesPage(FormPage):
     return Section(tr("Source"), "code", [
       Info(tr("Repository"), repo_name(repo)),
       Nav(tr("Branch"), tr("Where updates come from"), self._open_picker, value=self.branch() or "–"),
-    ], note=tr("Updates come only from this repository, never from upstream BluePilot or comma."))
+    ], note=tr("Updates come only from this repository, never from upstream BluePilot or comma."), adv=True)
 
   def _software(self) -> Section:
     commit = self._get("GitCommit")[:7]
     date = commit_date(self._get("GitCommitDate"))
     version = self._get("Version")
     rows = [Info(tr("Version"), version)] if version else []
-    rows += [Info(tr("Branch"), self._get("GitBranch") or "–"),
-             Info(tr("Commit"), (commit + (f"  ·  {date}" if date else "")) if commit else "–")]
+    rows += [Info(tr("Branch"), self._get("GitBranch") or "–", adv=True),
+             Info(tr("Commit"), (commit + (f"  ·  {date}" if date else "")) if commit else "–", adv=True)]
     return Section(tr("This software"), "list", rows,
                    note=tr("Citadel Auto OS, built on BluePilot, sunnypilot and openpilot."))
 
@@ -153,7 +153,7 @@ class UpdatesPage(FormPage):
                          auto, self._ask_auto_updates, enabled=offroad))
     rows.append(Action(tr("Uninstall"), tr("Removes this software from the comma"), tr("Uninstall"),
                        self._ask_uninstall, danger=True, enabled=offroad))
-    return Section(tr("Advanced"), "sliders", rows)
+    return Section(tr("Update options"), "sliders", rows, adv=True)
 
   def _picker(self) -> list[Section]:
     branches = self.branches()
