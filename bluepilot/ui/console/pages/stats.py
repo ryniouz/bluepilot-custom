@@ -211,7 +211,8 @@ class StatsPage(Widget):
     t, v = h.arrays(key, window, end)
     ok = np.isfinite(v)
     head = f"{info.label}"
-    cur = v[ok][-1] if ok.any() else float("nan")
+    # Same live value as the list (blank when the truck stops sending), not the last one in the window
+    cur = h.latest.get(key, float("nan"))
     D.text(D.fit(head, CAP + 2, lane.width * 0.6, semi=True), lane.x + 8, lane.y + 10, CAP + 2, color, semi=True)
     val = fmt_value(float(cur), info.digits, info.unit)
     D.text_right(val + (f" {info.unit}" if info.unit and val not in ("--", tr("On"), tr("Off")) else ""),

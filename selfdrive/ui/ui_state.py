@@ -175,7 +175,7 @@ class UIState(UIStateSP):
     except (KeyError, AttributeError, TypeError, ValueError):
       v_ego = 0.0
     show = self.charge_session.update(self.ev, v_ego)
-    self.charging_screen = show and getattr(self, "charging_screen_enabled", True)
+    self.charging_screen = show and (getattr(self, "charging_screen_enabled", True) or self.charge_session.reopened)
   # Custom: end
 
   def _update_state(self) -> None:
