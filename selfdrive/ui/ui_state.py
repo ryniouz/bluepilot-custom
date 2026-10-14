@@ -15,6 +15,9 @@ from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, DeviceSP
 from bluepilot.ui.lib.theme import set_accent as set_console_accent, set_mode as set_console_mode, freeze_derived  # Custom: Console theme
 from bluepilot.ui.lib.ev_data import EvDataSource, ChargeSession  # Custom: EV panel and charging screen
+from bluepilot.ui.lib.ev_history import EvHistory  # Custom: Statistics page and Home chart history
+from cereal.services import SERVICE_LIST  # Custom: offroad charging reader (Lightning stream, PR #2)
+CHARGING_SERVICES = ["chargingStateBP"] if "chargingStateBP" in SERVICE_LIST else []  # Custom
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
 
@@ -64,7 +67,7 @@ class UIState(UIStateSP):
         "rawAudioData",
         "carStateBP",  # BluePilot: Hybrid battery and drive data
         "peripheralState",  # Custom: 12 V reading for the Console EV HUD
-      ] + self.sm_services_ext
+      ] + CHARGING_SERVICES + self.sm_services_ext
     )
 
     self.prime_state = PrimeState()
@@ -164,7 +167,9 @@ class UIState(UIStateSP):
     if not hasattr(self, "ev_source"):
       self.ev_source = EvDataSource()
       self.charge_session = ChargeSession()
+      self.ev_history = EvHistory()
     self.ev = self.ev_source.update(self.sm, self.started_frame)
+    self.ev_history.update(self.sm, self.ev)
     try:
       v_ego = float(self.sm["carState"].vEgo) if self.started else 0.0
     except (KeyError, AttributeError, TypeError, ValueError):
