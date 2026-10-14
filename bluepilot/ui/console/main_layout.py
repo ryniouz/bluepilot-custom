@@ -21,14 +21,16 @@ from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
 from openpilot.selfdrive.ui.layouts.settings import settings as _settings_mod
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 
 from openpilot.selfdrive.ui.bp.onroad.augmented_road_view_bp import AugmentedRoadViewBP
-from openpilot.selfdrive.ui.bp.onroad.charging_view import ChargingView
 from bluepilot.ui.widgets.debug import ControlsDebugPanel
 from bluepilot.ui.console.home import AlertsPage, ConsoleHome, active_alerts
+from bluepilot.ui.console.pages.charging import ChargingPage, ChargingScreen
+from bluepilot.ui.console.pages.stats import StatsPage
 from bluepilot.ui.console.quick_controls import QuickControls
-from bluepilot.ui.console.shell import ConsoleShell, Dest
+from bluepilot.ui.console.shell import ConsoleShell, Dest, Page
 from bluepilot.ui.console.standby import ConsoleStandby
 
 if gui_app.sunnypilot_ui():
@@ -59,12 +61,23 @@ class ConsoleMainLayout(Widget):
     home_page.subtitle = self._home.subtitle
     home_page.sub_dot = self._home.sub_dot
     self._shell.alert_count = lambda: len(active_alerts(self._home._params))
-    # The Energy pages (thread C) replace this full-screen charging view with Energy > Charging in the shell
+    # Energy pages (thread C): Charging and Statistics lead the Energy section
+    self._charging_page = ChargingPage()
+    self._charging_page.on_open_full = self.open_charging
+    self._stats_page = StatsPage()
+    self._shell.register_page(Dest.ENERGY, Page(tr("Charging"), "plug", self._charging_page, key="charging_page",
+                                                subtitle=self._charging_page.subtitle, sub_dot=self._charging_page.sub_dot,
+                                                action=self._charging_page.action, on_action=self.open_charging,
+                                                framed=False), index=0)
+    self._shell.register_page(Dest.ENERGY, Page(tr("Statistics"), "pulse", self._stats_page, key="statistics",
+                                                subtitle=self._stats_page.subtitle, sub_dot=self._stats_page.sub_dot,
+                                                action=self._stats_page.action, on_action=self._stats_page.on_action,
+                                                framed=False), index=1)
     self._layouts = {
       MainState.STANDBY: ConsoleStandby(),
       MainState.SHELL: self._shell,
       MainState.ONROAD: AugmentedRoadViewBP(),
-      MainState.CHARGING: ChargingView(),
+      MainState.CHARGING: ChargingScreen(),
     }
     self._current_mode = MainState.STANDBY
     self._prev_onroad = False
@@ -144,16 +157,6 @@ class ConsoleMainLayout(Widget):
     if not self._shell.open_panel(panel_type):
       self._shell.go(Dest.SYSTEM, 0)
 
-  def open_charging(self):
-    """Reopen the charging page after it was minimized (Home's Charging card)."""
-    session = getattr(ui_state, "charge_session", None)
-    if session is None or not session.active:
-      return
-    session.dismissed = False
-    ui_state.charging_screen = True
-    self._prev_charging = True
-    self._set_current_layout(MainState.CHARGING)
-
   def _on_onroad_clicked(self):
     if self._debug_panel.is_panel_visible:
       return
@@ -162,6 +165,18 @@ class ConsoleMainLayout(Widget):
       self._quick.handle_tap(pos)
     else:
       self._quick.open()
+
+  def open_charging(self):
+    """Home's Charging card and Energy > Charging: bring the charging page back."""
+    session = getattr(ui_state, "charge_session", None)
+    if session is not None and session.active:
+      session.dismissed = False
+      ui_state.charging_screen = True
+      self._prev_charging = True
+      self._set_current_layout(MainState.CHARGING)
+    else:
+      self._open_shell(Dest.ENERGY)
+      self._shell.open_panel("charging_page")
 
   def _on_charging_clicked(self):
     session = getattr(ui_state, "charge_session", None)

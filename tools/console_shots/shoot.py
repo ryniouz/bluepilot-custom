@@ -64,12 +64,17 @@ SCENES: dict[str, str] = {
   "onroad_debug_panel": "Onroad with the BluePilot controls debug panel open",
   "charging_dc": "Charging screen, DC fast charge (charge fields injected; CarStateBP.ev not on this branch yet)",
   "charging_ac": "Charging screen, AC charge limited by a cold battery",
+  # Stream C: Energy pages
+  "energy_charging": "Energy > Charging in the shell while plugged in (charging screen minimized)",
+  "energy_idle": "Energy > Charging when not plugged in, with the last session",
+  "stats": "Energy > Statistics with an hour of seeded history and three signals graphed",
 }
 ALIASES = {
   "alert_full": ["alert_full_prompt", "alert_full_critical"],
   "alerts": ["alert_small", "alert_mid", "alert_full_prompt", "alert_full_critical"],
   "onroad": ["onroad_engaged", "onroad_disengaged", "onroad_override", "onroad_experimental"],
   "charging": ["charging_dc", "charging_ac"],
+  "energy": ["charging_dc", "charging_ac", "energy_charging", "energy_idle", "stats"],
 }
 
 # --- Stream B (driving screen) scenes ------------------------------------------------------
@@ -929,10 +934,30 @@ def run_scene(sc: Scene):
       d.update(battery=dict(soc=78.0, volts=372.5, amps=-46.0))
       if name == "onroad_ev_powerflow":
         d.update(drive=dict(throttle=34.0, threshold=70.0, mode="EV Drive", mode_value=1))
-    elif name in ("charging_dc", "charging_ac"):
-      d.update(battery=dict(soc=62.0 if name == "charging_dc" else 41.0, volts=388.0, amps=-746.0),
+    elif name in ("charging_dc", "charging_ac", "energy_charging"):
+      d.update(battery=dict(soc=41.0 if name == "charging_ac" else 62.0, volts=388.0, amps=-746.0),
                v_ego=0.0, enabled=False, state="disabled", lead=False)
-      _inject_charge(name)
+      _inject_charge("charging_dc" if name == "energy_charging" else name)
+      if name == "energy_charging":
+        sc.settle()
+        sc.main._on_charging_clicked()       # minimize the full screen
+        sc.main._open_shell()
+        sc.main._shell.open_panel("charging_page")
+    elif name == "energy_idle":
+      sc.drive = None
+      _inject_last_known()
+      _inject_last_session()
+      sc.main._open_shell()
+      sc.main._shell.open_panel("charging_page")
+    elif name == "stats":
+      d.update(battery=dict(soc=62.0, volts=388.0, amps=-120.0), v_ego=0.0)
+      _seed_history()
+      sc.settle()
+      if hasattr(sc.main, "_stats_page"):
+        sc.main._stats_page.picks = ["ev.soc", "ev.power_kw", "ev.pack_temp_c"]
+        sc.main._stats_page.window_i = 3
+      sc.main._open_shell()
+      sc.main._shell.open_panel("statistics")
     elif name in DRIVE_SCENES:  # stream B
       setup_drive_scene(name, d)
     elif name == "onroad_all":
@@ -975,9 +1000,10 @@ def _inject_charge(name: str):
 
   dc = name == "charging_dc"
   fields = dict(charging=True, charge_type=2 if dc else 1, charge_status="chargingDc" if dc else "chargingAc",
-                charge_power_kw=148.0 if dc else 9.4, charge_time_to_full_min=21.0 if dc else 312.0,
-                charge_target_soc=80.0 if dc else 90.0, charge_inhibit_thermal=not dc,
-                pack_temp_c=31.0 if dc else -4.0, range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0)
+                charge_power_kw=148.0 if dc else 9.4, charge_time_to_full_min=21.0 if dc else math.nan,
+                charge_inhibit_thermal=not dc, thermal_mode="cooling" if dc else "heating", heater_on=not dc,
+                pack_temp_c=31.0 if dc else -4.0, coolant_temp_c=24.0 if dc else 2.0,
+                range_km=(62.0 if dc else 41.0) / 100 * 131000 / 300.0)
   orig = ev_data.EvDataSource.update
 
   def update(self, sm, started_frame, now=None):
@@ -995,10 +1021,53 @@ def _inject_charge(name: str):
     orig_begin(self, snap, now)
     self.start_t = time.monotonic() - (23 if dc else 95) * 60
     self.start_soc = 31.0 if dc else 28.0
+    self.start_range_km = self.start_soc / 100 * 131000 / 300.0
     self.energy_kwh = 41.3 if dc else 13.6
-    self.peak_kw = 212.0 if dc else 9.6
+    self.peak_kw = 152.0 if dc else 9.6
 
   ev_data.ChargeSession._begin = begin
+
+
+def _inject_last_session():
+  """A finished charge for the Energy > Charging idle state."""
+  import math
+  from bluepilot.ui.lib import ev_data
+  orig = ev_data.ChargeSession.__init__
+
+  def init(self, *a, **kw):
+    orig(self, *a, **kw)
+    self.last = {"ended": "6:42 am", "minutes": 312.0, "energy_kwh": 58.4, "peak_kw": 9.6, "start_soc": 28.0, "end_soc": 74.0}
+    _ = math
+
+  ev_data.ChargeSession.__init__ = init
+
+
+def _seed_history():
+  """An hour of plausible drive-then-charge history so the Statistics graph has something to show."""
+  import math
+  import time
+  from bluepilot.ui.lib import ev_history
+  orig = ev_history.EvHistory.__init__
+
+  def init(self, *a, **kw):
+    orig(self, *a, **kw)
+    now = time.monotonic()
+    n = int(3600 * ev_history.FINE_HZ)
+    for i in range(n):
+      t = now - 3600 + i / ev_history.FINE_HZ
+      m = i / n
+      driving = m < 0.55
+      soc = 48 - 18 * m / 0.55 if driving else 30 + 32 * (m - 0.55) / 0.45
+      power = (35 + 25 * math.sin(i / 37.0) + 12 * math.sin(i / 7.0)) if driving else -(148 - 40 * (m - 0.55))
+      vals = {"ev.soc": soc, "ev.power_kw": power, "ev.pack_temp_c": 24 + 9 * m, "ev.voltage": 372 + soc * 0.3,
+              "ev.current_a": power * 1000 / 380, "ev.coolant_temp_c": 22 + 4 * m, "ev.range_km": soc / 100 * 131000 / 300,
+              "ev.lv_volts": 12.6 + (0.9 if not driving else 1.6), "ev.outside_temp_c": 14.0, "ev.charging": 0.0 if driving else 1.0,
+              "ev.charge_power_kw": math.nan if driving else -power, "ev.motor_torque_nm": 180 + 140 * math.sin(i / 23.0) if driving else 0.0,
+              "ev.tire_kpa.0": 262.0, "ev.tire_kpa.1": 262.0, "ev.tire_kpa.2": 255.0, "ev.tire_kpa.3": 258.0}
+      self.push(vals, t)
+    self._next_fine = 0.0
+
+  ev_history.EvHistory.__init__ = init
 
 
 def run_worker(args) -> int:

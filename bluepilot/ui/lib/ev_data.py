@@ -86,11 +86,38 @@ class EvSnapshot:
   charge_target_soc: float = NAN
   charge_inhibit_thermal: bool = False
   charge_conditioning: bool = False
+  # Battery thermal system: "cooling", "heating", "conditioning", "idle", or "" when the truck does not say
+  thermal_mode: str = ""
+  heater_on: bool = False
+  pack_delta_temp_c: float = NAN   # spread between the warmest and coolest module
+  source: str = ""                 # "car" (carStateBP, ignition on) or "charger" (chargingStateBP, ignition off)
   # Trip integrals (since the UI went onroad)
   trip_used_kwh: float = 0.0
   trip_regen_kwh: float = 0.0
   trip_km: float = 0.0
   wh_per_km: float = NAN           # live efficiency (smoothed, trip-based)
+
+
+THERMAL_MODES = ("cooling", "heating", "conditioning", "idle")
+
+
+def thermal_mode(c) -> str:
+  """Battery thermal mode from CarStateBP.Charging.
+
+  Prefers an explicit thermalMode enum when the CAN stream publishes one; otherwise the PTC heater and
+  preconditioning flags give "heating" or "conditioning". Cooling is not decoded yet, so with neither flag
+  set the answer is "" (no data) rather than a guess.
+  """
+  raw = str(_f(c, "thermalMode", "") or "")
+  if raw in THERMAL_MODES:
+    return raw
+  if raw == "off":
+    return "idle"
+  if bool(_f(c, "coolantHeaterOn", False)):
+    return "heating"
+  if bool(_f(c, "batteryConditioning", False)):
+    return "conditioning"
+  return ""
 
 
 def _f(obj, name: str, default=NAN):
@@ -170,6 +197,7 @@ class EvDataSource:
       s.power_kw = _fv(b, "powerKw") if finite(s.current_a) else NAN
       s.pack_temp_c = _fv(b, "packTempC")
       s.coolant_temp_c = _fv(b, "coolantTempC")
+      s.pack_delta_temp_c = _fv(b, "packDeltaTempC")
       s.charge_limit_kw = _fv(b, "chargeLimitKw", "limitsAvailable")
       s.discharge_limit_kw = _fv(b, "dischargeLimitKw", "limitsAvailable")
       s.range_km = _fv(b, "rangeKm", "rangeAvailable")
@@ -211,6 +239,8 @@ class EvDataSource:
       hours = _fv(c, "timeToFullHours", "timeToFullAvailable")
       s.charge_time_to_full_min = hours * 60.0 if finite(hours) else NAN
       s.charge_conditioning = bool(_f(c, "batteryConditioning", False))
+      s.heater_on = bool(_f(c, "coolantHeaterOn", False))
+      s.thermal_mode = thermal_mode(c)
       if not finite(s.soc):
         s.soc = _fv(c, "socPercent")
       if not finite(s.pack_temp_c):
@@ -239,8 +269,15 @@ class EvDataSource:
     # Freshness (not started_frame) decides, so the last drive's values never linger offroad.
     has_bp = "carStateBP" in sm.recv_frame and sm.recv_frame["carStateBP"] > 0 and \
       (now - float(getattr(sm, "recv_time", {}).get("carStateBP", now))) < STALE_S
+    has_chg = not has_bp and "chargingStateBP" in sm.recv_frame and sm.recv_frame["chargingStateBP"] > 0 and \
+      (now - float(getattr(sm, "recv_time", {}).get("chargingStateBP", now))) < STALE_S
+    if has_chg:
+      # Ignition off: the Lightning stream's charging monitor publishes the same Charging and EvBattery structs
+      self._read_stream_b(sm["chargingStateBP"], s)
+      s.source = "charger"
     if has_bp:
       bp = sm["carStateBP"]
+      s.source = "car"
       self._read_stream_b(bp, s)
       hb = _f(bp, "hybridBattery", None)
       hb_ok = hb is not None and bool(_f(hb, "dataAvailable", False))
@@ -324,8 +361,11 @@ class ChargeSession:
     self.dismissed = False      # driver tapped back to the driving view for this session
     self.start_t = 0.0
     self.start_soc = NAN
+    self.start_range_km = NAN
     self.energy_kwh = 0.0
     self.peak_kw = NAN
+    self.last: dict | None = None   # summary of the previous session, for the Energy > Charging page
+    self._snap: EvSnapshot | None = None
     self._on_since: float | None = None
     self._off_since: float | None = None
     self._last_t: float | None = None
@@ -360,6 +400,9 @@ class ChargeSession:
         self.peak_kw = snap.charge_power_kw if not finite(self.peak_kw) else max(self.peak_kw, snap.charge_power_kw)
       if not finite(self.start_soc) and finite(snap.soc):
         self.start_soc = snap.soc
+      if not finite(self.start_range_km) and finite(snap.range_km):
+        self.start_range_km = snap.range_km
+      self._snap = snap
     self._last_t = now
     return self.active and not self.dismissed
 
@@ -367,15 +410,30 @@ class ChargeSession:
     now = time.monotonic() if now is None else now
     return max(0.0, now - self.start_t) if self.active else 0.0
 
+  def range_added_km(self, snap: EvSnapshot) -> float:
+    if finite(snap.range_km) and finite(self.start_range_km):
+      return max(0.0, snap.range_km - self.start_range_km)
+    return NAN
+
   def _begin(self, snap: EvSnapshot, now: float):
     self.active = True
     self.dismissed = False
     self.start_t = now
     self.start_soc = snap.soc
+    self.start_range_km = snap.range_km
     self.energy_kwh = 0.0
     self.peak_kw = NAN
 
   def _end(self):
+    snap = self._snap
+    self.last = {
+      "ended": time.strftime("%-I:%M %p").lower(),
+      "minutes": self.elapsed_s() / 60.0,
+      "energy_kwh": self.energy_kwh,
+      "peak_kw": self.peak_kw,
+      "start_soc": self.start_soc,
+      "end_soc": snap.soc if snap is not None else NAN,
+    }
     self.active = False
     self.dismissed = False
     self._off_since = None
