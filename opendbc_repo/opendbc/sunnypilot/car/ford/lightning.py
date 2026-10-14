@@ -37,7 +37,22 @@ EV_PT_MESSAGES = (
   "SelectDriveModeData",      # 0x420 drive mode
   "TrailerInfo_FD1",          # 0x443 trailer lamp connection
   "TrailerBrakeInfo_FD1",     # 0x445 trailer brake connection
+  "PreCond_Hev_Data1_FD1",    # 0x440 charge status (AC / DC / scheduled / paused ...)
+  "Cluster_HEV_Data1_FD1",    # 0x312 cluster charge status fallback
+  "MHT_EV_Wakeup_FD1",        # 0x478 battery preconditioning, coolant heater
 )
+
+# ChrgStat_D2_Dsply (0x440)
+CHARGE_STATE_D2 = {
+  0: "notReady", 1: "fault", 2: "fault", 3: "evseNotCompatible", 4: "evseNotDetected", 5: "evsePaused",
+  6: "scheduled", 7: "chargingAc", 8: "chargingDc", 9: "chargingInductive", 10: "maintaining",
+  11: "cabinPreconditioning", 12: "driveConditioning", 13: "targetReached",
+}
+# ChrgStat_D_Dsply (0x312)
+CHARGE_STATE_CLUSTER = {
+  0: "notReady", 1: "fault", 2: "fault", 3: "fault", 4: "chargingUnknownType", 5: "scheduled", 6: "targetReached",
+}
+CHARGE_TYPE = {"chargingAc": "ac", "chargingDc": "dc", "chargingInductive": "other", "chargingUnknownType": "other"}
 # Already parsed by BluePilot when FordFlags.HEV_BATTERY_DATA is set; added here otherwise.
 HEV_BATTERY_MESSAGES = ("Battery_Traction_1_FD1", "Battery_Traction_3_FD1", "Battery_Traction_4_FD1")
 
@@ -151,6 +166,7 @@ class LightningState:
     self.tire_low = Debounce(3.0, 3.0)
     self.low_volt = Debounce(5.0, 5.0)
     self.one_pedal = OnePedalEstimator()
+    self.charging = Debounce(2.0, 2.0)
     self.values: dict = {}
 
   # *** traction battery ***
@@ -321,6 +337,41 @@ class LightningState:
     else:
       v["vehicleMode.onePedalActive"], v["vehicleMode.onePedalSource"] = False, "off"
 
+  # *** charging ***
+  def _update_charging(self, cp, dt: float) -> None:
+    v = self.values
+    state, raw, ok = "unknown", 0, False
+    if msg_fresh(cp, "PreCond_Hev_Data1_FD1"):
+      raw = int(cp.vl["PreCond_Hev_Data1_FD1"]["ChrgStat_D2_Dsply"])
+      state, ok = CHARGE_STATE_D2.get(raw, "unknown"), True
+    elif msg_fresh(cp, "Cluster_HEV_Data1_FD1"):
+      raw = int(cp.vl["Cluster_HEV_Data1_FD1"]["ChrgStat_D_Dsply"])
+      state, ok = CHARGE_STATE_CLUSTER.get(raw, "unknown"), True
+    ctype = CHARGE_TYPE.get(state, "none")
+    charging = self.charging.update(ctype != "none", dt)
+
+    pack_kw = v["evBattery.powerKw"]
+    power_ok = charging and v["evBattery.packCurrentSource"] in ("battTracActl", "battTracEstVsc")
+    v["charging.dataAvailable"] = ok
+    v["charging.charging"] = charging
+    v["charging.state"] = state
+    v["charging.stateRaw"] = raw
+    v["charging.chargeType"] = ctype if charging else "none"
+    v["charging.powerAvailable"] = power_ok
+    v["charging.powerKw"] = float(max(0.0, -pack_kw)) if power_ok else 0.0
+    v["charging.socPercent"] = v["evBattery.socPercent"]
+    v["charging.batteryTempC"] = v["evBattery.packTempC"]
+
+    ttf = cp.vl["HEV_ChargeStat_FD1"]["ChargeNowDuration_St"] if msg_fresh(cp, "HEV_ChargeStat_FD1") else 0.0
+    v["charging.timeToFullAvailable"] = charging and 0. < ttf < 25.45  # raw 255 = invalid
+    v["charging.timeToFullHours"] = float(ttf) if v["charging.timeToFullAvailable"] else 0.0
+
+    wake_ok = msg_fresh(cp, "MHT_EV_Wakeup_FD1")
+    precond = (wake_ok and cp.vl["MHT_EV_Wakeup_FD1"]["PreCondBatt_B_Actl"] == 1) or \
+              (msg_fresh(cp, "PreCond_Hev_Data2_FD1") and cp.vl["PreCond_Hev_Data2_FD1"]["PreCondActv_B_Actl"] == 1)
+    v["charging.batteryConditioning"] = bool(precond)
+    v["charging.coolantHeaterOn"] = bool(wake_ok and cp.vl["MHT_EV_Wakeup_FD1"]["PtcHtr_D_Stat"] == 1)
+
   # *** alerts ***
   def _update_alerts(self, s: EvSettings) -> None:
     v = self.values
@@ -328,7 +379,7 @@ class LightningState:
     crit = min(s.low_soc_pct, s.critical_soc_pct)
     prev, h = self.soc_level, self.SOC_HYSTERESIS
     soc = v["evBattery.socPercent"]
-    if not v["evBattery.dataAvailable"]:
+    if not v["evBattery.dataAvailable"] or v["charging.charging"]:  # no "plan a charging stop" while charging
       level = "none"
     elif soc <= crit or (prev == "critical" and soc <= crit + h):
       level = "critical"
@@ -363,6 +414,7 @@ class LightningState:
     self._update_low_volt(cp, s, dt)
     self._update_ambient(cp)
     self._update_vehicle_mode(cp, s, v_ego, a_ego, gas, brake, cruise, dt)
+    self._update_charging(cp, dt)
     self._update_alerts(s)
     return self.values
 

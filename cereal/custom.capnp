@@ -480,6 +480,7 @@ struct CarStateBP @0xb057204d7deadf3f {
   vehicleMode @7 :VehicleMode;
   tune @8 :TuneState;
   evAlerts @9 :EvAlerts;
+  charging @10 :Charging;
 
   # Traction battery and energy. Power sign convention: + = discharging (driving), - = charging/regen.
   struct EvBattery {
@@ -580,6 +581,48 @@ struct CarStateBP @0xb057204d7deadf3f {
       sport @3;
       offroad @4;
       slippery @5;
+    }
+  }
+
+  # Charging state for a charging screen. Only published while card runs (onroad / ignition on).
+  struct Charging {
+    dataAvailable @0 :Bool;          # a charge-status message is on the bus
+    charging @1 :Bool;               # energy is flowing in (debounced 2 s)
+    state @2 :State;
+    stateRaw @3 :UInt8;              # ChrgStat_D2_Dsply (0x440), or ChrgStat_D_Dsply (0x312) when 0x440 is absent
+    chargeType @4 :ChargeType;
+    powerKw @5 :Float32;             # power into the pack, >= 0: -(pack V x pack current) while charging
+    powerAvailable @6 :Bool;
+    socPercent @7 :Float32;
+    batteryTempC @8 :Float32;
+    timeToFullHours @9 :Float32;     # ChargeNowDuration_St (0x352), unverified meaning
+    timeToFullAvailable @10 :Bool;
+    batteryConditioning @11 :Bool;   # PreCondBatt_B_Actl (0x478) or PreCondActv_B_Actl (0x185)
+    coolantHeaterOn @12 :Bool;       # PtcHtr_D_Stat (0x478)
+
+    enum State {
+      unknown @0;
+      notReady @1;
+      chargingAc @2;
+      chargingDc @3;
+      chargingInductive @4;
+      scheduled @5;
+      evsePaused @6;
+      evseNotDetected @7;
+      evseNotCompatible @8;
+      fault @9;
+      targetReached @10;
+      maintaining @11;
+      cabinPreconditioning @12;
+      driveConditioning @13;
+      chargingUnknownType @14;       # 0x312 In_Progress without AC/DC detail
+    }
+
+    enum ChargeType {
+      none @0;
+      ac @1;
+      dc @2;
+      other @3;
     }
   }
 

@@ -217,6 +217,47 @@ class TestLightningState:
     assert level(12.5) == "low"
     assert level(30.) == "none"
 
+  def test_charging_dc(self):
+    f = lightning_feed()
+    state = LightningState()
+    values = run(f, state)
+    assert not values["charging.dataAvailable"] and not values["charging.charging"]
+    f.set("Battery_Traction_4_FD1", BattTracSoc2_Pc_Actl=15., BattTrac_Te_Actl=35.)
+    f.set("PreCond_Hev_Data1_FD1", ChrgStat_D2_Dsply=8)  # ChargingDCFastChange
+    f.set("PreCond_Hev_Data2_FD1", BattTrac_I_EstVsc=-300., PreCondActv_B_Actl=0)
+    f.set("HEV_ChargeStat_FD1", ChargeNowDuration_St=0.7)
+    f.set("MHT_EV_Wakeup_FD1", PreCondBatt_B_Actl=1, PtcHtr_D_Stat=0)
+    values = run(f, state, v_ego=0., n=100)
+    assert values["charging.dataAvailable"] and values["charging.state"] == "chargingDc"
+    assert not values["charging.charging"]  # debounced 2 s
+    values = run(f, state, v_ego=0., n=150)
+    assert values["charging.charging"]
+    assert values["charging.chargeType"] == "dc"
+    assert values["charging.powerAvailable"]
+    assert values["charging.powerKw"] == pytest.approx(120., abs=0.1)
+    assert values["charging.socPercent"] == pytest.approx(15.)
+    assert values["charging.batteryTempC"] == pytest.approx(35.)
+    assert values["charging.timeToFullHours"] == pytest.approx(0.7)
+    assert values["charging.batteryConditioning"]
+    assert not values["charging.coolantHeaterOn"]
+    # low SOC alert is suppressed while charging
+    assert values["evAlerts.lowSoc"] == "none"
+
+  def test_charging_ac_and_cluster_fallback(self):
+    f = lightning_feed()
+    state = LightningState()
+    f.set("Cluster_HEV_Data1_FD1", ChrgStat_D_Dsply=4)  # In_Progress, no AC/DC detail
+    values = run(f, state, v_ego=0., n=250)
+    assert values["charging.charging"] and values["charging.state"] == "chargingUnknownType"
+    assert values["charging.chargeType"] == "other"
+    # only MtrTrac2 current: no charge power (it excludes the charger path)
+    assert not values["charging.powerAvailable"]
+    f.set("PreCond_Hev_Data1_FD1", ChrgStat_D2_Dsply=7)
+    assert run(f, state, v_ego=0.)["charging.chargeType"] == "ac"
+    f.set("PreCond_Hev_Data1_FD1", ChrgStat_D2_Dsply=13)  # target reached
+    values = run(f, state, v_ego=0., n=250)
+    assert not values["charging.charging"] and values["charging.state"] == "targetReached"
+
   def test_one_pedal_estimator(self):
     est = OnePedalEstimator()
     for _ in range(100):
