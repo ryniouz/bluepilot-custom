@@ -5,6 +5,8 @@ error window (system/ui/text.py). Both are separate processes; the stock files s
 
   ConsoleSpinner     a rotating accent arc on a thick track, "Starting up" and the latest status line;
                      a number on stdin shows a thick squared progress bar instead.
+  ConsoleBuildSpinner  the same screen for BluePilot's on-device build (system/ui/bp_spinner.py): progress with
+                     the current build step, and the build log with Reboot when it fails.
   ConsoleTextWindow  "Something went wrong", what to do next, the log in a scrolling card, and
                      Reboot (Exit on a PC).
 """
@@ -61,6 +63,8 @@ class ConsoleSpinner(Widget):
     rl.draw_rectangle_rec(rect, Console.BG_PAGE)
     cx = rect.x + rect.width / 2
     below = 72 + (len(self._lines) * 48 if self._lines else 0) + (96 if self._progress is not None else 0)
+    if self._progress is not None and self._lines:
+      below += 40
     cy = rect.y + (rect.height - below) / 2 - 20
 
     self._angle = (self._angle + DEG_PER_S * rl.get_frame_time()) % 360.0
@@ -79,14 +83,60 @@ class ConsoleSpinner(Widget):
       bar = rl.Rectangle(cx - BAR_W / 2, y, BAR_W, K.BAR_H)
       K.bar(bar, self._progress / 100.0, Console.ACCENT)
       D.text_center(f"{self._progress} %", cx, y + K.BAR_H + 20, D.LABEL, Console.TEXT_MUTED, semi=True)
+      y += K.BAR_H + 96  # the build spinner shows a status line under the bar
     for i, ln in enumerate(self._lines):
       D.text_center(ln, cx, y + i * 48, D.BODY, Console.TEXT_SECONDARY)
 
 
+class ConsoleBuildSpinner(ConsoleSpinner):
+  """BluePilot 7.0 builds on the device through bp_build.py and system/ui/bp_spinner.py, not the stock
+  spinner: '<pct>|<status>' lines, BUILD_FAILED (show the build log with Reboot) and BUILD_RETRY."""
+
+  LOG_MAX = 500
+
+  def __init__(self):
+    super().__init__()
+    self._log: list[str] = []
+    self._error: ConsoleTextWindow | None = None
+
+  def _append(self, line: str):
+    if line.strip():
+      self._log.append(line[:200])
+      del self._log[:-self.LOG_MAX]
+
+  def set_text(self, text: str) -> None:
+    text = text.strip()
+    if text == "BUILD_FAILED":
+      self._error = ConsoleTextWindow("\n".join(self._log) or "No build output", title="Build failed",
+                                      message="The build log is below; the error is usually at the end. Reboot to try again.")
+      return
+    if text == "BUILD_RETRY":
+      self._error, self._log, self._progress, self._lines = None, [], None, []
+      return
+    head, sep, tail = text.partition("|")
+    if sep and head.isdigit():
+      self._progress = max(0, min(100, int(head)))
+      self._lines = D.wrap(tail[:100], D.BODY, gui_app.width - 400, 2)
+      self._append(tail)
+      return
+    super().set_text(text)
+    if not text.isdigit():
+      self._append(text)
+
+  def _render(self, rect: rl.Rectangle):
+    if self._error is not None:
+      self._error.render(rect)
+      return
+    super()._render(rect)
+
+
 class ConsoleTextWindow(Widget):
-  def __init__(self, text: str):
+  def __init__(self, text: str, title: str = "Something went wrong",
+               message: str = "The details are below. A reboot usually fixes it. If it keeps happening, take a photo of this screen."):
     super().__init__()
     self._text = text
+    self._title = title
+    self._message = message
     self._lines: list[str] = []
     self._wrap_w = 0.0
     self._scroll = GuiScrollPanel()
@@ -98,9 +148,8 @@ class ConsoleTextWindow(Widget):
     pad = 64
     x, y = rect.x + pad, rect.y + 56
     D.icon("warning", x, y + 2, 64, Console.WARNING)
-    D.text("Something went wrong", x + 92, y, D.H1, semi=True)
-    D.text("The details are below. A reboot usually fixes it. If it keeps happening, take a photo of this screen.",
-           x + 92, y + 72, D.LABEL, Console.TEXT_MUTED)
+    D.text(self._title, x + 92, y, D.H1, semi=True)
+    D.text(self._message, x + 92, y + 72, D.LABEL, Console.TEXT_MUTED)
 
     btn_w = 280
     log = rl.Rectangle(x, y + 150, rect.width - 2 * pad - btn_w - 32, rect.height - (y + 150) - 48)

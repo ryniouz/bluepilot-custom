@@ -277,7 +277,14 @@ def _read_stdin() -> list[str]:
 
 def main():
   gui_app.init_window("BP Spinner")
-  bp_spinner = BPSpinner()
+  # Custom: Console start-up screen (bp_build.py drives this spinner, not system/ui/spinner.py, on 7.0)
+  try:
+    from bluepilot.ui.console.boot import ConsoleBuildSpinner, apply_saved_theme
+    apply_saved_theme()
+    bp_spinner = ConsoleBuildSpinner()
+  except Exception:
+    bp_spinner = BPSpinner()
+  # Custom: end
   for _ in gui_app.render():
     for text in _read_stdin():
       bp_spinner.set_text(text)
