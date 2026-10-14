@@ -17,7 +17,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
-from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, _plugged_in, soc_color, temp, truck_snapshot
+from bluepilot.ui.console.home import KM_TO_MI, KPA_TO_PSI, _plugged_in, network_status, soc_color, temp, truck_snapshot
 from bluepilot.ui.lib.ev_data import finite
 from bluepilot.ui.lib.theme import Console, roundness
 
@@ -41,24 +41,17 @@ class ConsoleStandby(Widget):
     x = mark.x + 60 + 20
     x += D.text("BLUEPILOT", x, mark.y + 15, 28, semi=True) + 20
     D.text(tr("F-150 Lightning"), x, mark.y + 15, 28, Console.TEXT_MUTED)
-    chips = []
+    cx = right
+    net = network_status()
+    if net is not None:
+      cx = K.signal_chip(cx, mark.y, net[0], net[1], net[2]).x - 16
     try:
       if self._params.get_bool("UpdateAvailable"):
-        chips.append((tr("Update ready"), Console.ACCENT, True))
+        label = tr("Update ready")
+        w = 22 + 32 + D.text_w(label, K.CAP, semi=True) + 22
+        K.chip(cx - w, mark.y, label, Console.ACCENT, accent=True)
     except Exception:
       pass
-    try:
-      nt = str(ui_state.sm["deviceState"].networkType)
-      chips.append((tr("Offline") if nt in ("none", "") else ("Wi-Fi" if nt == "wifi" else tr("Cellular")),
-                    Console.TEXT_GHOST if nt in ("none", "") else Console.SUCCESS, False))
-    except Exception:
-      pass
-    cx = right
-    for label, color, accent in chips:
-      w = 22 + 32 + D.text_w(label, K.CAP, semi=True) + 22
-      cx -= w
-      K.chip(cx, mark.y, label, color, accent=accent)
-      cx -= 16
 
     # Clock and date
     now = time.localtime()

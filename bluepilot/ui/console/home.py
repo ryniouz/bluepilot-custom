@@ -82,6 +82,27 @@ def active_alerts(params: Params) -> list[tuple[str, int]]:
   return out
 
 
+NETWORK_NAMES = {"wifi": "Wi-Fi", "cell2G": "2G", "cell3G": "3G", "cell4G": "LTE", "cell5G": "5G", "ethernet": "Ethernet"}
+STRENGTH = {"poor": 1, "moderate": 2, "good": 3, "great": 4}
+
+
+def network_status() -> tuple[str, int | None, rl.Color] | None:
+  """(label, signal level 0-4 or None, colour) for the header chip; None before deviceState arrives."""
+  try:
+    ds = ui_state.sm["deviceState"]
+    nt = str(ds.networkType)
+    strength = str(ds.networkStrength)
+  except Exception:
+    return None
+  if nt in ("none", ""):
+    return tr("Offline"), 0, Console.TEXT_GHOST
+  if nt == "ethernet":
+    return NETWORK_NAMES[nt], None, Console.SUCCESS
+  level = STRENGTH.get(strength, 0)
+  color = Console.WARNING if level <= 1 else Console.SUCCESS
+  return NETWORK_NAMES.get(nt, nt), level, color
+
+
 def _plugged_in() -> bool:
   """A charge session is running (the charging page may be showing or minimized)."""
   session = getattr(ui_state, "charge_session", None)

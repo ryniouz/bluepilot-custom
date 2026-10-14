@@ -24,6 +24,8 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from bluepilot.ui.console import draw as D
+from bluepilot.ui.console import kit as K
+from bluepilot.ui.console.home import network_status
 from bluepilot.ui.lib.theme import Console, is_day, roundness
 
 RAIL_W = 152
@@ -39,12 +41,14 @@ class Dest(IntEnum):
   SCREEN = 3
   CONNECT = 4
   SYSTEM = 5
+  DRIVES = 6
 
 
 SECTIONS = [
   (Dest.HOME, "Home", "home"),
   (Dest.DRIVE, "Drive", "wheel"),
   (Dest.ENERGY, "Energy", "bolt"),
+  (Dest.DRIVES, "Drives", "route"),
   (Dest.SCREEN, "Screen", "screen"),
   (Dest.CONNECT, "Connect", "wifi"),
   (Dest.SYSTEM, "System", "sliders"),
@@ -92,6 +96,8 @@ class ConsoleShell(Widget):
     self._sub_rects: list[rl.Rectangle] = []
     self._chip_rects: list[tuple[rl.Rectangle, str]] = []
     self._params = Params()
+    self._wifi_key = getattr(PT, "NETWORK", None)
+    self._software_key = getattr(PT, "SOFTWARE", None)
     self._action_rect: rl.Rectangle | None = None
     self._current: Widget | None = None
     self.alert_count: Callable[[], int] = lambda: 0
@@ -126,6 +132,14 @@ class ConsoleShell(Widget):
 
     item_page(Dest.ENERGY, tr("Charging settings"), "sliders", "charging", tr("Energy"))
     panel(Dest.ENERGY, tr("Trips"), "route", "TRIPS", tr("Energy"))
+
+    from bluepilot.ui.console.pages.drives import DrivesPage, OffloadPage, StoragePage
+    drives = DrivesPage()
+    self.register_page(Dest.DRIVES, Page(tr("Previous drives"), "list", drives, key="drives", framed=False))
+    offload = OffloadPage()
+    self.register_page(Dest.DRIVES, Page(tr("Offloading"), "cloud", offload, key="drives_offload", framed=False))
+    storage = StoragePage()
+    self.register_page(Dest.DRIVES, Page(tr("Storage"), "download", storage, key="drives_storage", framed=False))
 
     item_page(Dest.SCREEN, tr("Theme and layout"), "palette", "theme", tr("Screen") + " | " + tr("Applies right away"))
     panel(Dest.SCREEN, tr("Visuals"), "eye", "VISUALS", tr("Screen"))
@@ -243,17 +257,17 @@ class ConsoleShell(Widget):
     D.text_center("BP", brand.x + 40, brand.y + 22, 32, Console.ON_ACCENT, semi=True)
 
     self._tab_rects = []
-    y = r.y + 140
+    y = r.y + 128
     for dest, label, ic in SECTIONS:
-      item = rl.Rectangle(r.x + 16, y, r.width - 32, 116)
+      item = rl.Rectangle(r.x + 16, y, r.width - 32, 108)
       self._tab_rects.append(item)
       on = dest == self._dest
       if on:
         rl.draw_rectangle_rounded(item, roundness(item, 16), 8, Console.ACCENT_TINT)
       color = Console.ACCENT_TEXT if on else Console.TEXT_MUTED
-      D.icon(ic, item.x + (item.width - 44) / 2, item.y + 18, 44, Console.ACCENT if on else Console.TEXT_MUTED)
-      D.text_center(tr(label), item.x + item.width / 2, item.y + 72, D.CAPTION, color, semi=True)
-      y += 124
+      D.icon(ic, item.x + (item.width - 44) / 2, item.y + 14, 44, Console.ACCENT if on else Console.TEXT_MUTED)
+      D.text_center(tr(label), item.x + item.width / 2, item.y + 66, D.CAPTION, color, semi=True)
+      y += 114
 
     ready = ui_state.panda_type is not None and str(ui_state.panda_type) != "unknown"
     D.dot(r.x + r.width / 2, r.y + r.height - 86, 10, Console.SUCCESS if ready else Console.TEXT_GHOST)
@@ -280,36 +294,28 @@ class ConsoleShell(Widget):
       D.button(b, action, primary=False, size=D.LABEL)
       self._action_rect = b
       right = b.x - 16
+    self._chip_rects = []
+    cy = r.y + (r.height - 60) / 2
+    net = network_status()
+    if net is not None:
+      c = K.signal_chip(right, cy, net[0], net[1], net[2])
+      self._chip_rects.append((c, self._wifi_key))
+      right = c.x - 16
     chips = []
     alerts = self.alert_count()
     if alerts:
       chips.append((tr("1 alert") if alerts == 1 else f"{alerts} " + tr("alerts"), Console.WARNING, "alerts"))
     try:
       if self._params.get_bool("UpdateAvailable"):
-        chips.append((tr("Update ready"), Console.ACCENT, None))
+        chips.append((tr("Update ready"), Console.ACCENT, self._software_key))
     except Exception:
       pass
-    net = self._network()
-    if net:
-      chips.append((net[0], net[1], None))
-    self._chip_rects = []
     for label, color, key in chips:
       cw = D.text_w(label, D.LABEL, semi=True) + 24 * 2 + 28
-      c = D.chip(right - cw, r.y + (r.height - 60) / 2, label, color)
-      if key:
+      c = D.chip(right - cw, cy, label, color)
+      if key is not None:
         self._chip_rects.append((c, key))
       right -= cw + 16
-
-  @staticmethod
-  def _network():
-    try:
-      nt = str(ui_state.sm["deviceState"].networkType)
-    except Exception:
-      return None
-    names = {"wifi": "Wi-Fi", "cell2G": "2G", "cell3G": "3G", "cell4G": "LTE", "cell5G": "5G", "ethernet": "Ethernet"}
-    if nt in ("none", ""):
-      return (tr("Offline"), Console.TEXT_GHOST)
-    return (names.get(nt, nt), Console.SUCCESS)
 
   # -- input ------------------------------------------------------------------------
 

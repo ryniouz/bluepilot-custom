@@ -429,3 +429,29 @@ def tag(x: float, y: float, label: str, accent: bool = False) -> rl.Rectangle:
   rl.draw_rectangle_rounded(c, roundness(c, 8), 8, Console.ACCENT_TINT if accent else Console.BG_HIGH)
   D.text(label, c.x + 14, c.y + 8, 26, Console.ACCENT_TEXT if accent else Console.TEXT_SECONDARY, semi=True)
   return c
+
+
+def signal_bars(x: float, bottom: float, h: float, level: int, color: rl.Color, n: int = 4) -> float:
+  """Signal-strength bars (Wi-Fi or cellular), bottom-aligned at `bottom`. Returns the width drawn."""
+  bw, gap = max(6.0, h / 4.5), max(4.0, h / 8)
+  for i in range(n):
+    bh = h * (i + 1) / n
+    r = rl.Rectangle(x + i * (bw + gap), bottom - bh, bw, bh)
+    rl.draw_rectangle_rounded(r, roundness(r, 2), 4, color if i < level else Console.BG_TRACK)
+  return n * bw + (n - 1) * gap
+
+
+def signal_chip(right: float, y: float, label: str, level: int | None, color: rl.Color | None = None) -> rl.Rectangle:
+  """Right-aligned 60 px chip: signal bars (or a dot when there is no signal level) and a label."""
+  h, pad = 60, 22
+  icon_w = 4 * 7 + 3 * 4 if level is not None else 18
+  w = pad + icon_w + 14 + D.text_w(label, CAP, semi=True) + pad
+  c = rl.Rectangle(right - w, y, w, h)
+  rl.draw_rectangle_rounded(c, roundness(c, 12), 8, Console.BG_HIGH)
+  fill = color if color is not None else Console.SUCCESS
+  if level is not None:
+    signal_bars(c.x + pad, c.y + h / 2 + 14, 28, level, fill)
+  else:
+    D.dot(c.x + pad + 9, c.y + h / 2, 9, fill)
+  D.text(label, c.x + pad + icon_w + 14, c.y + (h - CAP) / 2 - 1, CAP, Console.TEXT_SECONDARY, semi=True)
+  return c

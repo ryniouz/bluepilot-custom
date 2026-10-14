@@ -47,6 +47,9 @@ SCENES: dict[str, str] = {
   "home": "Offroad Home dashboard in the Console shell",
   "home_alerts": "Offroad home with offroad alerts + update available",
   "home_charging": "Home after the charging page was minimized (Charging card reopens it)",
+  "drives": "Drives > Previous drives (fake log root, some synced)",
+  "drives_offload": "Drives > Offloading (comma connect queue + Citadel sync)",
+  "drives_storage": "Drives > Storage",
   "settings": "Settings open on the Device panel",
   "settings_panels": "Every settings panel, one PNG each (settings_<panel>.png), incl. BluePilot",
   "sidebar": "Onroad engaged with the quick-controls sheet open",
@@ -500,6 +503,7 @@ class Scene:
     ds = m.new_message("deviceState", valid=True)
     ds.deviceState.started = started
     ds.deviceState.networkType = log.DeviceState.NetworkType.wifi
+    ds.deviceState.networkStrength = log.DeviceState.NetworkStrength.good
     ds.deviceState.deviceType = log.InitData.DeviceType.tici
     ds.deviceState.freeSpacePercent = 72.0
     ds.deviceState.memoryUsagePercent = 41
@@ -868,7 +872,8 @@ def _inject_ev(fields: dict):
 def run_scene(sc: Scene):
   name = sc.name
   d = default_drive()
-  if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels"):
+  if name in ("standby", "home", "home_alerts", "home_charging", "settings", "settings_panels",
+              "drives", "drives_offload", "drives_storage"):
     sc.drive = None
   else:
     sc.drive = d
@@ -882,6 +887,12 @@ def run_scene(sc: Scene):
   elif name == "home":
     if hasattr(sc.main, "_open_shell"):
       sc.main._open_shell()
+    sc.settle()
+    sc.shot()
+  elif name in ("drives", "drives_offload", "drives_storage"):
+    _seed_drives(sc)
+    sc.main._open_shell()
+    sc.main._shell.open_panel(name)
     sc.settle()
     sc.shot()
   elif name == "home_charging":
@@ -976,6 +987,54 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     sc.shot()
+
+
+def _seed_drives(sc):
+  """A fake log root: eight drives over three days, five synced by Citadel, one bookmarked, one recording."""
+  import json
+  import os
+  import tempfile
+  import time
+  from bluepilot.ui.lib import drive_index
+
+  root = tempfile.mkdtemp(prefix="console-drives-")
+  state = tempfile.mkdtemp(prefix="console-bridge-")
+  drive_index.BRIDGE_SYNCED = os.path.join(state, "synced.json")
+  drive_index.PORTAL_METRICS = os.path.join(state, "metrics")
+  os.makedirs(drive_index.PORTAL_METRICS)
+  now = time.mktime(time.localtime())
+  drives = [(0.4, 12, False, False, True), (3.0, 31, False, False, False), (5.5, 18, True, False, False),
+            (26.0, 44, True, True, False), (29.0, 9, True, False, False), (50.0, 62, True, False, False),
+            (53.0, 25, True, False, False), (75.0, 7, False, False, False)]
+  places = [("Home", "Costco Burnaby"), ("Costco Burnaby", "Home"), ("Home", "Work")]
+  synced = {}
+  for i, (hours_ago, segs, is_synced, bookmarked, recording) in enumerate(drives):
+    route = f"{i + 120:08x}--{i:010x}"
+    start = now - hours_ago * 3600
+    for n in range(segs):
+      d = os.path.join(root, f"{route}--{n}")
+      os.makedirs(d)
+      for fn, size in (("rlog.zst", 9_000_000), ("qlog.zst", 600_000), ("qcamera.ts", 3_000_000), ("fcamera.hevc", 55_000_000)):
+        with open(os.path.join(d, fn), "wb") as f:
+          f.truncate(size)
+      if recording and n == segs - 1:
+        open(os.path.join(d, "rlog.lock"), "w").close()
+      if bookmarked and n == segs - 1:
+        try:
+          os.setxattr(d, "user.preserve", b"1")
+        except OSError:
+          pass
+      os.utime(d, (start + n * 60, start + n * 60))
+      if is_synced:
+        synced[f"{route}--{n}"] = "logs"
+    if i < 7:
+      a, b = places[i % 3]
+      with open(os.path.join(drive_index.PORTAL_METRICS, f"{route}.json"), "w") as f:
+        json.dump({"total_distance_meters": segs * 1150.0, "has_gps_data": True, "start_location": a, "end_location": b}, f)
+  with open(drive_index.BRIDGE_SYNCED, "w") as f:
+    json.dump(synced, f)
+  drive_index._indexer = drive_index.DriveIndexer(root)
+  sc.put("BPBridgeEnabled", True) if hasattr(sc, "put") else None
 
 
 def _inject_last_known():
