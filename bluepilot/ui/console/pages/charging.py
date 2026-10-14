@@ -28,6 +28,7 @@ from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.console import kit as K
 from bluepilot.ui.lib.ev_data import ChargeSession, EvSnapshot, finite, PACK_TEMP_LOW_C, PACK_TEMP_HIGH_C
+from bluepilot.ui.lib.obd_link import fmt_value, live_values
 from bluepilot.ui.lib.theme import Console, roundness
 
 # Lightning maximum charge power, for the power bar: DC about 155 kW (Extended Range), AC 19.2 kW (80 A)
@@ -282,11 +283,49 @@ def draw_tiles(r: rl.Rectangle, s: EvSnapshot, session: ChargeSession):
     tile(cells[3], tr("Battery temperature") if wide else tr("Battery"), "--", "", note, note_dot=thermal_color(mode))
 
 
+def obd_items() -> list[tuple[str, str]]:
+  """Extra charging readings from the OBD adapter; empty unless it is connected (then the row isn't drawn)."""
+  vals = live_values()
+  out = []
+  v, a = vals.get("HvbV"), vals.get("HvbA")
+  if v is not None:
+    out.append((tr("Pack"), fmt_value(v) + (f" · {abs(a.value):.0f} A" if a is not None else "")))
+  if "ChgOV" in vals:
+    out.append((tr("Charger out"), fmt_value(vals["ChgOV"])))
+  if "HvbMinModV" in vals and "HvbAvgModV" in vals:
+    out.append((tr("Modules"), f"{vals['HvbMinModV'].value:.2f}–{vals['HvbAvgModV'].value:.2f} V"))
+  if "HvbCit" in vals:
+    cv, cu = fmt_temp(vals["HvbCit"].value)
+    out.append((tr("Coolant in"), f"{cv} {cu}"))
+  if "LvV" in vals:
+    out.append((tr("12 V"), fmt_value(vals["LvV"])))
+  return out
+
+
+def draw_obd_row(r: rl.Rectangle, items: list[tuple[str, str]]):
+  """One quiet line under the tiles: OBD label, then label/value pairs that fit."""
+  x, right, y = r.x, r.x + r.width, r.y + (r.height - LABEL) / 2
+  D.icon("plug", x, y - 2, 36, Console.TEXT_MUTED)
+  x += 52
+  for label, value in items:
+    w = D.text_w(label, LABEL) + 12 + D.text_w(value, LABEL, semi=True)
+    if x + w > right:
+      break
+    D.text(label, x, y, LABEL, Console.TEXT_MUTED)
+    D.text(value, x + D.text_w(label, LABEL) + 12, y, LABEL, Console.TEXT_SECONDARY, semi=True)
+    x += w + 48
+
+
 def draw_body(r: rl.Rectangle, s: EvSnapshot, session: ChargeSession):
   bottom = draw_battery(rl.Rectangle(r.x, r.y, r.width, r.height), s, session)
-  top = bottom + 56
-  tiles_h = min(300.0, r.y + r.height - top)
+  obd = obd_items()
+  top = bottom + (36 if obd else 56)
+  # the OBD row may use part of the screen margin below; the tiles keep their height so the meter fits
+  row_h = 60 if obd else 0
+  tiles_h = min(300.0, max(280.0, r.y + r.height - top - row_h))
   draw_tiles(rl.Rectangle(r.x, top, r.width, tiles_h), s, session)
+  if obd:
+    draw_obd_row(rl.Rectangle(r.x, top + tiles_h + 4, r.width, row_h), obd)
 
 
 def draw_idle(r: rl.Rectangle, s: EvSnapshot | None, session: ChargeSession | None):

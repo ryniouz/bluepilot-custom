@@ -24,10 +24,11 @@ STALE_S = 5.0
 
 @dataclass
 class ObdValue:
-  name: str
+  name: str          # catalog short name, e.g. HvbSoc
   value: float
   unit: str
   age_s: float
+  label: str = ""    # catalog long name, e.g. "HV battery state of charge"
 
 
 @dataclass
@@ -94,7 +95,8 @@ class ObdLink:
       enabled=bool(m.enabled), transport=str(m.transport), link=str(m.link), message=str(m.message),
       adapter=str(m.adapter), protocol=str(m.protocol), bluetooth_available=bool(m.bluetoothAvailable),
       bluetooth_message=str(m.bluetoothMessage), usb_devices=[str(d) for d in m.usbDevices], polling=bool(m.polling),
-      values=[ObdValue(str(v.shortName or v.name), float(v.value), str(v.unit), float(v.ageS)) for v in m.values],
+      values=[ObdValue(str(v.shortName or v.name), float(v.value), str(v.unit), float(v.ageS), str(v.name or v.shortName))
+              for v in m.values],
     )
 
   # -- settings -----------------------------------------------------------------------------
@@ -153,3 +155,39 @@ LINK_TEXT = {
   "off": "Off", "unavailable": "Not available", "connecting": "Connecting", "initializing": "Setting up adapter",
   "connected": "Connected", "carAsleep": "Truck asleep", "idle": "Paused while truck is off", "error": "Error",
 }
+
+
+# -- connected / not connected ----------------------------------------------------------------
+
+MAX_AGE_S = 120.0  # a value older than this is dropped rather than shown stale
+
+
+def live_values() -> dict[str, ObdValue]:
+  """OBD values by short name, only while the adapter is connected and the truck answers. Anything else
+  (off, not set up, connecting, truck asleep, error) returns {}, so callers simply leave OBD items out."""
+  link = obd_link()
+  if not link.available():
+    return {}
+  snap = link.snapshot()
+  if not snap.received or snap.link != "connected":
+    return {}
+  return {v.name: v for v in snap.values if 0 <= v.age_s < MAX_AGE_S}
+
+
+def connected() -> bool:
+  return bool(live_values())
+
+
+def status() -> tuple[str, str]:
+  """(state, text) for a small status line: state is connected, waiting, off or setup."""
+  link = obd_link()
+  if not link.available():
+    return "setup", "Not set up"
+  snap = link.snapshot()
+  if not snap.received:
+    return ("waiting", "Starting") if str(link.get("BPObdEnabled", "")) in ("1", "True", "true") else ("off", "Off")
+  if not snap.enabled or snap.link == "off":
+    return "off", "Off"
+  if snap.link == "connected":
+    return "connected", "Connected" + (f" · {snap.adapter}" if snap.adapter else "")
+  return "waiting", LINK_TEXT.get(snap.link, "Waiting")
