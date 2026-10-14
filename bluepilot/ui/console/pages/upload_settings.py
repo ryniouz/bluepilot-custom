@@ -55,13 +55,13 @@ class UploadSettingsPage(Widget):
     left.width -= GAP / 2
     right.x += GAP / 2
     right.width -= GAP / 2
-    top, bottom = K.split_rows(left, [0.45, 1.0])
-    top.height -= GAP / 2
-    bottom.y += GAP / 2
-    bottom.height -= GAP / 2
+    # Citadel gets the left column; comma connect (one switch) sits above the data limit on the right
+    top_h = 76 + SET_ROW + 2 * D.CARD_PAD + (88 if right.height > 900 else 0)
+    top = rl.Rectangle(right.x, right.y, right.width, top_h)
+    rest = rl.Rectangle(right.x, right.y + top_h + GAP, right.width, right.height - top_h - GAP)
+    self._citadel_card(left)
     self._comma_card(top)
-    self._citadel_card(bottom)
-    self._limit_card(right)
+    self._limit_card(rest)
 
   # -- pieces -------------------------------------------------------------------------------
 
@@ -91,22 +91,23 @@ class UploadSettingsPage(Widget):
                fn: Callable[[int], None], enabled: bool = True) -> float:
     p = D.CARD_PAD
     x, right = r.x + p, r.x + r.width - p
-    if y + 56 + 72 > r.y + r.height - p + 8:
+    if y + 130 > r.y + r.height - p + 8:
       return y
     K.hline(x, right, y)
-    D.text(title, x, y + 16, D.BODY, Console.TEXT_PRIMARY if enabled else Console.TEXT_GHOST, semi=True)
-    seg = rl.Rectangle(x, y + 66, right - x, 64)
+    D.text(title, x, y + 12, D.BODY, Console.TEXT_PRIMARY if enabled else Console.TEXT_GHOST, semi=True)
+    seg = rl.Rectangle(x, y + 56, right - x, 60)
     rects = D.segmented(seg, labels, sel if enabled else -1)
     if enabled:
       for i, sr in enumerate(rects):
         self._hits.append((sr, lambda i=i: fn(i)))
-    return y + 66 + 64 + 24
+    return y + 130
 
   def _note(self, r: rl.Rectangle, y: float, text: str, lines: int = 3) -> float:
     p = D.CARD_PAD
-    for ln in D.wrap(text, D.LABEL, r.width - 2 * p, lines):
-      if y + 40 > r.y + r.height - p:
-        break
+    wrapped = D.wrap(text, D.LABEL, r.width - 2 * p, lines)
+    if y + 12 + 40 * len(wrapped) > r.y + r.height - p + 4:  # all of it or none of it
+      return y
+    for ln in wrapped:
       D.text(ln, r.x + p, y + 12, D.LABEL, Console.TEXT_MUTED)
       y += 40
     return y
@@ -144,22 +145,22 @@ class UploadSettingsPage(Widget):
                            lambda: self._params.put("BPRoadTripVideo", 0 if video else 1), enabled=on and configured)
     if has_param(self._params, "BPRemoteLink"):
       link = bool(_param(self._params, "BPRemoteLink", True))
-      self._toggle_row(r, y, tr("Remote access from Citadel"), self._link_text(link), link and configured,
+      self._toggle_row(r, y, tr("Remote access"), self._link_text(link), link and configured,
                        lambda: self._params.put_bool("BPRemoteLink", not link), enabled=configured)
 
   @staticmethod
   def _link_text(on: bool) -> str:
     """services.citadel.link from the bridge: settings and live data from Citadel while away."""
     if not on:
-      return tr("Settings and live data while away")
+      return tr("Citadel can't reach the truck while away")
     st = bridge.get("services", "citadel", "link")
     if not isinstance(st, dict):
-      return tr("Settings and live data, a few KB a minute")
+      return tr("Citadel: settings and live data while away")
     state = str(st.get("state") or "")
     reason = {"no_server": tr("no server"), "no_network": tr("no signal"), "over_limit": tr("data limit reached"),
               "server_error": tr("server error"), "disabled": tr("turned off")}.get(str(st.get("pausedReason")), "")
     return {"connected": tr("Connected"), "connecting": tr("Connecting"), "waiting": tr("Waiting for a connection"),
-            "paused": tr("Paused") + (f": {reason}" if reason else "")}.get(state, tr("Settings and live data while away"))
+            "paused": tr("Paused") + (f": {reason}" if reason else "")}.get(state, tr("Citadel: settings and live data while away"))
 
   def _limit_card(self, r: rl.Rectangle):
     y = self._title(r, tr("LTE data limit"), "cell")
