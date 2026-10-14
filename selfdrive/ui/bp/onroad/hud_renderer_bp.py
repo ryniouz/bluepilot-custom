@@ -331,7 +331,10 @@ class HudRendererBP(HudRendererSP):
       if self.show_icbm_status:
         label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
       elif self._auto_set_on():
-        label, label_color = tr("AUTO"), Console.ACCENT_TEXT  # Resume/Set uses the driver's speed for the limit
+        # Lightning control's Auto set: "AUTO" in accent while it holds a speed it chose for the limit
+        # (BPAutoSetActive > 0), muted while it's on and waiting for Resume/Set
+        label = tr("AUTO")
+        label_color = Console.ACCENT_TEXT if self._auto_set_active > 0 else Console.TEXT_MUTED
       else:
         label, label_color = tr("MAX"), Console.TEXT_MUTED
       sy = body_y + (card_h - CLUSTER_H) / 2  # the set speed sits mid-card next to a large speed
@@ -356,14 +359,15 @@ class HudRendererBP(HudRendererSP):
     return card
 
   def _auto_set_on(self) -> bool:
-    """BPAutoSetSpeed, read about once a second."""
+    """BPAutoSetSpeed and BPAutoSetActive, read about twice a second."""
     now = time.monotonic()
-    if now - getattr(self, "_auto_set_t", 0.0) > 1.0:
+    if now - getattr(self, "_auto_set_t", 0.0) > 0.5:
       self._auto_set_t = now
       try:
         self._auto_set = bool(ui_state.params.get_bool("BPAutoSetSpeed"))
+        self._auto_set_active = int(ui_state.params.get("BPAutoSetActive") or 0) if self._auto_set else 0
       except Exception:
-        self._auto_set = False
+        self._auto_set, self._auto_set_active = False, 0
     return getattr(self, "_auto_set", False)
 
   def _set_speed_state_color(self, long_override: bool, sla_active: bool) -> rl.Color:

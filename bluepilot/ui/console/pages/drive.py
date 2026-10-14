@@ -60,7 +60,7 @@ class DrivePage(FormPage):
 
   # -- row builders; None when the param is missing, which FormPage skips --
   def toggle(self, key: str | None, title: str, sub: str, enabled: bool = True, invert: bool = False,
-             restart: bool = False, after: Callable[[bool], None] | None = None) -> Toggle | None:
+             restart: bool = False, after: Callable[[bool], None] | None = None, adv: bool = False) -> Toggle | None:
     if key is None or not self.has(key):
       return None
     try:
@@ -76,7 +76,7 @@ class DrivePage(FormPage):
         self.p.put("OnroadCycleRequested", True)
       if after is not None:
         after(new != invert)
-    return Toggle(title, sub, on, flip, enabled=enabled and not locked)
+    return Toggle(title, sub, on, flip, enabled=enabled and not locked, adv=adv)
 
   def stepper(self, key: str | None, title: str, lo: float, hi: float, step: float, fmt: Callable[[float], str],
               sub: str = "", default: float = 0.0, as_float: bool = False, enabled: bool = True) -> Stepper | None:
@@ -266,13 +266,13 @@ class SpeedPage(DrivePage):
     source = Section(tr("Where limits come from"), "map", [
       Choice(tr("Source"), [tr(x) for x in LIMIT_SOURCES], max(0, min(4, src)), p.setter("SpeedLimitPolicy"),
              subs=[tr(x) for x in LIMIT_SOURCE_SUBS], enabled=mode != 0) if self.has("SpeedLimitPolicy") else None,
-    ])
+    ], adv=True)
     tuning = Section(tr("Speed control tuning"), "tune", [
       self.toggle("disable_BP_long_UI", tr("Smooth speed control"), tr("Gentle coasting and braking"), invert=True),
       self.toggle("disable_downhill_comp_UI", tr("Downhill compensation"), tr("Adjusts for the slope"), invert=True),
       self.toggle("disable_ford_radar_UI", tr("Use the truck's radar"), tr("Off follows the camera only; after a reboot"),
                   invert=True),
-    ], note=tr("Turning smooth speed control off uses the stock openpilot longitudinal logic."))
+    ], note=tr("Turning smooth speed control off uses the stock openpilot longitudinal logic."), adv=True)
     return [following, limits, self._auto_set(mode), cruise, source, tuning]
 
   # Auto set (Lucas 22:42): your own set speed for each detected limit, used when you press Resume/Set. The cruise
@@ -349,7 +349,7 @@ class SteeringPage(DrivePage):
                   tr("For a faulty yaw sensor, from next start"),
                   enabled=cp is None or cp.carFingerprint != "FORD_EDGE_MK2"),
     ], note=tr("Angle is newer and still being tuned. Each has its own tuning below.")
-       if self.has("FordPrefLateralControl") else "")
+       if self.has("FordPrefLateralControl") else "", adv=True)
 
     timer = p.int("AutoLaneChangeTimer", 0)
     bsm = bool(cp is not None and cp.enableBsm)
@@ -387,7 +387,7 @@ class SteeringPage(DrivePage):
       self.toggle("LaneTurnDesire", tr("Plan the turn you signal"), tr("At a stop or crawling, e.g. red lights")),
       Stepper(tr("Plan turns up to"), self._lane_turn_label(lt_v), lambda: self._lane_turn_step(-1), lambda: self._lane_turn_step(1))
       if turn and self.has("LaneTurnValue") else None,
-    ])
+    ], adv=True)
 
     if angle:
       lp_on = p.bool("enable_lane_positioning_ang")
@@ -398,7 +398,7 @@ class SteeringPage(DrivePage):
         self.stepper("lane_centering_strength_ang", tr("Centring strength"), 0, 1, 0.05,
                      lambda v: f"{int(round(v * 100))} %", sub=tr("Against the model's own path"), default=0.25,
                      as_float=True) if lp_on else None,
-      ])
+      ], adv=True)
     else:
       lp_key = self.key("enable_lane_positioning")
       lp_on = lp_key is not None and p.bool(lp_key)
@@ -408,7 +408,7 @@ class SteeringPage(DrivePage):
                      as_float=True) if lp_on else None,
         self.toggle(self.key("enable_lane_full_mode"), tr("Follow lane lines"), tr("Blend the lines into the offset"))
         if lp_on else None,
-      ])
+      ], adv=True)
 
     custom = p.bool(self.key("custom_profile") or "custom_profile")
     gain_key = self.key("LC_PID_gain_UI")
@@ -427,7 +427,7 @@ class SteeringPage(DrivePage):
                      sub=tr("High speed"), default=1.0, as_float=True),
         self.stepper("FordHighSpeedDampening_ang", tr("Highway straights"), 0.25, 1.25, 0.05, factor,
                      sub=tr("Lower if it oversteers"), default=1.0, as_float=True),
-      ])
+      ], adv=True)
       return [mads, control, lc, signal, position, tuning]
     tuning = Section(tr("Steering tuning"), "tune", [
       self.toggle(self.key("disable_BP_lat_UI"), tr("Smooth steering control"), tr("Off uses stock curvature control"),
@@ -443,7 +443,7 @@ class SteeringPage(DrivePage):
                    default=0.4, as_float=True) if custom else None,
       self.stepper(gain_key, tr("Gentle curve gain"), 0, gain_hi, gain_step, lambda v: f"{v:.1f}", default=3.0,
                    as_float=True) if custom else None,
-    ])
+    ], adv=True)
     return [mads, control, lc, signal, position, tuning]
 
   def _delay_sub(self, live: bool) -> str:
