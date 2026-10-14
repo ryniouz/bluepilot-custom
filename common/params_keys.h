@@ -435,5 +435,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPCellResetDay", {PERSISTENT | BACKUP, INT, "1"}},
     {"BPRoadTripCellular", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPCommaConnectWifiOnly", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRemoteLink", {PERSISTENT | BACKUP, BOOL, "1"}},             // Citadel can reach the bridge API from away
     // End Custom
 };

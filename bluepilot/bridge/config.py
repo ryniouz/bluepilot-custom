@@ -17,6 +17,7 @@ PARAM_CELL_LIMIT_ACTION = "BPCellLimitAction"
 PARAM_CELL_RESET_DAY = "BPCellResetDay"
 PARAM_ROADTRIP_CELLULAR = "BPRoadTripCellular"
 PARAM_COMMA_WIFI_ONLY = "BPCommaConnectWifiOnly"
+PARAM_REMOTE_LINK = "BPRemoteLink"
 
 STATE_DIR = os.environ.get("BP_BRIDGE_STATE_DIR", "/data/bluepilot/bridge")
 EVENTS_FILE = "events.jsonl"
