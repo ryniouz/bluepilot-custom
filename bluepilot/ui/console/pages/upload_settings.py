@@ -28,7 +28,7 @@ from bluepilot.ui.lib.theme import Console
 GAP = 32
 SET_ROW = 112
 LIMITS_MB = [0, 2000, 5000, 10000, 20000]
-LIMIT_LABELS = ["Off", "2 GB", "5 GB", "10 GB", "20 GB"]
+LIMIT_LABELS = ["Off", "2", "5", "10", "20"]
 
 
 def _int(v, default: int) -> int:
@@ -138,7 +138,7 @@ class UploadSettingsPage(Widget):
                            lambda: self._params.put_bool("BPRoadTripCellular", not cell), enabled=on and configured)
     if has_param(self._params, "BPRoadTripVideo"):
       video = _int(_param(self._params, "BPRoadTripVideo", 1), 1)
-      self._seg_row(r, y, tr("What to send"), [tr("Logs only"), tr("Logs and low-res video")], 1 if video else 0,
+      self._seg_row(r, y, tr("What to send"), [tr("Logs only"), tr("With low-res video")], 1 if video else 0,
                     lambda i: self._params.put("BPRoadTripVideo", int(i)), enabled=on and configured)
 
   def _limit_card(self, r: rl.Rectangle):
@@ -148,7 +148,7 @@ class UploadSettingsPage(Widget):
       return
     cur = _int(_param(self._params, "BPCellLimitMB", 0), 0)
     sel = LIMITS_MB.index(cur) if cur in LIMITS_MB else 0
-    y = self._seg_row(r, y, tr("Monthly limit"), [tr(t) for t in LIMIT_LABELS], sel,
+    y = self._seg_row(r, y, tr("Monthly limit, GB"), [tr(t) for t in LIMIT_LABELS], sel,
                       lambda i: self._params.put("BPCellLimitMB", LIMITS_MB[i]))
     if has_param(self._params, "BPCellLimitAction"):
       act = _int(_param(self._params, "BPCellLimitAction", 0), 0)
@@ -165,9 +165,9 @@ class UploadSettingsPage(Widget):
       return y
     K.hline(x, right, y)
     day = max(1, min(31, _int(_param(self._params, "BPCellResetDay", 1), 1)))
-    D.text(tr("Month starts on day"), x, y + 34, D.BODY, semi=True)
     plus = rl.Rectangle(right - 72, y + 20, 72, 64)
     minus = rl.Rectangle(plus.x - 16 - 72 - 96, y + 20, 72, 64)
+    D.text(D.fit(tr("Month starts on day"), D.BODY, minus.x - x - 16, semi=True), x, y + 34, D.BODY, semi=True)
     D.button(minus, "-", primary=False)
     D.text_center(str(day), minus.x + 72 + 8 + 48, y + 30, D.H2, semi=True)
     D.button(plus, "+", primary=False)
