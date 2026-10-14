@@ -1,5 +1,5 @@
 """
-Read-only view of the data-export bridge's status.json (bp_bridge, Comma 3X BluePilot work).
+Read-only view of the data-export bridge's status file (bp_bridge, Comma 3X BluePilot work).
 
 The bridge rewrites the file every 2 s (storage every 30 s). A missing file, or one whose `t`
 is older than STALE_S, means the bridge is off; callers then fall back to their own data.
@@ -13,7 +13,7 @@ import os
 import time
 from datetime import datetime
 
-STATUS_FILE = os.environ.get("BP_BRIDGE_STATE_DIR", "/data/bluepilot/bridge") + "/status.json"
+STATUS_FILE = os.environ.get("BP_BRIDGE_STATUS_PATH", "/dev/shm/bp_bridge_status.json")  # tmpfs: rewritten every 2 s
 STALE_S = 10.0
 READ_EVERY_S = 1.0
 
