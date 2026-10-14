@@ -53,6 +53,9 @@ def build_snapshot(sm, gps_service: str, onroad: bool, route: str | None, segmen
   snap = {"t": iso_now(), "onroad": onroad, "route": route if onroad else None, "segment": segment if onroad else None,
           "gps": None, "car": None, "ev": None, "engaged": None, "latActive": None, "experimental": None, "device": device}
   if not onroad:
+    # Parked but awake (e.g. charging): still report the battery if the car is publishing it.
+    if seen("carStateBP"):
+      snap["ev"] = _ev_snapshot(get("carStateBP"))
     return snap
 
   gps = get(gps_service) if seen(gps_service) else None
@@ -99,6 +102,12 @@ def _ev_snapshot(bp) -> dict:
            "packA": _num(ev.packCurrent, 2), "powerKw": _num(ev.powerKw, 2)}
     for src, dst, d in (("rangeKm", "rangeKm", 1), ("packTempC", "packTempC", 1), ("coolantTempC", "coolantTempC", 1)):
       out[dst] = _num(getattr(ev, src, None), d)
+    for src in ("charging", "chargeMode", "chargePowerKw"):  # present once charging mode lands
+      try:
+        val = getattr(ev, src)
+      except (AttributeError, KeyError):
+        continue
+      out[src] = _num(val, 2) if src == "chargePowerKw" else (_enum_name(val) if src == "chargeMode" else bool(val))
     return out
   hb = bp.hybridBattery
   if not bool(hb.dataAvailable):
@@ -173,26 +182,24 @@ class LiveMonitor(threading.Thread):
     import cereal.messaging as messaging  # device-only import
 
     sm = messaging.SubMaster(LIVE_SERVICES)
-    seen: set[str] = set()
+    last_update: dict[str, float] = {}
 
     last_scan = 0.0
     while not self.stop_event.is_set():
       sm.update(200)
+      now = time.monotonic()
       for name in LIVE_SERVICES:
         if sm.updated[name]:
-          seen.add(name)
+          last_update[name] = now
+      seen = {name for name, t in last_update.items() if now - t < 5.0}
       onroad = bool(sm["deviceState"].started) if "deviceState" in seen else False
 
-      now = time.monotonic()
       if now - last_scan > 5.0:
         last_scan = now
         self.tracker.update_segments(seg_index.scan(self.log_root, self.allowed_files))
       self.tracker.update_onroad(onroad)
       if sm.updated["userBookmark"]:
         self.tracker.bookmark()
-      if not onroad:
-        seen.difference_update({"carState", "carStateBP", "selfdriveState", "carControl", "gpsLocationExternal", "gpsLocation"})
-
       view = _View({name: sm[name] for name in LIVE_SERVICES}, seen)
       snap = build_snapshot(view, self.gps_service, onroad, self.tracker.current_route, self.tracker.current_segment)
       thumb = None

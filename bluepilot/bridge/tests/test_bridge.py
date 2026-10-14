@@ -381,3 +381,13 @@ def test_settings_refused_onroad(env):
   assert body["editable"] is False
   status, body = jcall(env, "/v1/settings", "PUT", {"values": {"ShowBrakeStatus": True}})
   assert status == 409 and body["error"] == "onroad"
+
+
+def test_offroad_charging_reports_battery():
+  v = View({"deviceState": SimpleNamespace(maxTempC=40.0, freeSpacePercent=50.0, memoryUsagePercent=30, networkType="wifi"),
+            "carStateBP": SimpleNamespace(hybridBattery=None, evBattery=SimpleNamespace(
+              dataAvailable=True, socPercent=55.0, packVoltage=390.0, packCurrent=-30.0, powerKw=-11.5, rangeKm=250.0,
+              packTempC=22.0, coolantTempC=20.0, charging=True, chargeMode="ac", chargePowerKw=11.5))})
+  snap = build_snapshot(v, "gpsLocationExternal", False, None, None)
+  assert snap["onroad"] is False and snap["car"] is None
+  assert snap["ev"]["socPct"] == 55.0 and snap["ev"]["charging"] is True and snap["ev"]["chargeMode"] == "ac"
