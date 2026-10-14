@@ -1,6 +1,7 @@
 import pyray as rl
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.onroad.hud_renderer import UI_CONFIG, CRUISE_DISABLED_CHAR
+from openpilot.selfdrive.ui.onroad.exp_button import FACE_SIZE
 from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
@@ -9,7 +10,7 @@ from bluepilot.ui.lib.theme import Console, Onroad, Radius, draw_panel, roundnes
 from bluepilot.ui.lib.layout_presets import LayoutPreset, current_preset
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
-from openpilot.selfdrive.ui.bp.onroad.console_cues import (CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
+from openpilot.selfdrive.ui.bp.onroad.console_cues import (SIGN_W, CanadianSpeedLimit, SignalTiles, TILE, cruise_chips, e2e_notice,
                                                           notice, notice_size)
 
 # BluePilot: Y center for speed display (matching upstream hardcoded values)
@@ -50,6 +51,7 @@ class HudRendererBP(HudRendererSP):
     # Custom: Console cues replace SP's sign art, turn-signal icons and circular pop-ups
     self.speed_limit_renderer = CanadianSpeedLimit()
     self._signals = SignalTiles()
+    self._signals_shown = False
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -100,43 +102,50 @@ class HudRendererBP(HudRendererSP):
       self.road_name_renderer.render(rect)
     self.speed_limit_renderer.render(self._speed_limit_anchor(rect))
 
-    # Custom: turn signals and blind spot as tiles at the ends of the top band
-    outer_l, outer_r = self._outer_band(rect)
-    self._signals.render(outer_l, outer_r, self.cluster_rect.y)
+    # Custom: turn signals and blind spot as two tiles at the top centre
+    self._signals_shown = self._signals.render_center(rect.x + rect.width / 2, rect.y + NOTICE_TOP)
 
     if preset != LayoutPreset.MINIMAL:
       scc = self.smart_cruise_control_renderer
       if scc.vision_enabled or scc.map_enabled:
-        cruise_chips(scc, self.cluster_rect.x, self.cluster_rect.y + self.cluster_rect.height + 16)
+        chips_x = self.cluster_rect.x + (SIGN_W + CLUSTER_GAP if ui_state.speed_limit_mode != SpeedLimitMode.off else 0)
+        cruise_chips(scc, chips_x, self.cluster_rect.y + self.cluster_rect.height + 16)
       # SP green light / lead departing / stopped timer, as a notification card
       pop = e2e_notice(self.circular_alerts_renderer)
       if pop is not None:
         title, sub, bar, icon = pop
         band_l, band_r = self.notify_band(rect)
         w, h = notice_size(title, sub, band_r - band_l)
-        notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, rect.y + NOTICE_TOP, w, h), title, sub, bar, icon)
+        notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, bar, icon)
       self.rocket_fuel.render(rect, ui_state.sm)
 
-  def _outer_band(self, rect: rl.Rectangle) -> tuple[float, float]:
-    """Top band between the speed card (and sign) and the experimental button."""
-    left = self.cluster_rect.x + self.cluster_rect.width + CLUSTER_GAP
-    if ui_state.speed_limit_mode != SpeedLimitMode.off:
-      left += (UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial) + CLUSTER_GAP
-    right = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size - CLUSTER_GAP
-    return left, right
+  def lead_card_pos(self, rect: rl.Rectangle, width: float) -> tuple[float, float]:
+    """Top-left of the lead card: under the experimental button, right edges aligned."""
+    inset = (UI_CONFIG.button_size - FACE_SIZE) / 2
+    right = rect.x + rect.width - UI_CONFIG.border_size - inset
+    return right - width, rect.y + UI_CONFIG.border_size + UI_CONFIG.button_size + 8
 
   def notify_band(self, rect: rl.Rectangle) -> tuple[float, float]:
-    """Where notification cards centre: the top band minus the two signal-tile slots."""
-    left, right = self._outer_band(rect)
-    return left + TILE + CLUSTER_GAP, right - TILE - CLUSTER_GAP
+    """Notification cards centre on the screen: the widest band symmetric about the centre that
+    clears the speed card and the experimental button."""
+    cx = rect.x + rect.width / 2
+    left = self.cluster_rect.x + self.cluster_rect.width + CLUSTER_GAP
+    right = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size - CLUSTER_GAP
+    half = max(0.0, min(cx - left, right - cx))
+    return cx - half, cx + half
+
+  def notify_top(self, rect: rl.Rectangle) -> float:
+    """Top of the notification card: the top row, or under the signal tiles when they show."""
+    return rect.y + NOTICE_TOP + ((TILE + 16) if self._signals_shown else 0)
 
   def _speed_limit_anchor(self, rect: rl.Rectangle) -> rl.Rectangle:
-    """SpeedLimitRenderer places its sign at rect.x + 60 + w + 24; shift rect so the sign sits
-    CLUSTER_GAP right of the speed card, top-aligned with it."""
+    """SpeedLimitRenderer places its sign rect at (rect.x + 84, rect.y + 39); the Canadian sign
+    is SIGN_W wide in the middle of it. Shift rect so the sign sits under the speed card,
+    left edges aligned."""
     width = UI_CONFIG.set_speed_width_metric if ui_state.is_metric else UI_CONFIG.set_speed_width_imperial
     c = self.cluster_rect
-    x = c.x + c.width + CLUSTER_GAP - (60 + width + 24)
-    y = c.y + 6 - 45
+    x = c.x - (width - SIGN_W) / 2 - (60 + width + 30 - 6)
+    y = c.y + c.height + CLUSTER_GAP - (45 - 6)
     return rl.Rectangle(x, y, rect.width, rect.height)
 
   def _status(self) -> tuple[str, rl.Color]:

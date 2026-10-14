@@ -307,6 +307,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"mici_hide_onroad_border", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPHideOnroadBorder", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadView", {PERSISTENT | BACKUP, INT, "375"}},
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"BPUIDebugLog", {PERSISTENT, BOOL, "0"}},
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},

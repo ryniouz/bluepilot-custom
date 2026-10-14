@@ -1,9 +1,10 @@
 """
 Console quick-controls sheet for the driving view.
 
-The expanded form of the bottom dock: a tap on the camera slides up a sheet with three big
-cards (experimental mode, following distance, screen layout) and two actions in its header
-(mark this moment, diagnostics). It closes on a tap outside it, on its close button, or after
+The expanded form of the bottom dock: a tap on the camera slides up a sheet with four big
+cards (experimental mode, following distance, screen layout, road view) and two actions in its
+header (mark this moment, diagnostics). The road view card opens a second page of switches for
+what the road view and the lead card show. It closes on a tap outside it, on its close button, or after
 a few seconds without a touch, so the road stays clear.
 """
 
@@ -21,6 +22,7 @@ from bluepilot.ui.console import draw as D
 from bluepilot.ui.console.home import PERSONALITY_LABELS, PERSONALITY_VALUES
 from bluepilot.ui.lib.layout_presets import PRESET_LABELS
 from bluepilot.ui.lib.theme import Console, roundness
+from openpilot.selfdrive.ui.bp.onroad.road_view import OPTIONS as ROAD_OPTIONS, road_prefs
 
 AUTO_CLOSE_S = 8.0
 
@@ -43,6 +45,7 @@ class QuickControls:
     self._opened_t = 0.0
     self._touched_t = 0.0
     self._sheet: rl.Rectangle | None = None
+    self._page = "main"      # or "road"
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
     self.on_bookmark: Callable[[], None] | None = None
     self.on_diagnostics: Callable[[], None] | None = None
@@ -53,6 +56,7 @@ class QuickControls:
 
   def close(self):
     self.visible = False
+    self._page = "main"
 
   def toggle(self):
     self.close() if self.visible else self.open()
@@ -88,12 +92,22 @@ class QuickControls:
 
     # Header: title on the left; actions and close on the right
     hx, hy = sheet.x + SHEET_PAD, sheet.y + SHEET_PAD - 4
-    D.text(tr("Quick controls"), hx, hy + (HEADER_H - D.H1) / 2 - 2, D.H1, semi=True)
+    road = self._page == "road"
+    D.text(tr("Road view") if road else tr("Quick controls"), hx, hy + (HEADER_H - D.H1) / 2 - 2, D.H1, semi=True)
     right = sheet.x + sheet.width - SHEET_PAD
     close = rl.Rectangle(right - HEADER_H, hy, HEADER_H, HEADER_H)
     rl.draw_rectangle_rounded(close, roundness(close, 16), 8, Console.BG_HIGH if self._pressed(close) else Console.BG_RAISED)
     D.icon("close", close.x + (HEADER_H - 40) / 2, close.y + (HEADER_H - 40) / 2, 40, Console.TEXT_SECONDARY)
     self._hits.append((close, self.close))
+    body_top = hy + HEADER_H + CARD_GAP
+    body = rl.Rectangle(sheet.x + SHEET_PAD, body_top, sheet.width - 2 * SHEET_PAD, sheet.y + sheet.height - SHEET_PAD - body_top)
+    if road:
+      back = rl.Rectangle(close.x - CARD_GAP / 2 - ACTION_W, hy, ACTION_W, HEADER_H)
+      rl.draw_rectangle_rounded(back, roundness(back, 16), 8, Console.BG_HIGH if self._pressed(back) else Console.BG_RAISED)
+      D.text_center(tr("Done"), back.x + back.width / 2, back.y + (HEADER_H - D.BODY) / 2 - 2, D.BODY, semi=True)
+      self._hits.append((back, lambda: setattr(self, "_page", "main")))
+      self._render_road_page(body)
+      return
     ax = close.x - CARD_GAP / 2
     for ic, label, fn in (("pulse", tr("Diagnostics"), self.on_diagnostics), ("bookmark", tr("Mark"), self.on_bookmark)):
       ax -= ACTION_W + CARD_GAP / 2
@@ -104,9 +118,7 @@ class QuickControls:
       self._hits.append((a, (lambda f=fn: (f and f(), self.close()))))
 
     # Cards
-    top = hy + HEADER_H + CARD_GAP
-    body = rl.Rectangle(sheet.x + SHEET_PAD, top, sheet.width - 2 * SHEET_PAD, sheet.y + sheet.height - SHEET_PAD - top)
-    weights = [1.0, 1.0, 1.0]
+    weights = [1.0, 1.0, 1.0, 1.0]
     unit = (body.width - CARD_GAP * (len(weights) - 1)) / sum(weights)
     x = body.x
     cards = []
@@ -122,7 +134,7 @@ class QuickControls:
     confirmed = bool(self._params.get_bool("ExperimentalModeConfirmed"))
     D.text(tr("Experimental mode"), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY, semi=True)
     if not confirmed:
-      state, color = tr("Turn on in Drive settings"), Console.TEXT_GHOST
+      state, color = tr("Enable in settings"), Console.TEXT_GHOST
     else:
       state, color = tr("End-to-end speed control"), (Console.ACCENT_TEXT if exp else Console.TEXT_MUTED)
     D.text(D.fit(state, D.LABEL, c.width - 2 * CARD_PAD - 112), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 14, D.LABEL, color)
@@ -146,6 +158,30 @@ class QuickControls:
     seg = rl.Rectangle(c.x + CARD_PAD - 8, c.y + c.height - CARD_PAD - D.CONTROL_H + 8, c.width - 2 * CARD_PAD + 16, D.CONTROL_H)
     for i, sr in enumerate(D.segmented(seg, [tr(s) for s in PRESET_LABELS], preset, track=Console.BG_HIGH)):
       self._hits.append((sr, lambda v=i: self._set_preset(v)))
+
+    # Road view: opens the second page
+    c = cards[3]
+    D.text(tr("Road view"), c.x + CARD_PAD, c.y + CARD_PAD, D.BODY, semi=True)
+    n_on = sum(1 for bit, _ in ROAD_OPTIONS if road_prefs.on(bit))
+    D.text(tr(f"{n_on} of {len(ROAD_OPTIONS)} shown"), c.x + CARD_PAD, c.y + c.height - CARD_PAD - D.LABEL - 14, D.LABEL, Console.TEXT_MUTED)
+    D.icon("sliders", c.x + c.width - CARD_PAD - 52, c.y + c.height - CARD_PAD - 60, 52, Console.ACCENT_TEXT)
+    if self._pressed(c):
+      rl.draw_rectangle_rounded_lines_ex(c, roundness(c, CARD_RADIUS), 8, 2, Console.BORDER_STRONG)
+    self._hits.append((c, lambda: setattr(self, "_page", "road")))
+
+  def _render_road_page(self, body: rl.Rectangle):
+    """What the road view shows: a 4 x 2 grid of switches."""
+    cols, rows = 4, 2
+    w = (body.width - CARD_GAP * (cols - 1)) / cols
+    h = (body.height - CARD_GAP * (rows - 1)) / rows
+    for i, (bit, label) in enumerate(ROAD_OPTIONS):
+      c = rl.Rectangle(body.x + (i % cols) * (w + CARD_GAP), body.y + (i // cols) * (h + CARD_GAP), w, h)
+      rl.draw_rectangle_rounded(c, roundness(c, CARD_RADIUS), 8, Console.BG_RAISED)
+      on = road_prefs.on(bit)
+      D.text(D.fit(tr(label), D.BODY, w - 2 * CARD_PAD - 120, semi=True), c.x + CARD_PAD, c.y + (h - D.BODY) / 2 - 2, D.BODY,
+             Console.TEXT_PRIMARY if on else Console.TEXT_MUTED, semi=True)
+      D.toggle(c.x + w - CARD_PAD - 104, c.y + (h - 60) / 2, on)
+      self._hits.append((c, lambda b=bit: road_prefs.toggle(b)))
 
   def _set_preset(self, v: int):
     try:

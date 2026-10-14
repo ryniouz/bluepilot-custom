@@ -5,7 +5,8 @@ from cereal import log
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_PADDING, Alert
 from openpilot.selfdrive.ui.bp.onroad.console_cues import cue_icon, notice, notice_size
 from bluepilot.ui.console import draw as D
-from bluepilot.ui.lib.theme import Console, Onroad, roundness, with_alpha
+from bluepilot.ui.lib.theme import Console, Onroad, Radius, mix, roundness, with_alpha
+from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
 
@@ -13,41 +14,58 @@ AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
 
 # Custom: Console alerts. openpilot decides when an alert shows, how long, its size and its
-# sound; this only decides how it looks.
+# sound; this only decides how it looks. Every alert uses the notification card's anatomy:
+# a squared status bar, an icon tile, then title over subtitle in sentence case.
 #   informational (normal, not full)  notification card at the top centre (console_cues.notice)
-#   prompt / critical, small and mid  openpilot's rect at the bottom, as a Console card: a
-#                                     square icon tile in the status colour, left-aligned title
-#                                     and subtitle, a thick status-coloured frame
-#   full screen                       a flat status ground with a large icon above the stock text
+#   prompt (yellow), small and mid    translucent Console panel over the road, warning bar + tile
+#   critical (red), small and mid     translucent red card, white bar + tile
+#   full screen                       deep status ground, large icon tile, wrapped title + subtitle
 PILL_TOP_Y = 24            # level with the speed card
 PILL_SIDE_MARGIN = 560     # fallback when the road view has not set the band
 
 ALERT_RADIUS = 24          # kit PANEL_R
-FRAME_W = 6                # status frame on prompt cards
-TILE = 132                 # icon tile on bottom cards
+BAR_W = 16                 # status bar on the left of a card
+TILE = 128                 # icon tile on bottom cards
 TILE_R = 24
-TITLE_MID = 72
-SUB_MID = 50
-TITLE_SMALL = 64
-FULL_ICON = 128
+TITLE_MID = 68
+SUB_MID = 46
+TITLE_SMALL = 62
+FULL_TILE = 176
+FULL_TITLE = 112
+FULL_SUB = 54
 
-# Bottom cards stay deep in both modes (white text over the camera reads the same by day)
-CARD_GROUND = {
-  AlertStatus.normal: Onroad.ALERT_NORMAL,
-  AlertStatus.userPrompt: Onroad.ALERT_NORMAL,
-  AlertStatus.critical: Onroad.ALERT_CRITICAL,
-}
-FULL_GROUND = {
-  AlertStatus.normal: Onroad.ALERT_NORMAL,
-  AlertStatus.userPrompt: Onroad.ALERT_PROMPT,
-  AlertStatus.critical: Onroad.ALERT_CRITICAL,
-}
 STATUS_COLOR = {
   AlertStatus.normal: Console.ACCENT,
   AlertStatus.userPrompt: Console.WARNING,
   AlertStatus.critical: Console.DANGER_FILL,
 }
+# Full screen: a deep status ground so the bright icon tile and white text carry the urgency
+FULL_GROUND = {
+  AlertStatus.normal: Onroad.ALERT_NORMAL,
+  AlertStatus.userPrompt: mix(Console.WARNING, Console.FRAME_INK, 0.6),
+  AlertStatus.critical: mix(Console.DANGER_FILL, Console.FRAME_INK, 0.3),
+}
 SUB_TEXT = with_alpha(Onroad.ALERT_TEXT, 0xC8)
+
+
+def sentence(text: str) -> str:
+  """openpilot shouts some alerts in capitals; the Console speaks in sentence case."""
+  if text and text.upper() == text and any(c.isalpha() for c in text):
+    return text[:1] + text[1:].lower()
+  return text
+
+
+def alert_icon(alert) -> str:
+  t = f"{alert.text1} {alert.text2}".lower()
+  if "wheel" in t or "steer" in t or "take control" in t or "hands" in t:
+    return "hands"
+  if "attention" in t or "distract" in t or "eyes" in t or "road" in t or "driver" in t:
+    return "eye"
+  if "lane change" in t or "changing lanes" in t:
+    return "lane_right" if "right" in t else "lane_left"
+  if "blindspot" in t or "blind spot" in t:
+    return "car_rear"
+  return "alert"
 
 
 class AlertRendererBP(AlertRenderer):
@@ -60,6 +78,7 @@ class AlertRendererBP(AlertRenderer):
     # Set by the road view each frame: the free band between the signal tiles. The
     # notification card centres in it.
     self.notify_band: tuple[float, float] | None = None
+    self.notify_top: float | None = None
 
   def _render(self, rect: rl.Rectangle):
     from openpilot.selfdrive.ui.ui_state import ui_state
@@ -81,7 +100,7 @@ class AlertRendererBP(AlertRenderer):
     if alert.status == AlertStatus.normal and alert.size != AlertSize.full:
       r = self._get_pill_rect(rect, alert)
       if r is not None:
-        notice(r, alert.text1 or "", alert.text2 or "", Console.ACCENT, self._icon_for(alert))
+        notice(r, sentence(alert.text1 or ""), sentence(alert.text2 or ""), Console.ACCENT, alert_icon(alert) if alert_icon(alert) != "alert" else "bell")
       return
 
     alert_rect = self._get_alert_rect(rect, alert.size)
@@ -92,15 +111,6 @@ class AlertRendererBP(AlertRenderer):
 
   # -- notification ------------------------------------------------------------------------
 
-  @staticmethod
-  def _icon_for(alert) -> str:
-    t = f"{alert.text1} {alert.text2}".lower()
-    if "lane change" in t or "changing lanes" in t:
-      return "lane_right" if "right" in t else "lane_left"
-    if "blindspot" in t or "blind spot" in t:
-      return "car"
-    return "bell"
-
   def _get_pill_rect(self, rect: rl.Rectangle, alert) -> Optional[rl.Rectangle]:
     """Notification card rect: centred in the band between the signal tiles."""
     line1, line2 = alert.text1 or "", alert.text2 or ""
@@ -110,51 +120,76 @@ class AlertRendererBP(AlertRenderer):
     if band_r - band_l < 100:
       return None
     w, h = notice_size(line1, line2, band_r - band_l)
-    return rl.Rectangle(band_l + (band_r - band_l - w) / 2, rect.y + PILL_TOP_Y, w, h)
+    top = self.notify_top if self.notify_top is not None else rect.y + PILL_TOP_Y
+    return rl.Rectangle(band_l + (band_r - band_l - w) / 2, top, w, h)
 
   # -- prompt and critical cards (small, mid) ----------------------------------------------
 
   def _draw_card(self, rect: rl.Rectangle, alert: Alert) -> None:
     status = alert.status
+    critical = status == AlertStatus.critical
     accent = STATUS_COLOR.get(status, Console.ACCENT)
     r = roundness(rect, ALERT_RADIUS)
-    rl.draw_rectangle_rounded(rect, r, 10, CARD_GROUND.get(status, Onroad.ALERT_NORMAL))
-    if status == AlertStatus.userPrompt:
-      rl.draw_rectangle_rounded_lines_ex(rect, r, 10, FRAME_W, accent)
-    elif status == AlertStatus.normal:
-      rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, Console.BORDER_DEFAULT)
-
-    # Icon tile: status colour with a dark mark; white with a red mark on a critical card
-    tile = min(TILE, rect.height - 2 * 32)
-    t = rl.Rectangle(rect.x + 40, rect.y + (rect.height - tile) / 2, tile, tile)
-    critical = status == AlertStatus.critical
-    rl.draw_rectangle_rounded(t, roundness(t, TILE_R), 10, Onroad.ALERT_TEXT if critical else accent)
-    icon = "warning" if status != AlertStatus.normal else "bell"
-    isz = tile * 0.58
-    cue_icon(icon, t.x + (tile - isz) / 2, t.y + (tile - isz) / 2 - 2, isz, Console.DANGER_FILL if critical else Console.FRAME_INK)
-
-    tx = t.x + tile + 40
-    max_w = rect.x + rect.width - ALERT_PADDING - tx
-    if alert.size == AlertSize.small or not alert.text2:
-      size = TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID
-      text = D.fit(alert.text1, size, max_w, semi=True)
-      rl.draw_text_ex(self._font_semi, text, rl.Vector2(tx, rect.y + (rect.height - size) / 2 - 2), size, 0, Onroad.ALERT_TEXT)
+    if critical:
+      ground, ink, sub_ink, edge = with_alpha(Onroad.ALERT_CRITICAL, 0xE0), Onroad.ALERT_TEXT, SUB_TEXT, with_alpha(Onroad.ALERT_TEXT, 0x40)
     else:
-      y = rect.y + (rect.height - TITLE_MID - 14 - SUB_MID) / 2 - 2
-      rl.draw_text_ex(self._font_semi, D.fit(alert.text1, TITLE_MID, max_w, semi=True), rl.Vector2(tx, y), TITLE_MID, 0,
-                      Onroad.ALERT_TEXT)
-      rl.draw_text_ex(self._font_body, D.fit(alert.text2, SUB_MID, max_w), rl.Vector2(tx, y + TITLE_MID + 14), SUB_MID, 0, SUB_TEXT)
+      ground, ink, sub_ink, edge = Onroad.PANEL, Console.TEXT_PRIMARY, Console.TEXT_SECONDARY, Console.BORDER_DEFAULT
+    rl.draw_rectangle_rounded(rect, r, 10, ground)
+    rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, edge)
+
+    # Status bar, then the icon tile: tinted status colour with the mark in full colour
+    bar = Onroad.ALERT_TEXT if critical else accent
+    b = rl.Rectangle(rect.x + 32, rect.y + 28, BAR_W, rect.height - 56)
+    rl.draw_rectangle_rounded(b, roundness(b, Radius.XS), 4, bar)
+    tile = min(TILE, rect.height - 2 * 32)
+    t = rl.Rectangle(b.x + BAR_W + 28, rect.y + (rect.height - tile) / 2, tile, tile)
+    rl.draw_rectangle_rounded(t, roundness(t, TILE_R), 10, with_alpha(bar, 0x38))
+    isz = tile * 0.6
+    cue_icon(alert_icon(alert), t.x + (tile - isz) / 2, t.y + (tile - isz) / 2, isz, bar)
+
+    tx = t.x + tile + 36
+    max_w = rect.x + rect.width - ALERT_PADDING - tx
+    title, sub = sentence(alert.text1), sentence(alert.text2)
+    if alert.size == AlertSize.small or not sub:
+      size = TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID
+      rl.draw_text_ex(self._font_semi, D.fit(title, size, max_w, semi=True), rl.Vector2(tx, rect.y + (rect.height - size) / 2 - 2),
+                      size, 0, ink)
+    else:
+      y = rect.y + (rect.height - TITLE_MID - 12 - SUB_MID) / 2 - 2
+      rl.draw_text_ex(self._font_semi, D.fit(title, TITLE_MID, max_w, semi=True), rl.Vector2(tx, y), TITLE_MID, 0, ink)
+      rl.draw_text_ex(self._font_body, D.fit(sub, SUB_MID, max_w), rl.Vector2(tx, y + TITLE_MID + 12), SUB_MID, 0, sub_ink)
 
   # -- full screen ---------------------------------------------------------------------------
 
   def _draw_full(self, rect: rl.Rectangle, alert: Alert) -> None:
     status = alert.status
     rl.draw_rectangle_rec(rect, FULL_GROUND.get(status, Onroad.ALERT_NORMAL))
-    if status != AlertStatus.normal:
-      cue_icon("warning", rect.x + (rect.width - FULL_ICON) / 2, rect.y + 56, FULL_ICON, Onroad.ALERT_TEXT)
-    # stock text layout untouched; the icon sits in the space above the title
-    text_rect = rl.Rectangle(rect.x + ALERT_PADDING, rect.y + ALERT_PADDING, rect.width - 2 * ALERT_PADDING, rect.height - 2 * ALERT_PADDING)
-    self._draw_text(text_rect, alert)
+    accent = Onroad.ALERT_TEXT if status == AlertStatus.critical else STATUS_COLOR.get(status, Console.ACCENT)
+
+    max_w = rect.width - 2 * ALERT_PADDING - 120
+    title = D.wrap(sentence(alert.text1), FULL_TITLE, max_w, max_lines=2, semi=True)
+    sub = D.wrap(sentence(alert.text2), FULL_SUB, max_w, max_lines=2) if alert.text2 else []
+    title_lh, sub_lh = FULL_TITLE * 1.1, FULL_SUB * 1.25
+    total = FULL_TILE + 48 + len(title) * title_lh + (24 + len(sub) * sub_lh if sub else 0)
+    y = rect.y + (rect.height - total) / 2
+    cx = rect.x + rect.width / 2
+
+    t = rl.Rectangle(cx - FULL_TILE / 2, y, FULL_TILE, FULL_TILE)
+    rl.draw_rectangle_rounded(t, roundness(t, 32), 10, accent)
+    isz = FULL_TILE * 0.6
+    mark = Onroad.ALERT_CRITICAL if status == AlertStatus.critical else Console.FRAME_INK
+    cue_icon(alert_icon(alert), t.x + (FULL_TILE - isz) / 2, t.y + (FULL_TILE - isz) / 2, isz, mark)
+    y += FULL_TILE + 48
+    for line in title:
+      w = measure_text_cached(self._font_semi, line, FULL_TITLE).x
+      rl.draw_text_ex(self._font_semi, line, rl.Vector2(cx - w / 2, y), FULL_TITLE, 0, Onroad.ALERT_TEXT)
+      y += title_lh
+    if sub:
+      y += 24
+      for line in sub:
+        w = measure_text_cached(self._font_body, line, FULL_SUB).x
+        rl.draw_text_ex(self._font_body, line, rl.Vector2(cx - w / 2, y), FULL_SUB, 0, SUB_TEXT)
+        y += sub_lh
 
   # kept for callers of the base API
   def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
