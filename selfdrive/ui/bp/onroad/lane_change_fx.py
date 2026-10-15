@@ -22,6 +22,7 @@ import numpy as np
 import pyray as rl
 from cereal import log
 
+from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import Gradient, draw_polygon
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from bluepilot.ui.lib.theme import Console, Onroad, with_alpha
@@ -159,11 +160,14 @@ class LaneChangeFx:
     if poly.size < 8:
       return
     lo, hi = poly.min(axis=0), poly.max(axis=0)
-    box = rl.Rectangle(float(lo[0]), float(lo[1]), float(max(hi[0] - lo[0], 1.0)), float(max(hi[1] - lo[1], 1.0)))
-    # like the driving path: strongest at the truck, fading toward the box
+    # the gradient shader works in gl_FragCoord (origin bottom left), so the ribbon's own box is given flipped;
+    # stock passes the full screen, where the flip cancels out
+    box = rl.Rectangle(float(lo[0]), float(gui_app.height - hi[1]), float(max(hi[0] - lo[0], 1.0)),
+                       float(max(hi[1] - lo[1], 1.0)))
+    # like the driving path, a little stronger at the truck, but still clearly reaching the box
     grad = Gradient(start=(0.0, 1.0), end=(0.0, 0.0), stops=[0.0, 0.6, 1.0],
-                    colors=[with_alpha(color, int(100 * vis)), with_alpha(color, int(65 * vis)),
-                            with_alpha(color, int(30 * vis))])
+                    colors=[with_alpha(color, int(105 * vis)), with_alpha(color, int(85 * vis)),
+                            with_alpha(color, int(65 * vis))])
     _fill(box, poly, gradient=grad)
 
   def _draw(self, r, curve: np.ndarray):
