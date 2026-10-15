@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import pyray as rl
 
 from openpilot.common.params import Params
+from openpilot.system.hardware import PC
 from openpilot.system.ui.lib.application import MouseEvent
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
@@ -32,6 +33,10 @@ ROW_H = 128
 DAY_H = 72
 DRAG_PX = 16
 GB = 1024 ** 3
+# On a PC (the simulator) the scan sees the host's disk, so its system slice would fill the bar. Show a comma
+# 3X's own disk instead: its capacity and a typical system share, with the drives the scan really found.
+SIM_DISK_BYTES = 128 * GB
+SIM_SYSTEM_BYTES = 14 * GB
 
 
 def fmt_bytes(n: float) -> tuple[str, str]:
@@ -247,11 +252,15 @@ def storage_breakdown() -> Storage | None:
   if not idx.disk_total:
     return None
   other_drive = max(0, idx.drive_bytes - idx.video_bytes - idx.low_res_bytes - idx.log_bytes)
+  total, free, system = idx.disk_total, idx.disk_free, idx.other_bytes
+  if PC:
+    total, system = SIM_DISK_BYTES, SIM_SYSTEM_BYTES
+    free = max(0, total - system - idx.drive_bytes)
   slices = [Slice(tr("Video"), idx.video_bytes, Console.ACCENT),
             Slice(tr("Low-res video"), idx.low_res_bytes, Console.INFO),
             Slice(tr("Logs"), idx.log_bytes + other_drive, Console.PURPLE),
-            Slice(tr("System, maps and caches"), idx.other_bytes, Console.TEXT_GHOST)]
-  return Storage(idx.disk_total, idx.disk_free, slices, idx.unsynced_bytes if idx.sync_known else 0, False)
+            Slice(tr("System, maps and caches"), system, Console.TEXT_GHOST)]
+  return Storage(total, free, slices, idx.unsynced_bytes if idx.sync_known else 0, False)
 
 
 def storage_bar(r: rl.Rectangle, st: Storage):
