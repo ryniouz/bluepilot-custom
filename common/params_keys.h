@@ -433,6 +433,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
     {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
     {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},  // pinned update branch; empty = UpdaterTargetBranch / current
+    {"BPUpdateProgress", {CLEAR_ON_MANAGER_START, JSON}},  // {"stage","pct","detail"} while updated downloads (Console Updates bar)
+    {"BPForkStatus", {PERSISTENT, JSON}},  // last check of BPUpdateRepo: version and commit of the update branch
+    {"BPUpstreamStatus", {PERSISTENT, JSON}},  // last check of upstream BluePilot: newest release, bp-dev commits since our base
     {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
     {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
     {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
