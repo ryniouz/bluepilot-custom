@@ -7,7 +7,7 @@ Same params as before; rows whose param this build lacks are left out.
 from __future__ import annotations
 
 from openpilot.selfdrive.ui.bp.onroad.road_view import (LC_STYLE_LABELS, LC_STYLES, LEAD_STYLE_LABELS, LEAD_STYLES, LC_MASK,
-                                                        LC_SHIFT, MARKER_MASK, MARKER_SHIFT, OPTIONS, PRESET_ORDER,
+                                                        MARKER_MASK, lc_bits, lc_index, MARKER_SHIFT, OPTIONS, PRESET_ORDER,
                                                         PRESETS, road_prefs)
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
@@ -68,12 +68,12 @@ class DrivingScreenPage(DrivePage):
       for bit, label in OPTIONS
     ]
     marker = (v & MARKER_MASK) >> MARKER_SHIFT
-    lc = (v & LC_MASK) >> LC_SHIFT
+    lc = lc_index(v)
     styles = Section(tr("Lead car and lane change"), "car", [
       Choice(tr("Lead car marker"), [tr(LEAD_STYLE_LABELS[s]) for s in LEAD_STYLES], marker,
              lambda i: self._set_bits(MARKER_MASK, MARKER_SHIFT, i), radio=False),
       Choice(tr("Lane change cue"), [tr(LC_STYLE_LABELS[s]) for s in LC_STYLES], lc,
-             lambda i: self._set_bits(LC_MASK, LC_SHIFT, i), radio=False),
+             lambda i: road_prefs._write((road_prefs.value & ~LC_MASK) | lc_bits(i)), radio=False),
       self.toggle("FordPrefShowRadarLeadOverlay", tr("Radar lead marker"), tr("With the truck's own cruise")),
       self._choice("FordPrefRadarOverlaySize", tr("Radar marker size"), ["Small", "Medium", "Large"], 1, adv=True)
       if self.p.bool("FordPrefShowRadarLeadOverlay") else None,

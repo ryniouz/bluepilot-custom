@@ -70,8 +70,18 @@ DEFAULT_SHOW = CUSTOM_DEFAULT | (1 << PRESET_SHIFT)  # new installs start on Sta
 PARAM = "BPRoadView"
 
 LEAD_STYLES = ("floor", "bracket", "corners", "chevron")
-LC_STYLES = ("arrow", "chevrons", "lane", "off")  # lane_change_fx.py; index 0 is the default (Lucas picked arrow)
-LC_STYLE_LABELS = {"chevrons": "Chevrons", "lane": "Lane glow", "arrow": "Arrow", "off": "Off"}
+LC_STYLES = ("pointer", "off")  # lane_change_fx.py; Lucas picked Pointer (2026-10-15), the other cues are gone
+LC_STYLE_LABELS = {"pointer": "Pointer", "off": "Off"}
+LC_OFF = 3                       # stored value for Off; 0-2 were earlier cue styles and now mean Pointer
+
+
+def lc_index(value: int) -> int:
+  """BPRoadView -> index into LC_STYLES."""
+  return 1 if (value & LC_MASK) >> LC_SHIFT == LC_OFF else 0
+
+
+def lc_bits(index: int) -> int:
+  return (LC_OFF if index else 0) << LC_SHIFT
 
 # (bit, label) in the order the settings sheet lists them
 OPTIONS = (
@@ -149,11 +159,10 @@ class RoadViewPrefs:
 
   @property
   def lane_change(self) -> str:
-    return LC_STYLES[(self.value & LC_MASK) >> LC_SHIFT]
+    return LC_STYLES[lc_index(self.value)]
 
   def next_lane_change(self):
-    i = ((self.value & LC_MASK) >> LC_SHIFT) + 1
-    self._write((self.value & ~LC_MASK) | ((i % len(LC_STYLES)) << LC_SHIFT))
+    self._write((self.value & ~LC_MASK) | lc_bits(1 - lc_index(self.value)))
 
   def _write(self, value: int):
     self._value = value

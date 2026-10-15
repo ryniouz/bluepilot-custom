@@ -994,8 +994,8 @@ def drive_scene_params(name: str) -> dict:
     # default with the speed tag on, the lead card off and this marker style
     p.update({"BPRoadView": 0xF7 | (LEAD_STYLES.index(name.split("_")[-1]) << MARKER_SHIFT)})
   if name.startswith("drive_lc_"):
-    from openpilot.selfdrive.ui.bp.onroad.road_view import DEFAULT_SHOW, LC_SHIFT, LC_STYLES
-    p.update({"BPRoadView": DEFAULT_SHOW | (LC_STYLES.index(name.split("_")[-1]) << LC_SHIFT)})
+    from openpilot.selfdrive.ui.bp.onroad.road_view import DEFAULT_SHOW, LC_STYLES, lc_bits
+    p.update({"BPRoadView": DEFAULT_SHOW | lc_bits(LC_STYLES.index(name.split("_")[-1]))})
   return p
 
 
@@ -1528,8 +1528,7 @@ def run_scene(sc: Scene):
       sc.main._debug_panel.toggle_visibility()
       sc.step(max(30, sc.frames // 3))
     if name.startswith("drive_lc_"):  # stream B: one full loop of the cue, every 3rd frame (20 fps)
-      from openpilot.selfdrive.ui.bp.onroad.lane_change_fx import PERIOD
-      n = round(PERIOD[name.split("_")[-1]] * 60 / 3)
+      n = round(1.4 * 60 / 3)
       for k in range(n):
         sc.shot(f"{name}_{k:02d}")
         sc.step(2)
