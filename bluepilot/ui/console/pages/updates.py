@@ -20,6 +20,7 @@ bluepilot/ui/lib/update_flow.py turns that into one state; on a PC it plays the 
 
 from __future__ import annotations
 
+import datetime
 import re
 import time
 
@@ -78,7 +79,9 @@ def when(ts) -> str:
       ts = time.localtime(ts)
       return time.strftime("%b %-d, %-I:%M %p", ts)
     if hasattr(ts, "strftime"):
-      return ts.strftime("%b %-d, %-I:%M %p")
+      if getattr(ts, "tzinfo", None) is None:   # updated writes LastUpdateTime as naive UTC
+        ts = ts.replace(tzinfo=datetime.UTC)
+      return ts.astimezone().strftime("%b %-d, %-I:%M %p")
   except (ValueError, OverflowError, OSError):
     pass
   return ""
@@ -89,6 +92,8 @@ HERO_LOGO = 112
 HERO_H = {State.UP_TO_DATE: 300, State.CHECKING: 300, State.AVAILABLE: 300, State.DOWNLOADING: 352,
           State.READY: 336, State.FAILED: 300}
 INSTALL_S = 4.0     # the installing view before the comma restarts
+INSTALL_TEXT = rl.Color(244, 246, 250, 255)   # the installing view is black in day and night
+INSTALL_SUB = rl.Color(176, 182, 192, 255)
 
 
 class InstallView(Widget):
@@ -112,18 +117,19 @@ class InstallView(Widget):
     if tex is not None:
       rl.draw_texture_ex(tex, rl.Vector2(cx - tex.width / 2, y), 0, 1, rl.WHITE)
     y += 220 + 80
-    D.text_center(D.fit(tr("Installing") + " " + self.label, D.H1, rect.width - 256, semi=True), cx, y, D.H1, semi=True)
+    D.text_center(D.fit(tr("Installing") + " " + self.label, D.H1, rect.width - 256, semi=True), cx, y, D.H1, INSTALL_TEXT,
+                  semi=True)   # always on black, so bright in day mode too
     bar_w = min(1100, rect.width - 256)
     bar = rl.Rectangle(cx - bar_w / 2, y + 108, bar_w, 36)
     K.bar(bar, frac, Console.ACCENT)
     self._done = None
     if self.flow.simulated and frac >= 1.0:
       D.text_center(tr("Simulator: the comma would restart now. Nothing was installed."), cx, bar.y + 84, D.LABEL,
-                    Console.TEXT_MUTED)
+                    INSTALL_SUB)
       self._done = rl.Rectangle(cx - 200, bar.y + 168, 400, 96)
       D.button(self._done, tr("Done"), primary=False)
       return
-    D.text_center(tr("The comma restarts to finish. Keep it plugged in."), cx, bar.y + 84, D.LABEL, Console.TEXT_MUTED)
+    D.text_center(tr("The comma restarts to finish. Keep it plugged in."), cx, bar.y + 84, D.LABEL, INSTALL_SUB)
     if frac >= 1.0 and not self.sent and not self.flow.simulated:
       self.sent = True
       self.flow.install()
@@ -222,8 +228,12 @@ class UpdatesPage(FormPage):
     source = " · ".join(b for b in (fork.get("repo", ""), fork.get("branch") or self.branch()) if b)
     if state == State.UP_TO_DATE:
       last = when(self.p.get("LastUpdateTime", None)) or when(fork.get("checkedAt", 0))
-      headline(Console.SUCCESS, tr("Your software is up to date"),
-               (tr("Last checked") + " " + last if last else tr("Not checked yet")) + (f"  ·  {source}" if source else ""))
+      if last:
+        headline(Console.SUCCESS, tr("Your software is up to date"),
+                 tr("Last checked") + " " + last + (f"  ·  {source}" if source else ""))
+      else:   # nothing to vouch for until the first check
+        headline(Console.TEXT_MUTED, tr("Not checked yet"),
+                 tr("Check for updates from") + " " + (source or tr("your repository")))
       D.button(btn, tr("Check for updates"), primary=False, size=D.LABEL)
       hits.append((btn, self.flow.check))
     elif state == State.CHECKING:
