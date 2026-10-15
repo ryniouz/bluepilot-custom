@@ -384,6 +384,9 @@ class HudRendererBP(HudRendererSP):
       rl.draw_text_ex(self._font_medium, D.fit(sub, 26, text_w), rl.Vector2(tx, ty + CLUSTER_LABEL + 8), 26, 0, sub_c)
     return card
 
+  def lane_blocked(self) -> bool:
+    return self._bs_markers.blocked_side() is not None
+
   def _ghost_sign(self, r: rl.Rectangle) -> None:
     """Where the sign goes when no limit is known: a faint outline with a dash, so the tile keeps its shape."""
     k = r.height / SIGN_H

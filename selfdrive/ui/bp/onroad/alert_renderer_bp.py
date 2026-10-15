@@ -175,7 +175,7 @@ class AlertRendererBP(AlertRenderer):
     words = measure_text_cached(self._font_semi, title, TITLE_SMALL if alert.size == AlertSize.small else TITLE_MID).x
     if not small:
       words = max(words, measure_text_cached(self._font_body, sub, SUB_MID).x)
-    w = max(CARD_MIN_W, min(screen.width - 2 * CARD_SIDE, lead + words + ALERT_PADDING))
+    w = max(CARD_MIN_W, min(screen.width - 2 * CARD_SIDE, lead + words + ALERT_PADDING + 32))  # slack so D.fit never clips
     return rl.Rectangle(screen.x + (screen.width - w) / 2, r.y, w, r.height)
 
   # -- notification ------------------------------------------------------------------------
@@ -199,7 +199,7 @@ class AlertRendererBP(AlertRenderer):
     critical = status == AlertStatus.critical
     # Steering blocked (Lucas 2026-10-15): the card that explains it takes the red line and the red box, matching the
     # red left-edge bar and the speed tile's red outline
-    boxed = self.attention == "blocked" and not critical
+    boxed = self.attention in ("blocked", "lane_blocked") and not critical
     accent = Console.DANGER_FILL if boxed else STATUS_COLOR.get(status, Console.ACCENT)
     r = roundness(rect, ALERT_RADIUS)
     if critical:
