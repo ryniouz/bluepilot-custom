@@ -70,7 +70,7 @@
 
 .metric-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--bp-accent-blue), var(--bp-accent-purple));
+  background: var(--bp-accent-blue);
   border-radius: 4px;
   transition: width 0.5s ease;
 }

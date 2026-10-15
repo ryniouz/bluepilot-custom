@@ -118,8 +118,8 @@
 
 /* Color states for metric pills */
 .status-pill.normal {
-  background: rgba(76, 175, 80, 0.1);
-  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(var(--success-rgb), 0.1);
+  border-color: rgba(var(--success-rgb), 0.3);
 }
 
 .status-pill.normal .pill-icon {
@@ -131,21 +131,21 @@
 }
 
 .status-pill.warning {
-  background: rgba(255, 152, 0, 0.15);
-  border-color: rgba(255, 152, 0, 0.4);
+  background: rgba(var(--warning-rgb), 0.15);
+  border-color: rgba(var(--warning-rgb), 0.4);
 }
 
 .status-pill.warning .pill-icon {
-  color: #ff9800;
+  color: var(--warning);
 }
 
 .status-pill.warning .pill-value {
-  color: #ff9800;
+  color: var(--warning);
 }
 
 .status-pill.critical {
-  background: rgba(244, 67, 54, 0.15);
-  border-color: rgba(244, 67, 54, 0.4);
+  background: rgba(var(--danger-rgb), 0.15);
+  border-color: rgba(var(--danger-rgb), 0.4);
   animation: pulse-critical 2s ease-in-out infinite;
 }
 
@@ -160,12 +160,12 @@
 @keyframes pulse-critical {
   0%,
   100% {
-    border-color: rgba(244, 67, 54, 0.4);
-    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4);
+    border-color: rgba(var(--danger-rgb), 0.4);
+    box-shadow: 0 0 0 0 rgba(var(--danger-rgb), 0.4);
   }
   50% {
-    border-color: rgba(244, 67, 54, 0.6);
-    box-shadow: 0 0 0 4px rgba(244, 67, 54, 0.1);
+    border-color: rgba(var(--danger-rgb), 0.6);
+    box-shadow: 0 0 0 4px rgba(var(--danger-rgb), 0.1);
   }
 }
 
@@ -231,7 +231,7 @@
 }
 
 .stat-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  background: var(--bg-panel);
   border: 1px solid var(--bp-border);
   border-radius: 12px;
   padding: 0.875rem;
@@ -252,7 +252,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--bp-accent-blue), transparent);
+  background: var(--bp-accent-blue);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
@@ -260,7 +260,7 @@
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border-color: rgba(33, 150, 243, 0.4);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .stat-card:hover::before {
@@ -268,12 +268,12 @@
 }
 
 .stat-card.all-time {
-  background: linear-gradient(135deg, rgba(33, 150, 243, 0.12) 0%, rgba(33, 150, 243, 0.04) 100%);
-  border-color: rgba(33, 150, 243, 0.3);
+  background: var(--accent-tint);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .stat-card.all-time::before {
-  background: linear-gradient(90deg, transparent, #2196f3, transparent);
+  background: var(--accent);
 }
 
 .stat-value {
@@ -285,7 +285,7 @@
 }
 
 .stat-card.all-time .stat-value {
-  color: var(--bp-accent-blue, #2196f3);
+  color: var(--bp-accent-blue, var(--accent));
   font-size: 1.85rem;
 }
 
@@ -347,7 +347,7 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--ink-rgb), 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -399,11 +399,11 @@
 }
 
 .quick-link-card.settings .quick-link-icon .material-icons {
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .quick-link-card.settings:hover {
-  border-color: #f59e0b;
+  border-color: var(--warning);
 }
 
 .quick-link-card.routes .quick-link-icon .material-icons {
@@ -415,27 +415,27 @@
 }
 
 .quick-link-card.parameters .quick-link-icon .material-icons {
-  color: #8b5cf6;
+  color: var(--purple);
 }
 
 .quick-link-card.parameters .link-badge {
-  background: #8b5cf6;
+  background: var(--purple);
 }
 
 .quick-link-card.parameters:hover {
-  border-color: #8b5cf6;
+  border-color: var(--purple);
 }
 
 .quick-link-card.logs .quick-link-icon .material-icons {
-  color: #10b981;
+  color: var(--success);
 }
 
 .quick-link-card.logs .link-badge {
-  background: #10b981;
+  background: var(--success);
 }
 
 .quick-link-card.logs:hover {
-  border-color: #10b981;
+  border-color: var(--success);
 }
 
 /* Disabled state for onroad */
@@ -487,8 +487,8 @@
 /* Error Panel */
 .dashboard-error-panel {
   grid-column: 1 / -1;
-  background: rgba(244, 67, 54, 0.08);
-  border: 1px solid rgba(244, 67, 54, 0.3);
+  background: rgba(var(--danger-rgb), 0.08);
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
   border-radius: 16px;
   padding: 1rem;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
@@ -508,18 +508,18 @@
   gap: 0.5rem;
   margin: 0;
   font-size: 1.1rem;
-  color: var(--bp-error, #f44336);
+  color: var(--bp-error, var(--danger));
   font-weight: 600;
 }
 
 .dashboard-error-panel .error-icon {
   font-size: 20px !important;
-  color: var(--bp-error, #f44336);
+  color: var(--bp-error, var(--danger));
 }
 
 .error-count-badge {
-  background: rgba(244, 67, 54, 0.2);
-  color: var(--bp-error, #f44336);
+  background: rgba(var(--danger-rgb), 0.2);
+  color: var(--bp-error, var(--danger));
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.625rem;
@@ -528,7 +528,7 @@
 
 .error-card {
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(var(--danger-rgb), 0.2);
   border-radius: 12px;
   padding: 1rem;
 }
@@ -552,18 +552,18 @@
 }
 
 .error-level.error {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
+  background: rgba(var(--danger-rgb), 0.2);
+  color: var(--danger);
 }
 
 .error-level.critical {
-  background: rgba(156, 39, 176, 0.2);
-  color: #9c27b0;
+  background: rgba(var(--purple-rgb), 0.2);
+  color: var(--purple);
 }
 
 .error-level.warning {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ff9800;
+  background: rgba(var(--warning-rgb), 0.2);
+  color: var(--warning);
 }
 
 .error-timestamp {
@@ -586,7 +586,7 @@
   padding: 0.75rem;
   border-radius: 8px;
   margin-bottom: 0.75rem;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 150px;
@@ -594,9 +594,9 @@
 }
 
 .view-logs-button {
-  background: rgba(244, 67, 54, 0.15);
-  border: 1px solid rgba(244, 67, 54, 0.3);
-  color: var(--bp-error, #f44336);
+  background: rgba(var(--danger-rgb), 0.15);
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
+  color: var(--bp-error, var(--danger));
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.8rem;
@@ -607,8 +607,8 @@
 }
 
 .view-logs-button:hover {
-  background: rgba(244, 67, 54, 0.25);
-  border-color: rgba(244, 67, 54, 0.5);
+  background: rgba(var(--danger-rgb), 0.25);
+  border-color: rgba(var(--danger-rgb), 0.5);
 }
 
 @media (max-width: 768px) {

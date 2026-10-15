@@ -7,6 +7,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console, Onroad, OnroadType, with_alpha  # Custom: Console theme
 
 # Constants
 SET_SPEED_NA = 255
@@ -22,33 +23,35 @@ class UIConfig:
   set_speed_width_metric: int = 200
   set_speed_width_imperial: int = 172
   set_speed_height: int = 204
-  wheel_icon_size: int = 144
+  wheel_icon_size: int = 108  # Custom: sized for the Console button face
 
 
 @dataclass(frozen=True)
 class FontSizes:
-  current_speed: int = 176
-  speed_unit: int = 66
-  max_speed: int = 40
-  set_speed: int = 90
+  # Custom: Console onroad type scale (bluepilot/ui/lib/theme.py OnroadType)
+  current_speed: int = OnroadType.SPEED
+  speed_unit: int = OnroadType.SPEED_UNIT
+  max_speed: int = OnroadType.SET_LABEL
+  set_speed: int = OnroadType.SET_SPEED
 
 
 @dataclass(frozen=True)
 class Colors:
-  WHITE = rl.WHITE
-  DISENGAGED = rl.Color(145, 155, 149, 255)
-  OVERRIDE = rl.Color(145, 155, 149, 255)  # Added
-  ENGAGED = rl.Color(128, 216, 166, 255)
-  DISENGAGED_BG = rl.Color(0, 0, 0, 153)
-  OVERRIDE_BG = rl.Color(145, 155, 149, 204)
-  ENGAGED_BG = rl.Color(128, 216, 166, 204)
-  GREY = rl.Color(166, 166, 166, 255)
-  DARK_GREY = rl.Color(114, 114, 114, 255)
-  BLACK_TRANSLUCENT = rl.Color(0, 0, 0, 166)
-  WHITE_TRANSLUCENT = rl.Color(255, 255, 255, 200)
-  BORDER_TRANSLUCENT = rl.Color(255, 255, 255, 75)
-  HEADER_GRADIENT_START = rl.Color(0, 0, 0, 114)
-  HEADER_GRADIENT_END = rl.BLANK
+  # Custom: Console tokens. Status hues mark state only; text steps primary -> muted -> ghost.
+  WHITE = Console.TEXT_PRIMARY
+  DISENGAGED = Console.TEXT_MUTED
+  OVERRIDE = Console.WARNING
+  ENGAGED = Console.SUCCESS
+  DISENGAGED_BG = Onroad.PANEL
+  OVERRIDE_BG = with_alpha(Console.WARNING, 0xCC)
+  ENGAGED_BG = with_alpha(Console.SUCCESS, 0xCC)
+  GREY = Console.TEXT_MUTED
+  DARK_GREY = Console.TEXT_GHOST
+  BLACK_TRANSLUCENT = Onroad.PANEL
+  WHITE_TRANSLUCENT = Console.TEXT_MUTED
+  BORDER_TRANSLUCENT = Console.BORDER_DEFAULT
+  HEADER_GRADIENT_START = Onroad.BAND
+  HEADER_GRADIENT_END = Console.TRANSPARENT  # legibility fade over the camera, not decoration
 
 
 UI_CONFIG = UIConfig()

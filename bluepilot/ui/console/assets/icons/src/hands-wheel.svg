@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Hands on the F-150 wheel at nine and three -->
+  <circle cx="12" cy="12" r="8.5"/>
+  <path d="M9.3 9.6 H14.7 Q15.7 9.6 15.5 10.6 L14.95 13.6 Q14.8 14.4 14 14.4 H10 Q9.2 14.4 9.05 13.6 L8.5 10.6 Q8.3 9.6 9.3 9.6 Z"/>
+  <ellipse cx="12" cy="12" rx="1.6" ry="0.9" fill="currentColor" stroke="none"/>
+  <path d="M5.5 11.2 L8.4 11.1 M18.5 11.2 L15.6 11.1 M10.9 14.4 L10.6 20.4 M13.1 14.4 L13.4 20.4"/>
+  <rect x="1.6" y="8.4" width="4.4" height="7" rx="2.1" fill="currentColor" stroke="none"/>
+  <rect x="18" y="8.4" width="4.4" height="7" rx="2.1" fill="currentColor" stroke="none"/>
+</svg>

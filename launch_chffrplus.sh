@@ -27,7 +27,14 @@ function agnos_init {
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
     fi
-    $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    # Custom: Console update screen (logo, squared progress bar); the stock updater if it can't start here
+    if [ -x "$DIR/system/hardware/tici/updater_console" ] && \
+       timeout 60 "$DIR/system/hardware/tici/updater_console" --check > /dev/null 2>&1; then
+      $DIR/system/hardware/tici/updater_console $AGNOS_PY $MANIFEST
+    else
+      $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    fi
+    # End Custom
   fi
 }
 

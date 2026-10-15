@@ -20,7 +20,7 @@ from openpilot.selfdrive.ui.sunnypilot.layouts.settings.network import NetworkUI
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.osm import OSMLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.software import SoftwareLayoutSP
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.steering import SteeringLayout
-from openpilot.selfdrive.ui.sunnypilot.layouts.settings.sunnylink import SunnylinkLayout
+# Custom: sunnylink and BP web portal panels are not built (see the panel list below)
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.trips import TripsLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.vehicle import VehicleLayout
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.visuals import VisualsLayout
@@ -28,7 +28,6 @@ from openpilot.selfdrive.ui.sunnypilot.layouts.settings.visuals import VisualsLa
 from openpilot.common.bluepilot import is_bluepilot
 if is_bluepilot():
   from openpilot.selfdrive.ui.bp.layouts.settings.bluepilot import BluePilotLayout
-  from openpilot.selfdrive.ui.bp.layouts.settings.bp_web_panel import BPWebPanel
 from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.system.ui.lib.multilang import tr_noop
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -36,10 +35,11 @@ from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.sunnypilot.lib.styles import style
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller_tici import Scroller
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 # from openpilot.selfdrive.ui.sunnypilot.layouts.settings.navigation import NavigationLayout
 
-OP.PANEL_COLOR = rl.Color(10, 10, 10, 255)
+OP.PANEL_COLOR = Console.BG_PAGE
 ICON_SIZE = 70
 
 OP.PanelType = IntEnum(
@@ -87,7 +87,7 @@ class NavButton(Widget):
 
     if self.panel_info.icon:
       icon_texture = gui_app.texture(self.panel_info.icon, ICON_SIZE, ICON_SIZE, keep_aspect_ratio=True)
-      rl.draw_texture_ex(icon_texture, rl.Vector2(content_x, rect.y + (OP.NAV_BTN_HEIGHT - icon_texture.height) / 2), 0.0, 1.0, rl.WHITE)
+      rl.draw_texture_ex(icon_texture, rl.Vector2(content_x, rect.y + (OP.NAV_BTN_HEIGHT - icon_texture.height) / 2), 0.0, 1.0, Console.TEXT_PRIMARY)
       content_x += ICON_SIZE + 20
 
     # Draw button text (right-aligned)
@@ -116,7 +116,7 @@ class SettingsLayoutSP(OP.SettingsLayout):
     self._panels = {
       OP.PanelType.DEVICE: PanelInfo(tr_noop("Device"), DeviceLayoutSP(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_home.png"),
       OP.PanelType.NETWORK: PanelInfo(tr_noop("Network"), NetworkUISP(wifi_manager), icon="icons/network.png"),
-      OP.PanelType.SUNNYLINK: PanelInfo(tr_noop("sunnylink"), SunnylinkLayout(), icon="icons/wifi_strength_full.png"),
+      # Custom: no sunnylink panel; Citadel Auto OS links through its own services (sunnylinkd is off too)
       OP.PanelType.TOGGLES: PanelInfo(tr_noop("Toggles"), TogglesLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_toggle.png"),
       OP.PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayoutSP(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_software.png"),
       OP.PanelType.MODELS: PanelInfo(tr_noop("Models"), ModelsLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_models.png"),
@@ -130,9 +130,8 @@ class SettingsLayoutSP(OP.SettingsLayout):
       OP.PanelType.VEHICLE: PanelInfo(tr_noop("Vehicle"), VehicleLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_vehicle.png"),
       OP.PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout(), icon="../../sunnypilot/selfdrive/assets/offroad/icon_firehose.png"),
       OP.PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayoutSP(), icon="icons/shell.png"),
-      # BluePilot: settings and portal panels
-      **(({OP.PanelType.BLUEPILOT: PanelInfo(tr_noop("BluePilot"), BluePilotLayout(), icon="icons/chffr_wheel.png"),
-           OP.PanelType.BP_PORTAL: PanelInfo(tr_noop("BP Portal"), BPWebPanel(), icon="icons/network.png")}) if is_bluepilot() else {}),
+      # BluePilot: settings panel. Custom: no web portal panel; the portal is a section of Console Connect > Data export
+      **(({OP.PanelType.BLUEPILOT: PanelInfo(tr_noop("BluePilot"), BluePilotLayout(), icon="icons/chffr_wheel.png")}) if is_bluepilot() else {}),
     }
 
   def _draw_sidebar(self, rect: rl.Rectangle):
@@ -148,7 +147,7 @@ class SettingsLayoutSP(OP.SettingsLayout):
     close_color = OP.CLOSE_BTN_PRESSED if pressed else OP.CLOSE_BTN_COLOR
     rl.draw_rectangle_rounded(close_btn_rect, 1.0, 20, close_color)
 
-    icon_color = rl.Color(255, 255, 255, 255) if not pressed else rl.Color(220, 220, 220, 255)
+    icon_color = with_alpha(Console.TEXT_PRIMARY, 255) if not pressed else Console.TEXT_SECONDARY
     icon_dest = rl.Rectangle(
       close_btn_rect.x + (close_btn_rect.width - self._close_icon.width) / 2,
       close_btn_rect.y + (close_btn_rect.height - self._close_icon.height) / 2,

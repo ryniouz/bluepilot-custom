@@ -7,6 +7,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, device
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets.label import gui_label
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 class DriverCameraDialog(CameraView):
@@ -68,7 +69,7 @@ class DriverCameraDialog(CameraView):
     fbox_y = int(-135.0 + (504.0 + abs(face_x) * 112.0) + (1205.0 - abs(face_x) * 724.0) * face_y)
     box_size = 220
 
-    line_color = rl.Color(255, 255, 255, int(alpha * 255))
+    line_color = with_alpha(Console.TEXT_PRIMARY, int(alpha * 255))
     rl.draw_rectangle_rounded_lines_ex(
       rl.Rectangle(fbox_x - box_size / 2, fbox_y - box_size / 2, box_size, box_size),
       35.0 / box_size / 2,

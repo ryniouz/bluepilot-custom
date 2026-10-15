@@ -21,6 +21,7 @@ from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.list_view import dual_button_item
 from openpilot.system.ui.widgets.scroller_tici import Scroller, LineSeparator
 from openpilot.system.version import sunnylink_consent_version
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class SunnylinkHeader(Widget):
@@ -31,7 +32,7 @@ class SunnylinkHeader(Widget):
       text="🚀 sunnylink 🚀",
       font_size=90,
       font_weight=FontWeight.AUDIOWIDE,
-      text_color=rl.WHITE,
+      text_color=Console.TEXT_PRIMARY,
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
       wrap_text=False,
@@ -42,7 +43,7 @@ class SunnylinkHeader(Widget):
       text=tr("For secure backup, restore, and remote configuration"),
       font_size=40,
       font_weight=FontWeight.NORMAL,
-      text_color=rl.Color(0, 255, 0, 255),  # Green
+      text_color=Console.SUCCESS,  # Green
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
       wrap_text=True,
@@ -54,7 +55,7 @@ class SunnylinkHeader(Widget):
            tr("Click the Sponsor button for more details"),
       font_size=35,
       font_weight=FontWeight.NORMAL,
-      text_color=rl.Color(255, 165, 0, 255),  # Orange
+      text_color=Console.WARNING,  # Orange
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
       wrap_text=True,
@@ -108,7 +109,7 @@ class SunnylinkDescriptionItem(Widget):
       text="",
       font_size=40,
       font_weight=FontWeight.NORMAL,
-      text_color=rl.WHITE,
+      text_color=Console.TEXT_PRIMARY,
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
       wrap_text=True,
@@ -323,11 +324,11 @@ class SunnylinkLayout(Widget):
     if state:
       description = tr(
         "Welcome back!! We're excited to see you've enabled sunnylink again!")
-      color = rl.Color(0, 255, 0, 255)  # Green
+      color = Console.SUCCESS  # Green
     else:
       description = ("😢 " + tr("Not going to lie, it's sad to see you disabled sunnylink") +
                      tr(", but we'll be here when you're ready to come back."))
-      color = rl.Color(255, 165, 0, 255)  # Orange
+      color = Console.WARNING  # Orange
     self._sunnylink_description.set_text(description)
     self._sunnylink_description.set_color(color)
     self._sunnylink_description.set_visible(True)

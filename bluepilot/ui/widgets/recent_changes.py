@@ -17,6 +17,7 @@ from openpilot.system.ui.lib.wrap_text import wrap_text
 from openpilot.system.ui.widgets import Widget, DialogResult
 from openpilot.system.ui.lib.application import MousePos
 from bluepilot.ui.lib.colors import BPColors
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 # Layout constants
 HEADER_HEIGHT = 110
@@ -85,7 +86,7 @@ class _CloseButton(Widget):
   def _render(self, rect: rl.Rectangle):
     cx = int(rect.x + rect.width / 2)
     cy = int(rect.y + rect.height / 2)
-    circle_color = rl.Color(180, 180, 180, 255) if self.is_pressed else rl.WHITE
+    circle_color = Console.TEXT_MUTED if self.is_pressed else Console.TEXT_PRIMARY
 
     # White filled circle
     rl.draw_circle(cx, cy, CLOSE_CIRCLE_RADIUS, circle_color)
@@ -186,7 +187,7 @@ class RecentChangesDialog(Widget):
 
   def _render(self, rect: rl.Rectangle):
     # Background
-    rl.draw_rectangle_rec(rect, rl.BLACK)
+    rl.draw_rectangle_rec(rect, Console.BG_PAGE)
 
     # Header
     header_rect = rl.Rectangle(rect.x, rect.y, rect.width, HEADER_HEIGHT)
@@ -208,7 +209,7 @@ class RecentChangesDialog(Widget):
     title_x = rect.x + (rect.width - title_size.x) / 2
     title_y = header_rect.y + (HEADER_HEIGHT - title_size.y) / 2
     rl.draw_text_ex(title_font, title_text, rl.Vector2(int(title_x), int(title_y)),
-                    TITLE_FONT_SIZE, 0, rl.WHITE)
+                    TITLE_FONT_SIZE, 0, Console.TEXT_PRIMARY)
 
     # Scrollable content area
     content_x = rect.x + CONTENT_MARGIN
@@ -258,7 +259,7 @@ class RecentChangesDialog(Widget):
     rl.draw_rectangle_rounded(version_rect, roundness, 10, BPColors.CHANGES_BLUE)
     text_y = y + (badge_h - BADGE_FONT_SIZE * line_height) / 2
     rl.draw_text_ex(font, version_text, rl.Vector2(int(cur_x + BADGE_PAD_X), int(text_y)),
-                    BADGE_FONT_SIZE, 0, rl.WHITE)
+                    BADGE_FONT_SIZE, 0, Console.TEXT_PRIMARY)
     cur_x += version_w + 15
 
     # AGNOS badge (purple)
@@ -271,7 +272,7 @@ class RecentChangesDialog(Widget):
       rl.draw_rectangle_rounded(agnos_rect, agnos_roundness, 10, BPColors.CHANGES_AGNOS)
       agnos_text_y = y + (badge_h - AGNOS_FONT_SIZE * line_height) / 2
       rl.draw_text_ex(font, agnos_text, rl.Vector2(int(cur_x + 20), int(agnos_text_y)),
-                      AGNOS_FONT_SIZE, 0, rl.WHITE)
+                      AGNOS_FONT_SIZE, 0, Console.TEXT_PRIMARY)
 
     return y + badge_h
 

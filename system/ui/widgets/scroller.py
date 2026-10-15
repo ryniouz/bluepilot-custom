@@ -8,9 +8,10 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2, ScrollState
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.nav_widget import NavWidget
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 ITEM_SPACING = 20
-LINE_COLOR = rl.GRAY
+LINE_COLOR = Console.TEXT_GHOST
 LINE_PADDING = 40
 ANIMATION_SCALE = 0.6
 
@@ -64,7 +65,7 @@ class ScrollIndicator(Widget):
     src_rec = rl.Rectangle(0, 0, self._txt_scroll_indicator.width, self._txt_scroll_indicator.height)
     dest_rec = rl.Rectangle(dest_left, y, dest_w, self._txt_scroll_indicator.height)
     rl.draw_texture_pro(self._txt_scroll_indicator, src_rec, dest_rec, rl.Vector2(0, 0), 0.0,
-                        rl.Color(255, 255, 255, int(255 * 0.45)))
+                        with_alpha(Console.TEXT_PRIMARY, int(255 * 0.45)))
 
 
 class _Scroller(Widget):
@@ -344,7 +345,7 @@ class _Scroller(Widget):
     # Dim background if moving items, lifted items are above
     self._overlay_filter.update(MOVE_OVERLAY_ALPHA if len(self._pending_move) else 0.0)
     if self._overlay_filter.x > 0.01:
-      rl.draw_rectangle_rec(self._rect, rl.Color(0, 0, 0, int(255 * self._overlay_filter.x)))
+      rl.draw_rectangle_rec(self._rect, with_alpha(Console.BG_PAGE, int(255 * self._overlay_filter.x)))
 
     for item in self._move_lift:
       self._render_item(item)
@@ -355,12 +356,12 @@ class _Scroller(Widget):
     if self._edge_shadows:
       rl.draw_rectangle_gradient_h(int(self._rect.x), int(self._rect.y),
                                    EDGE_SHADOW_WIDTH, int(self._rect.height),
-                                   rl.Color(0, 0, 0, 204), rl.BLANK)
+                                   with_alpha(Console.BG_PAGE, 204), rl.BLANK)
 
       right_x = int(self._rect.x + self._rect.width - EDGE_SHADOW_WIDTH)
       rl.draw_rectangle_gradient_h(right_x, int(self._rect.y),
                                    EDGE_SHADOW_WIDTH, int(self._rect.height),
-                                   rl.BLANK, rl.Color(0, 0, 0, 204))
+                                   rl.BLANK, with_alpha(Console.BG_PAGE, 204))
 
     # Draw scroll indicator on top of edge shadows
     if self._show_scroll_indicator and len(self._visible_items) > 0:

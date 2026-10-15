@@ -7,6 +7,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.text import wrap_text
 from openpilot.system.ui.widgets import Widget
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 # Constants
 if gui_app.big_ui():
@@ -71,8 +72,8 @@ class Spinner(Widget):
     # Draw rotating spinner and static comma logo
     rl.draw_texture_pro(self._spinner_texture, rl.Rectangle(0, 0, TEXTURE_SIZE, TEXTURE_SIZE),
                         rl.Rectangle(center.x, center.y, TEXTURE_SIZE, TEXTURE_SIZE),
-                        spinner_origin, self._rotation, rl.WHITE)
-    rl.draw_texture_v(self._comma_texture, comma_position, rl.WHITE)
+                        spinner_origin, self._rotation, Console.TEXT_PRIMARY)
+    rl.draw_texture_v(self._comma_texture, comma_position, Console.TEXT_PRIMARY)
 
     # Display the progress bar or text based on user input
     if self._progress is not None:
@@ -80,12 +81,12 @@ class Spinner(Widget):
       rl.draw_rectangle_rounded(bar, 1, 10, DARKGRAY)
 
       bar.width *= self._progress / 100.0
-      rl.draw_rectangle_rounded(bar, 1, 10, rl.WHITE)
+      rl.draw_rectangle_rounded(bar, 1, 10, Console.TEXT_PRIMARY)
     elif self._wrapped_lines:
       for i, line in enumerate(self._wrapped_lines):
         text_size = measure_text_cached(gui_app.font(), line, FONT_SIZE)
         rl.draw_text_ex(gui_app.font(), line, rl.Vector2(center.x - text_size.x / 2, y_pos + i * LINE_HEIGHT),
-                        FONT_SIZE, 0.0, rl.WHITE)
+                        FONT_SIZE, 0.0, Console.TEXT_PRIMARY)
 
 
 def _read_stdin():
@@ -104,7 +105,11 @@ def _read_stdin():
 
 def main():
   gui_app.init_window("Spinner")
-  spinner = Spinner()
+  # Custom: Console start-up screen
+  from bluepilot.ui.console.boot import ConsoleSpinner, apply_saved_theme
+  apply_saved_theme()
+  spinner = ConsoleSpinner()
+  # End Custom
   for _ in gui_app.render():
     text_list = _read_stdin()
     if text_list:

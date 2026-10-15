@@ -8,6 +8,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
+from bluepilot.ui.lib.theme import Console, accent_alpha, with_alpha  # Custom: Console theme
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 
@@ -17,17 +18,20 @@ CLIP_MARGIN = 500
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 
+# Custom: Console path. Accent while the plan allows throttle, primary text tone otherwise;
+# the fade toward the horizon is kept because it carries distance, not decoration.
 THROTTLE_COLORS = [
-  rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
-  rl.Color(114, 255, 92, 89),    # HSLF(112/360, 1.0, 0.68, 0.35)
-  rl.Color(114, 255, 92, 0),     # HSLF(112/360, 1.0, 0.68, 0.0)
+  accent_alpha(150),
+  accent_alpha(110),
+  accent_alpha(0),
 ]
 
 NO_THROTTLE_COLORS = [
-  rl.Color(242, 242, 242, 102), # HSLF(148/360, 0.0, 0.95, 0.4)
-  rl.Color(242, 242, 242, 89),  # HSLF(112/360, 0.0, 0.95, 0.35)
-  rl.Color(242, 242, 242, 0),   # HSLF(112/360, 0.0, 0.95, 0.0)
+  with_alpha(Console.TEXT_PRIMARY, 96),
+  with_alpha(Console.TEXT_PRIMARY, 80),
+  with_alpha(Console.TEXT_PRIMARY, 0),
 ]
+# Custom: end
 
 
 @dataclass
@@ -272,7 +276,7 @@ class ModelRenderer(Widget, ChevronMetrics, ModelRendererSP):
         continue
 
       alpha = np.clip(self._lane_line_probs[i], 0.0, 0.7)
-      color = rl.Color(255, 255, 255, int(alpha * 255))
+      color = with_alpha(Console.TEXT_PRIMARY, int(alpha * 255))
       draw_polygon(self._rect, lane_line.projected_points, color)
 
     for i, road_edge in enumerate(self._road_edges):
@@ -280,7 +284,7 @@ class ModelRenderer(Widget, ChevronMetrics, ModelRendererSP):
         continue
 
       alpha = np.clip(1.0 - self._road_edge_stds[i], 0.0, 1.0)
-      color = rl.Color(255, 0, 0, int(alpha * 255))
+      color = with_alpha(Console.DANGER, int(alpha * 255))
       draw_polygon(self._rect, road_edge.projected_points, color)
 
   def _draw_path(self, sm):
@@ -300,7 +304,7 @@ class ModelRenderer(Widget, ChevronMetrics, ModelRendererSP):
       if len(self._exp_gradient.colors) > 1:
         draw_polygon(self._rect, self._path.projected_points, gradient=self._exp_gradient)
       else:
-        draw_polygon(self._rect, self._path.projected_points, rl.Color(255, 255, 255, 30))
+        draw_polygon(self._rect, self._path.projected_points, with_alpha(Console.TEXT_PRIMARY, 30))
     else:
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
@@ -319,8 +323,8 @@ class ModelRenderer(Widget, ChevronMetrics, ModelRendererSP):
       if not lead.glow or not lead.chevron:
         continue
 
-      rl.draw_triangle_fan(lead.glow, len(lead.glow), rl.Color(218, 202, 37, 255))
-      rl.draw_triangle_fan(lead.chevron, len(lead.chevron), rl.Color(201, 34, 49, lead.fill_alpha))
+      rl.draw_triangle_fan(lead.glow, len(lead.glow), Console.WARNING)
+      rl.draw_triangle_fan(lead.chevron, len(lead.chevron), with_alpha(Console.WARNING, lead.fill_alpha))
 
   @staticmethod
   def _get_path_length_idx(pos_x_array: np.ndarray, path_distance: float) -> int:

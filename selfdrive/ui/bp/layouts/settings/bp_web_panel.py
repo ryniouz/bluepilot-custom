@@ -13,6 +13,7 @@ from openpilot.system.ui.widgets.scroller_tici import Scroller
 from openpilot.system.ui.widgets.list_view import toggle_item
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.selfdrive.ui.ui_state import ui_state
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 try:
   import qrcode
@@ -23,11 +24,11 @@ except ImportError:
 
 
 PADDING = 30
-BLUE = rl.Color(33, 150, 243, 255)
-GREEN = rl.Color(76, 175, 80, 255)
-GRAY = rl.Color(128, 128, 128, 255)
-LIGHT_GRAY = rl.Color(170, 170, 170, 255)
-INSET_BG = rl.Color(28, 28, 28, 255)
+BLUE = Console.ACCENT
+GREEN = Console.SUCCESS
+GRAY = Console.TEXT_MUTED
+LIGHT_GRAY = Console.TEXT_MUTED
+INSET_BG = Console.BG_PANEL
 
 
 class _QRCodeSection(Widget):
@@ -137,10 +138,10 @@ class _QRCodeSection(Widget):
     if self._qr_texture:
       src = rl.Rectangle(0, 0, self._qr_texture.width, self._qr_texture.height)
       dst = rl.Rectangle(qr_x, y, self.QR_SIZE, self.QR_SIZE)
-      rl.draw_texture_pro(self._qr_texture, src, dst, rl.Vector2(0, 0), 0, rl.WHITE)
+      rl.draw_texture_pro(self._qr_texture, src, dst, rl.Vector2(0, 0), 0, Console.TEXT_PRIMARY)
     else:
       ph = rl.Rectangle(qr_x, y, self.QR_SIZE, self.QR_SIZE)
-      rl.draw_rectangle_rounded(ph, 0.05, 20, rl.Color(40, 40, 40, 255))
+      rl.draw_rectangle_rounded(ph, 0.05, 20, Console.BG_RAISED)
       msg = "No WiFi Connection" if not url else "QR Code Error"
       gui_label(
         rl.Rectangle(qr_x, y + self.QR_SIZE / 2 - 20, self.QR_SIZE, 40),
@@ -313,12 +314,12 @@ class _StatsSection(Widget):
     ]):
       sr = rl.Rectangle(x + i * col_w + 5, y, col_w - 10, 55)
       rl.draw_rectangle_rounded(sr, 0.3, 10, INSET_BG)
-      gui_label(sr, text, font_size=33, color=rl.WHITE, font_weight=FontWeight.NORMAL)
+      gui_label(sr, text, font_size=33, color=Console.TEXT_PRIMARY, font_weight=FontWeight.NORMAL)
     y += 70
 
     # Refresh button
     btn_rect = self._get_btn_rect()
-    btn_color = rl.Color(35, 35, 35, 255) if self._loading else rl.Color(50, 50, 50, 255)
+    btn_color = Console.BG_PANEL if self._loading else Console.BG_HIGH
     rl.draw_rectangle_rounded(btn_rect, 0.5, 10, btn_color)
     btn_text = "Loading..." if self._loading else "Refresh Stats"
     gui_label(btn_rect, btn_text, font_size=36, color=LIGHT_GRAY, font_weight=FontWeight.MEDIUM)

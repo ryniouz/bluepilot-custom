@@ -1,71 +1,75 @@
 """
-BluePilot Color Scheme for Raylib UI
-Matches the Qt SidebarBP color palette
+BluePilot colour scheme for the raylib UI, backed by the Console theme.
 """
 
 import pyray as rl
 
+from bluepilot.ui.lib.theme import Console, Onroad
+
 
 class BPColors:
-  """BluePilot color scheme matching Qt implementation exactly"""
+  """BluePilot colour names, mapped onto the Console theme tokens (bluepilot/ui/lib/theme.py).
 
-  # Background colors (from Qt sidebar.h)
-  BACKGROUND = rl.Color(32, 33, 35, 255)  # background_color from Qt
-  BACKGROUND_DARKER = rl.Color(29, 30, 31, 255)  # 110% darker
-  CARD_BACKGROUND = rl.Color(48, 49, 51, 255)  # card_background from Qt
-  SIDEBAR_BG = rl.Color(57, 57, 57, 255)  # Stock sidebar background
+  Custom: every value now comes from Console. Names are kept so existing callers keep working.
+  """
 
-  # Accent color (BluePilot blue - from Qt)
-  ACCENT = rl.Color(24, 144, 255, 255)  # accent_color from Qt
+  # Background colors
+  BACKGROUND = Console.BG_PAGE
+  BACKGROUND_DARKER = Console.BG_PAGE
+  CARD_BACKGROUND = Console.BG_PANEL
+  SIDEBAR_BG = Console.BG_PANEL
 
-  # Status colors (from Qt sidebar.h)
-  GOOD = rl.Color(42, 199, 122, 255)  # good_color from Qt
-  WARNING = rl.Color(255, 195, 0, 255)  # warning_color from Qt
-  DANGER = rl.Color(242, 72, 85, 255)  # danger_color from Qt
-  DISABLED = rl.Color(128, 128, 128, 255)  # disabled_color from Qt
-  PROGRESS = rl.Color(3, 132, 252, 255)  # progress_color from Qt
+  # Accent (follows the Console accent theme)
+  ACCENT = Console.ACCENT
 
-  # Text colors (use explicit Color to avoid tuple issues with rl.WHITE)
-  WHITE = rl.Color(255, 255, 255, 255)
-  WHITE_DIM = rl.Color(255, 255, 255, 85)  # Semi-transparent white
-  GRAY = rl.Color(84, 84, 84, 255)
-  LIGHT_GRAY = rl.Color(200, 200, 200, 255)
-  TEXT_SECONDARY = rl.Color(180, 180, 180, 255)
+  # Status colors
+  GOOD = Console.SUCCESS
+  WARNING = Console.WARNING
+  DANGER = Console.DANGER
+  DISABLED = Console.TEXT_GHOST
+  PROGRESS = Console.ACCENT
+
+  # Text colors
+  WHITE = Console.TEXT_PRIMARY
+  WHITE_DIM = Console.TEXT_GHOST
+  GRAY = Console.BORDER_DEFAULT
+  LIGHT_GRAY = Console.TEXT_SECONDARY
+  TEXT_SECONDARY = Console.TEXT_MUTED
 
   # UI elements
-  METRIC_BORDER = rl.Color(255, 255, 255, 85)  # Semi-transparent border
-  BUTTON_NORMAL = rl.Color(255, 255, 255, 255)
-  BUTTON_PRESSED = rl.Color(255, 255, 255, 166)
-  BUTTON_BG = rl.Color(100, 110, 130, 140)
-  BUTTON_BG_PRESSED = rl.Color(100, 110, 130, 180)
-  SHADOW = rl.Color(0, 0, 0, 40)
+  METRIC_BORDER = Console.BORDER_DEFAULT
+  BUTTON_NORMAL = Console.TEXT_PRIMARY
+  BUTTON_PRESSED = Console.TEXT_MUTED
+  BUTTON_BG = Console.BG_RAISED
+  BUTTON_BG_PRESSED = Console.BG_HIGH
+  SHADOW = Console.TRANSPARENT
 
   # Signal bar colors
-  SIGNAL_ACTIVE = rl.Color(24, 144, 255, 255)  # accent_color from Qt
-  SIGNAL_INACTIVE = rl.Color(120, 120, 120, 120)  # Gray for inactive
+  SIGNAL_ACTIVE = Console.ACCENT
+  SIGNAL_INACTIVE = Console.BG_TRACK
 
-  # Badge colors (for version badges)
-  BADGE_BRAND = rl.Color(74, 144, 226, 255)  # Blue - brand/version
-  BADGE_BRANCH = rl.Color(155, 89, 182, 255)  # Purple - branch
-  BADGE_COMMIT = rl.Color(230, 126, 34, 255)  # Orange - commit
-  BADGE_DATE = rl.Color(149, 165, 166, 255)  # Gray - date
+  # Badge colors (version badges): quiet chips, colour only where it means something
+  BADGE_BRAND = Console.ACCENT_FILL
+  BADGE_BRANCH = Console.BG_HIGH
+  BADGE_COMMIT = Console.BG_HIGH
+  BADGE_DATE = Console.BG_HIGH
 
-  # Recent changes dialog colors (from Qt bp_recent_changes.cc)
-  CHANGES_GREEN = rl.Color(80, 211, 50, 255)        # #50d332 - New features
-  CHANGES_BLUE = rl.Color(33, 150, 243, 255)        # #2196F3 - Bug fixes / version badge
-  CHANGES_ORANGE = rl.Color(255, 124, 48, 255)      # #ff7c30 - Removed features
-  CHANGES_RED = rl.Color(234, 70, 70, 255)          # #EA4646 - Known issues
-  CHANGES_FRAME_BG = rl.Color(36, 36, 36, 255)      # #242424 - Category frame bg
-  CHANGES_HEADER_BG = rl.Color(32, 32, 32, 255)     # #202020 - Header bg
-  CHANGES_TEXT = rl.Color(228, 228, 228, 255)        # #E4E4E4 - Item text
-  CHANGES_AGNOS = rl.Color(156, 39, 176, 255)       # #9C27B0 - AGNOS badge
-  BADGE_C3X = rl.Color(0, 188, 212, 255)             # #00BCD4 - Cyan/teal for C3X
-  BADGE_C4 = rl.Color(255, 179, 0, 255)              # #FFB300 - Amber/gold for C4
+  # Recent changes dialog colors
+  CHANGES_GREEN = Console.SUCCESS
+  CHANGES_BLUE = Console.ACCENT
+  CHANGES_ORANGE = Console.WARNING
+  CHANGES_RED = Console.DANGER
+  CHANGES_FRAME_BG = Console.BG_PANEL
+  CHANGES_HEADER_BG = Console.BG_PAGE
+  CHANGES_TEXT = Console.TEXT_SECONDARY
+  CHANGES_AGNOS = Console.PURPLE
+  BADGE_C3X = Console.BG_HIGH      # 7.0 device badges: quiet chips like the other badges
+  BADGE_C4 = Console.BG_HIGH
 
   # Onroad border colors
-  BORDER_DISENGAGED = rl.Color(0x17, 0x33, 0x49, 0xC8)  # Blue
-  BORDER_OVERRIDE = rl.Color(0x91, 0x9B, 0x95, 0xF1)  # Gray
-  BORDER_ENGAGED = rl.Color(0x17, 0x86, 0x44, 0xF1)  # Green
+  BORDER_DISENGAGED = Onroad.BORDER_DISENGAGED
+  BORDER_OVERRIDE = Onroad.BORDER_OVERRIDE
+  BORDER_ENGAGED = Onroad.BORDER_ENGAGED
 
   @staticmethod
   def with_alpha(color: rl.Color, alpha: int) -> rl.Color:

@@ -6,7 +6,7 @@
   background: var(--bp-bg-tertiary);
   border: 1px solid var(--bp-border);
   border-radius: 12px;
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 .static-param-display-key {

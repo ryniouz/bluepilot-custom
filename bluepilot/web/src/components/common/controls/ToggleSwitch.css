@@ -20,8 +20,8 @@
   width: 64px;
   height: 30px;
   border-radius: 999px;
-  background: linear-gradient(145deg, #181818, #101010);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-page);
+  border: 1px solid rgba(var(--ink-rgb), 0.08);
   transition: background var(--transition-normal), border-color var(--transition-normal);
   display: inline-block;
 }
@@ -34,20 +34,20 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #f4f4f4;
+  background: var(--text-primary);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.15);
   transition: left var(--transition-normal), background var(--transition-normal);
 }
 
 .bp-toggle-switch input:checked + .bp-toggle-switch__slider {
-  background: linear-gradient(135deg, #ffa726, #ff7043);
+  background: var(--warning);
   border-color: transparent;
-  box-shadow: 0 4px 16px rgba(255, 152, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--warning-rgb), 0.4);
 }
 
 .bp-toggle-switch input:checked + .bp-toggle-switch__slider::after {
   left: calc(100% - 27px);
-  background: #ffffff;
+  background: var(--text-primary);
 }
 
 .bp-toggle-switch input:disabled + .bp-toggle-switch__slider {

@@ -459,10 +459,105 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
 struct CustomReserved10 @0xcb9fd56c7057593a {
 }
 
-struct CustomReserved11 @0xc2243c65e0340384 {
+# Custom: offroad charging state, published by selfdrive/car/charging_monitor.py while offroad (stream B).
+# Onroad, the same data is in carStateBP.charging.
+struct ChargingStateBP @0xc2243c65e0340384 {
+  charging @0 :CarStateBP.Charging;
+  evBattery @1 :CarStateBP.EvBattery;
+  canAlive @2 :Bool;           # frames seen on the car's main bus in the last 2 s
+  keepAwake @3 :Bool;          # BPChargeKeepAwake and charging: power monitoring will not time out
+  sleepInSeconds @4 :Float32;  # countdown after a charge ends (BPChargeSleepDelayMin), -1 when not counting
+  lowVoltBattery @5 :CarStateBP.LowVoltBattery;  # 12 V battery: CAN first, then the OBD adapter
+  lowVoltSource @6 :LowVoltSource;
+  harnessVoltage @7 :Float32;  # 12 V at the comma's harness (peripheralState), 0 when unknown
+  wake @8 :Wake;
+  powerSaver @9 :Bool;         # BPLvSaver: 12 V power-saving mode is on
+  shutdownReason @10 :Text;    # what will power the comma down next, for the UI ("" = nothing pending)
+
+  enum LowVoltSource {
+    none @0;
+    can @1;
+    obd @2;
+  }
+
+  # Why the truck's network is awake while the comma is offroad. A Lightning wakes on its own every so
+  # often to top up the 12 V battery from the HV pack; that is not a drive.
+  struct Wake {
+    dataAvailable @0 :Bool;          # BodyInfo_3_FD1 (0x3B3) or HEV_Powertrain_Data6 (0x480) on the bus
+    reason @1 :Reason;
+    ignition @2 :Ignition;           # Ignition_Status (0x3B3)
+    remoteStart @3 :Bool;            # Remote_Start_Status (0x3B3) non-zero
+    dcdcOn @4 :Bool;                 # DcdcOn_B_Rq (0x480): HV-to-12 V converter requested
+    lowVoltSupport @5 :Bool;         # ULoBattSpprtSustn_B_Rq (0x480): 12 V support (top-up) requested
+    nextWakeMinutes @6 :Int32;       # WakeAlarm0_T_Rq (0x478), unverified meaning; -1 when unknown
+    lowVoltTopUps @7 :UInt16;        # 12 V top-up wakes seen since the comma started
+
+    enum Reason {
+      unknown @0;          # CAN is up but nothing explains it
+      asleep @1;           # no CAN
+      ignitionOn @2;       # Run or Start: a drive
+      charging @3;
+      lowVoltTopUp @4;     # ignition off, 12 V support requested, not charging
+      remoteStart @5;
+      conditioning @6;     # battery or cabin conditioning without a charge
+      accessory @7;
+    }
+
+    enum Ignition {
+      unknown @0;
+      off @1;
+      accessory @2;
+      run @3;
+      start @4;
+    }
+  }
 }
 
-struct CustomReserved12 @0x9ccdc8676701b412 {
+# Custom: OBD adapter link (ELM327 over Wi-Fi, USB or Bluetooth), separate from the panda and CAN
+struct ObdStateBP @0x9ccdc8676701b412 {
+  enabled @0 :Bool;                  # BPObdEnabled
+  transport @1 :Transport;
+  link @2 :Link;
+  message @3 :Text;                  # one line for the UI: what is happening or what is wrong
+  adapter @4 :Text;                  # adapter banner, e.g. "ELM327 v1.5"
+  protocol @5 :Text;                 # ATDP answer
+  bluetoothAvailable @6 :Bool;
+  bluetoothMessage @7 :Text;         # why Bluetooth is unavailable, when it is
+  usbDevices @8 :List(Text);         # /dev/ttyUSB*, /dev/ttyACM* seen right now
+  requestsPerSecond @9 :Float32;
+  lastResponseAgeS @10 :Float32;     # -1 before the first answer
+  catalog @11 :Text;                 # which PID catalog is loaded
+  values @12 :List(Value);
+  polling @13 :Bool;                 # false while the truck is off and not charging (no 12 V drain)
+
+  struct Value {
+    name @0 :Text;
+    shortName @1 :Text;
+    value @2 :Float32;
+    unit @3 :Text;                   # metric: degC, kPa, V, A, kWh, percent
+    ageS @4 :Float32;
+    header @5 :Text;
+    request @6 :Text;
+  }
+
+  enum Transport {
+    none @0;
+    bluetooth @1;
+    wifi @2;
+    usb @3;
+    simulated @4;
+  }
+
+  enum Link {
+    off @0;           # BPObdEnabled is off
+    unavailable @1;   # the chosen transport cannot work on this device (e.g. no Bluetooth in AGNOS)
+    connecting @2;
+    initializing @3;
+    connected @4;     # adapter answers and the truck responds
+    carAsleep @5;     # adapter answers, truck does not
+    idle @6;          # connected earlier; paused while the truck is off and not charging
+    error @7;
+  }
 }
 
 struct ControllerStateBP @0xcd96dafb67a082d0 {
@@ -564,6 +659,188 @@ struct CarStateBP @0xb057204d7deadf3f {
   hybridDrive @0 :HybridDrive;
   hybridBattery @1 :HybridBattery;
   brakeLightStatus @2 :BrakeLightStatus;
+  # Custom: Lightning EV data, vehicle mode and tune state (stream B). Append-only field numbers.
+  evBattery @3 :EvBattery;
+  tirePressure @4 :TirePressure;
+  lowVoltBattery @5 :LowVoltBattery;
+  ambient @6 :Ambient;
+  vehicleMode @7 :VehicleMode;
+  tune @8 :TuneState;
+  evAlerts @9 :EvAlerts;
+  charging @10 :Charging;
+
+  # Traction battery and energy. Power sign convention: + = discharging (driving), - = charging/regen.
+  struct EvBattery {
+    dataAvailable @0 :Bool;
+    socPercent @1 :Float32;          # displayed SOC, BattTracSoc2_Pc_Actl (0x24C)
+    packVoltage @2 :Float32;         # V, BattTrac_U_Actl (0x07A)
+    packCurrent @3 :Float32;         # A, + = discharge
+    packCurrentSource @4 :CurrentSource;
+    powerKw @5 :Float32;             # packVoltage * packCurrent / 1000
+    regenKw @6 :Float32;             # max(0, -powerKw), for a regen meter
+    packTempC @7 :Float32;           # BattTrac_Te_Actl (0x24C)
+    coolantTempC @8 :Float32;        # BattTracClnt_Te_Actl (0x24B)
+    packDeltaTempC @9 :Float32;      # BattTracDelta_Te_Actl (0x458)
+    chargeLimitKw @10 :Float32;      # BattTrac2_Pw_LimChrg (0x24D)
+    dischargeLimitKw @11 :Float32;   # BattTrac2_Pw_LimDchrg (0x24D)
+    limitsAvailable @12 :Bool;
+    rangeKm @13 :Float32;            # VehElRnge_L_Dsply (0x442), fallback VehElRngeNut_L_Dsply (0x352)
+    rangeAvailable @14 :Bool;
+    motorTorqueNm @15 :Float32;      # MtrTrac2_Tq_Actl (0x475)
+    motorTorqueAvailable @16 :Bool;
+    efficiencyWhPerKm @17 :Float32;  # smoothed live efficiency, 0 when stopped
+    tripEnergyUsedKwh @18 :Float32;  # since this carState session started (ignition on)
+    tripEnergyRegenKwh @19 :Float32;
+    tripDistanceKm @20 :Float32;
+    motorPowerKw @21 :Float32;       # MtrTrac2_U_Actl * MtrTrac2_I_Actl (0x441): one drive motor only, excludes HVAC/DC-DC
+    motorPowerAvailable @22 :Bool;
+
+    enum CurrentSource {
+      none @0;
+      battTracActl @1;    # BattTrac_I_Actl (0x07A), reads a constant -750 A on Lightning
+      mtrTrac2Actl @2;    # MtrTrac2_I_Actl (0x441), last resort: one motor only
+      battTracEstVsc @3;  # BattTrac_I_EstVsc (0x185), whole-pack estimate, preferred on Lightning
+    }
+  }
+
+  struct TirePressure {
+    dataAvailable @0 :Bool;
+    frontLeftKpa @1 :Float32;
+    frontRightKpa @2 :Float32;
+    rearLeftKpa @3 :Float32;
+    rearRightKpa @4 :Float32;
+    lowThresholdKpa @5 :Float32;     # from BPTireLowPressureKpa
+    lowPressure @6 :Bool;            # any tire below threshold
+  }
+
+  struct LowVoltBattery {
+    dataAvailable @0 :Bool;
+    voltage @1 :Float32;             # BattULoAux_U_Actl (0x42B), fallback pandaState voltage is up to the UI
+    current @2 :Float32;             # A
+    socPercent @3 :Float32;          # BattULoAuxSoc_Pc_Actl, fallback BSBattSOC (0x43C)
+    tempC @4 :Float32;               # BattULo2_Te_Actl (0x43C)
+    fault @5 :Bool;                  # BattULoAux_B_Falt
+    low @6 :Bool;                    # voltage or SOC below alert threshold
+  }
+
+  struct Ambient {
+    dataAvailable @0 :Bool;
+    outsideTempC @1 :Float32;        # Outside_Air_Temp_Stat (0x41A), fallback AirAmb_Te_Actl (0x178), AirAmb_Te_ActlCld (0x308)
+    rangeImpactPercent @2 :Float32;  # estimated range change from temperature (negative = less range)
+  }
+
+  struct VehicleMode {
+    driveModeAvailable @0 :Bool;
+    driveMode @1 :DriveMode;
+    driveModeRaw @2 :UInt8;          # SelDrvMdePt_D_Rq (0x420)
+    trailerAvailable @3 :Bool;
+    trailerConnected @4 :Bool;       # TrlrLampCnnct_B_Actl (0x443) or TrlrBrkActCnnct_B_Actl (0x445), debounced
+    onePedalActive @5 :Bool;
+    onePedalSource @6 :OnePedalSource;
+
+    enum DriveMode {
+      unknown @0;
+      normal @1;
+      sport @2;
+      tow @3;
+      offroad @4;
+      slippery @5;
+      eco @6;
+    }
+
+    enum OnePedalSource {
+      off @0;        # BPOnePedalMode = 0
+      setting @1;    # BPOnePedalMode = 1 (driver says it is on)
+      estimated @2;  # BPOnePedalMode = 2, inferred from coast-down deceleration
+    }
+  }
+
+  struct TuneState {
+    platformTuneActive @0 :Bool;     # Lightning tune selected by fingerprint and BPLightningTune
+    profile @1 :Profile;
+    accelMaxScale @2 :Float32;       # <= 1.0, applied under openpilot longitudinal only
+    latAccelScale @3 :Float32;       # <= 1.0, scales the CAN FD lateral-accel cap
+
+    enum Profile {
+      stock @0;
+      lightning @1;
+      tow @2;
+      sport @3;
+      offroad @4;
+      slippery @5;
+    }
+  }
+
+  # Charging state for a charging screen. Only published while card runs (onroad / ignition on).
+  struct Charging {
+    dataAvailable @0 :Bool;          # a charge-status message is on the bus
+    charging @1 :Bool;               # energy is flowing in (debounced 2 s)
+    state @2 :State;
+    stateRaw @3 :UInt8;              # ChrgStat_D2_Dsply (0x440), or ChrgStat_D_Dsply (0x312) when 0x440 is absent
+    chargeType @4 :ChargeType;
+    powerKw @5 :Float32;             # power into the pack, >= 0: -(pack V x pack current) while charging
+    powerAvailable @6 :Bool;
+    socPercent @7 :Float32;
+    batteryTempC @8 :Float32;
+    timeToFullHours @9 :Float32;     # ChargeNowDuration_St (0x352), unverified meaning
+    timeToFullAvailable @10 :Bool;
+    batteryConditioning @11 :Bool;   # PreCondBatt_B_Actl (0x478) or PreCondActv_B_Actl (0x185)
+    coolantHeaterOn @12 :Bool;       # PtcHtr_D_Stat (0x478)
+    thermalMode @13 :ThermalMode;    # inferred from heater, preconditioning, pump/flow and coolant vs pack temp
+    coolantPumpOn @14 :Bool;         # BattTracClntPmp_D_Stat (0x458)
+    coolantFlowPercent @15 :Float32; # BattTracClntFlw_Pc_Rq (0x185), requested flow
+    coolantFlowAvailable @16 :Bool;
+
+    enum State {
+      unknown @0;
+      notReady @1;
+      chargingAc @2;
+      chargingDc @3;
+      chargingInductive @4;
+      scheduled @5;
+      evsePaused @6;
+      evseNotDetected @7;
+      evseNotCompatible @8;
+      fault @9;
+      targetReached @10;
+      maintaining @11;
+      cabinPreconditioning @12;
+      driveConditioning @13;
+      chargingUnknownType @14;       # 0x312 In_Progress without AC/DC detail
+    }
+
+    enum ChargeType {
+      none @0;
+      ac @1;
+      dc @2;
+      other @3;
+    }
+
+    enum ThermalMode {
+      unknown @0;       # no thermal message on the bus
+      off @1;
+      cooling @2;       # coolant flowing and colder than the pack
+      heating @3;       # coolant heater on, or coolant flowing and warmer than the pack
+      conditioning @4;  # Ford reports battery preconditioning active
+      circulating @5;   # coolant flowing, direction unclear (temps within 2 C)
+    }
+  }
+
+  struct EvAlerts {
+    lowSoc @0 :SocLevel;
+    lowSocThresholdPercent @1 :Float32;
+    criticalSocThresholdPercent @2 :Float32;
+    tirePressureLow @3 :Bool;
+    lowVoltBatteryLow @4 :Bool;
+    alertText @5 :Text;              # short text for the highest-priority active alert, "" when none
+
+    enum SocLevel {
+      none @0;
+      low @1;
+      critical @2;
+    }
+  }
+  # Custom: end
 
   struct HybridDrive {
     dataAvailable @0 :Bool;

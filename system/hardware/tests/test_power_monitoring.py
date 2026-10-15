@@ -232,3 +232,133 @@ class TestPowerMonitoring:
     result = pm.max_time_offroad_exceeded(offroad_time_s)
 
     assert result == expected_result
+
+  # Custom: offroad charging keep-awake and post-charge sleep delay
+  @pytest.mark.parametrize(
+    "active, last_age_s, keep_awake, delay_min, charged_after_offroad, expected",
+    [
+      (True, 5, True, 30, True, (True, False)),      # charging: hold
+      (True, 5, False, 30, True, (False, False)),    # keep-awake off: normal rules
+      (True, 120, True, 30, True, (False, False)),   # stale (monitor gone): no hold
+      (False, 60, True, 30, True, (False, False)),   # charge ended 1 min ago: still waiting
+      (False, 1801, True, 30, True, (False, True)),  # 30 min after the charge: power down
+      (False, 1801, True, 0, True, (False, False)),  # delay 0: MaxTimeOffroad decides
+      (False, 1801, True, 30, False, (False, False)),  # charge was before this offroad period
+    ]
+  )
+  def test_charging_shutdown_state(self, active, last_age_s, keep_awake, delay_min, charged_after_offroad, expected):
+    now = 100_000.
+    last = now - last_age_s
+    offroad_ts = last - 10 if charged_after_offroad else last + 1
+    self.params.put_bool("BPChargingActive", active)
+    self.params.put("BPChargeLastActiveTs", last)
+    self.params.put_bool("BPChargeKeepAwake", keep_awake)
+    self.params.put("BPChargeSleepDelayMin", delay_min)
+    try:
+      assert PowerMonitoring().charging_shutdown_state(now, offroad_ts) == expected
+    finally:
+      for k in ("BPChargingActive", "BPChargeLastActiveTs", "BPChargeKeepAwake", "BPChargeSleepDelayMin"):
+        self.params.remove(k)
+
+  def test_charging_holds_against_max_time_offroad(self, mocker):
+    pm = PowerMonitoring()
+    pm.car_voltage_mV = GOOD_VOLTAGE
+    self.params.put("MaxTimeOffroad", 10)
+    self.params.put_bool("BPChargingActive", True)
+    offroad_ts = ssb
+    try:
+      mocker.patch("time.monotonic", return_value=offroad_ts + 3600)
+      self.params.put("BPChargeLastActiveTs", offroad_ts + 3595)
+      assert not pm.should_shutdown(False, True, offroad_ts, True)
+      self.params.put_bool("BPChargingActive", False)
+      assert pm.should_shutdown(False, True, offroad_ts, True)
+    finally:
+      for k in ("MaxTimeOffroad", "BPChargingActive", "BPChargeLastActiveTs"):
+        self.params.remove(k)
+
+  # Custom: Lightning 12 V management (selfdrive/car/lv_power.py)
+  LV_KEYS = ("BPLvState", "BPLvSaver", "BPLvSaverOffroadMin", "BPLvShutdownSoc", "BPLvWakeFilter", "MaxTimeOffroad")
+
+  def _clear_lv(self):
+    for k in self.LV_KEYS:
+      self.params.remove(k)
+
+  def test_lv_top_up_wake(self):
+    pm = PowerMonitoring()
+    try:
+      self.params.put("BPLvState", {"ts": 100., "topUp": True, "topUpTs": 100.})
+      assert pm.lv_top_up_wake(102.)
+      assert not pm.lv_top_up_wake(110.)  # stale: a dead monitor never blocks a drive
+      self.params.put_bool("BPLvWakeFilter", False)
+      assert not pm.lv_top_up_wake(102.)
+      self.params.put_bool("BPLvWakeFilter", True)
+      self.params.put("BPLvState", {"ts": 100., "topUp": False, "topUpTs": 100.})
+      assert not pm.lv_top_up_wake(101.)
+    finally:
+      self._clear_lv()
+
+  def test_top_up_boot_powers_down_after_wake(self, mocker):
+    pm = PowerMonitoring()
+    pm.car_voltage_mV = GOOD_VOLTAGE
+    offroad_ts = 0.
+    try:
+      # booted by a top-up wake, never started: during the wake it stays on
+      mocker.patch("time.monotonic", return_value=400.)
+      self.params.put("BPLvState", {"ts": 400., "topUp": True, "topUpTs": 400.})
+      assert not pm.should_shutdown(False, True, offroad_ts, False)
+      # wake over, but not for long enough yet
+      mocker.patch("time.monotonic", return_value=460.)
+      self.params.put("BPLvState", {"ts": 460., "topUp": False, "topUpTs": 460.})
+      assert not pm.should_shutdown(False, True, offroad_ts, False)
+      # TOP_UP_SLEEP_S after the wake ended it powers down, well inside MIN_ON_TIME_S
+      mocker.patch("time.monotonic", return_value=530.)
+      assert pm.should_shutdown(False, True, offroad_ts, False)
+      # never while the ignition line is still up (keeps the next real ignition edge)
+      assert not pm.should_shutdown(True, True, offroad_ts, False)
+    finally:
+      self._clear_lv()
+
+  def test_no_top_up_boot_keeps_min_on_time(self, mocker):
+    pm = PowerMonitoring()
+    pm.car_voltage_mV = GOOD_VOLTAGE
+    mocker.patch("time.monotonic", return_value=530.)
+    assert not pm.should_shutdown(False, True, 0., False)
+
+  def test_lv_soc_cutoff(self, mocker):
+    pm = PowerMonitoring()
+    pm.car_voltage_mV = GOOD_VOLTAGE
+    try:
+      mocker.patch("time.monotonic", return_value=4000.)
+      self.params.put("BPLvState", {"ts": 3990., "soc": 48.})
+      assert not pm.should_shutdown(False, True, 3000., True)  # cutoff off by default
+      self.params.put("BPLvShutdownSoc", 50)
+      assert pm.should_shutdown(False, True, 3000., True)
+      self.params.put("BPLvState", {"ts": 3990., "soc": 55.})
+      assert not pm.should_shutdown(False, True, 3000., True)
+      self.params.put("BPLvState", {"ts": 3000., "soc": 40.})  # stale reading is ignored
+      assert not pm.should_shutdown(False, True, 3000., True)
+    finally:
+      self._clear_lv()
+
+  def test_lv_power_saver(self, mocker):
+    pm = PowerMonitoring()
+    try:
+      assert not pm.max_time_offroad_exceeded(11 * 60)
+      self.params.put_bool("BPLvSaver", True)
+      assert pm.max_time_offroad_exceeded(11 * 60)  # default 10 min
+      assert not pm.max_time_offroad_exceeded(9 * 60)
+      self.params.put("BPLvSaverOffroadMin", 5)
+      self.params.put("MaxTimeOffroad", 3)  # a shorter MaxTimeOffroad still wins
+      assert pm.max_time_offroad_exceeded(4 * 60)
+      # saver raises the 12 V cutoff to 12.2 V and the SOC cutoff to 60 %
+      self.params.put("MaxTimeOffroad", 0)
+      self.params.put("BPLvSaverOffroadMin", 600)
+      mocker.patch("time.monotonic", return_value=4000.)
+      pm.car_voltage_mV = 12.1e3
+      assert pm.should_shutdown(False, True, 3000., True)
+      pm.car_voltage_mV = 12.6e3
+      assert not pm.should_shutdown(False, True, 3000., True)
+      self.params.put("BPLvState", {"ts": 3990., "soc": 58.})
+      assert pm.should_shutdown(False, True, 3000., True)
+    finally:
+      self._clear_lv()

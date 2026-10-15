@@ -23,6 +23,7 @@ from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 
 from openpilot.system.ui.sunnypilot.lib.application import GuiApplicationExt
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
@@ -86,7 +87,7 @@ void main() {
 """
 
 DEFAULT_TEXT_SIZE = 60
-DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
+DEFAULT_TEXT_COLOR = with_alpha(Console.TEXT_PRIMARY, int(255 * 0.9))
 
 # Qt draws fonts accounting for ascent/descent differently, so compensate to match old styles
 # The real scales for the fonts below range from 1.212 to 1.266
@@ -97,17 +98,21 @@ FONT_DIR = ASSETS_DIR.joinpath("fonts")
 
 
 class FontWeight(StrEnum):
+  # Custom: Console type uses two weights on the 3X (BIG) UI: Inter 400 for text, 600 for
+  # headings, labels and numerals. MEDIUM maps to 400 and BOLD to 600 there; MICI is unchanged.
+  # (7.0 dropped LIGHT; Console code that asked for it uses NORMAL.)
   NORMAL = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
-  MEDIUM = "Inter-Medium.fnt"
-  BOLD = "Inter-Bold.fnt"
+  MEDIUM = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
+  BOLD = "Inter-SemiBold.fnt" if BIG_UI else "Inter-Bold.fnt"
   SEMI_BOLD = "Inter-SemiBold.fnt"
+  # Custom: end
   UNIFONT = "unifont.fnt"
   AUDIOWIDE = "Audiowide-Regular.fnt"
 
   # Small UI fonts
   DISPLAY_REGULAR = "Inter-Regular.fnt"
   ROMAN = "Inter-Regular.fnt"
-  DISPLAY = "Inter-Bold.fnt"
+  DISPLAY = "Inter-SemiBold.fnt" if BIG_UI else "Inter-Bold.fnt"  # Custom: Console 600
 
 
 def font_fallback(font: rl.Font) -> rl.Font:
@@ -618,10 +623,10 @@ class GuiApplication(GuiApplicationExt):
 
         if self._render_texture:
           rl.begin_texture_mode(self._render_texture)
-          rl.clear_background(rl.BLACK)
+          rl.clear_background(Console.BG_PAGE)
         else:
           rl.begin_drawing()
-          rl.clear_background(rl.BLACK)
+          rl.clear_background(Console.BG_PAGE)
 
         if self._scale != 1.0:
           rl.rl_push_matrix()
@@ -648,7 +653,7 @@ class GuiApplication(GuiApplicationExt):
         if self._render_texture:
           rl.end_texture_mode()
           rl.begin_drawing()
-          rl.clear_background(rl.BLACK)
+          rl.clear_background(Console.BG_PAGE)
           src_rect = rl.Rectangle(0, 0, float(self._scaled_width), -float(self._scaled_height))
           dst_rect = rl.Rectangle(0, 0, float(self._scaled_width), float(self._scaled_height))
           texture = self._render_texture.texture
@@ -714,9 +719,9 @@ class GuiApplication(GuiApplicationExt):
   def _set_styles(self):
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_SIZE, DEFAULT_TEXT_SIZE)
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.BACKGROUND_COLOR, rl.color_to_int(rl.BLACK))
+    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.BACKGROUND_COLOR, rl.color_to_int(Console.BG_PAGE))
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.TEXT_COLOR_NORMAL, rl.color_to_int(DEFAULT_TEXT_COLOR))
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BASE_COLOR_NORMAL, rl.color_to_int(rl.Color(50, 50, 50, 255)))
+    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BASE_COLOR_NORMAL, rl.color_to_int(Console.BG_HIGH))
 
   def _patch_text_functions(self):
     # Wrap pyray text APIs to apply a global text size scale so our px sizes match Qt
@@ -816,14 +821,14 @@ class GuiApplication(GuiApplicationExt):
 
     if self._mouse_history:
       mouse_pos = self._mouse_history[-1]
-      rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 15, rl.RED)
+      rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 15, Console.DANGER)
       for idx, mouse_pos in enumerate(self._mouse_history):
         perc = idx / len(self._mouse_history)
         color = rl.Color(min(int(255 * (1.5 - perc)), 255), int(min(255 * (perc + 0.5), 255)), 50, 255)
         rl.draw_circle(int(mouse_pos.x), int(mouse_pos.y), 5, color)
 
   def _draw_grid(self):
-    grid_color = rl.Color(60, 60, 60, 255)
+    grid_color = Console.BG_HIGH
     # Draw vertical lines
     x = 0
     while x <= self._scaled_width:

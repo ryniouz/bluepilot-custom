@@ -6,6 +6,7 @@ from enum import IntEnum
 from typing import TypeVar
 from collections.abc import Callable
 from openpilot.system.ui.lib.application import gui_app, MousePos, MAX_TOUCH_SLOTS, MouseEvent
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 try:
   from openpilot.selfdrive.ui.ui_state import device
@@ -135,7 +136,7 @@ class Widget(abc.ABC):
 
   def _draw_debug_rect(self) -> None:
     rl.draw_rectangle_lines(int(self._rect.x), int(self._rect.y),
-                            max(int(self._rect.width), 1), max(int(self._rect.height), 1), rl.RED)
+                            max(int(self._rect.width), 1), max(int(self._rect.height), 1), Console.DANGER)
 
   def _process_mouse_events(self) -> None:
     hit_rect = self._hit_rect

@@ -223,6 +223,11 @@ def hardware_thread(end_event, hw_queue) -> None:
         onroad_conditions["ignition"] = False
         cloudlog.error("panda timed out onroad")
 
+    # Custom: a Lightning 12 V top-up wake can raise ignition without a drive. Stay offroad; never ends a drive.
+    onroad_conditions["not_lv_top_up"] = started_ts is not None or not onroad_conditions["ignition"] or \
+                                         not power_monitor.lv_top_up_wake()
+    # Custom: end
+
     # Run at 2Hz, plus either edge of ignition
     ign_edge = (started_ts is not None) != all(onroad_conditions.values())
     if (sm.frame % round(SERVICE_LIST['pandaStates'].frequency * DT_HW) != 0) and not ign_edge:

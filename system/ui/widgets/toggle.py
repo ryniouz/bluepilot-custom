@@ -1,16 +1,19 @@
 import pyray as rl
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 from collections.abc import Callable
 from openpilot.system.ui.lib.application import MousePos
 from openpilot.system.ui.widgets import Widget
 
-ON_COLOR = rl.Color(51, 171, 76, 255)
-OFF_COLOR = rl.Color(0x39, 0x39, 0x39, 255)
-KNOB_COLOR = rl.WHITE
-DISABLED_ON_COLOR = rl.Color(0x22, 0x77, 0x22, 255)  # Dark green when disabled + on
-DISABLED_OFF_COLOR = rl.Color(0x39, 0x39, 0x39, 255)
-DISABLED_KNOB_COLOR = rl.Color(0x88, 0x88, 0x88, 255)
+# Custom: Console toggle - accent track when on, bg-high when off
+ON_COLOR = Console.ACCENT_FILL
+OFF_COLOR = Console.TOGGLE_OFF
+KNOB_COLOR = Console.TOGGLE_KNOB
+DISABLED_ON_COLOR = Console.ACCENT_TINT_STRONG
+DISABLED_OFF_COLOR = Console.BG_HIGH  # Custom: BG_RAISED matched night cards, hiding the track
+DISABLED_KNOB_COLOR = Console.TEXT_GHOST
 WIDTH, HEIGHT = 160, 80
 BG_HEIGHT = 60
+KNOB_PADDING = 5  # Custom: Console inset knob
 ANIMATION_SPEED = 8.0
 
 
@@ -68,9 +71,13 @@ class Toggle(Widget):
     rl.draw_rectangle_rounded(bg_rect, 1.0, 10, bg_color)
 
     # Draw knob
-    knob_x = self._rect.x + HEIGHT / 2 + (WIDTH - HEIGHT) * self._progress
-    knob_y = self._rect.y + HEIGHT / 2
-    rl.draw_circle(int(knob_x), int(knob_y), HEIGHT / 2, knob_color)
+    # Custom: Console knob sits inside the track (as ToggleSP does). The stock knob overhangs the track,
+    # so in day mode a white knob on a white card vanished and seemed to bite the track's end.
+    knob_r = BG_HEIGHT / 2 - KNOB_PADDING
+    knob_x = bg_rect.x + KNOB_PADDING + knob_r + (bg_rect.width - 2 * (KNOB_PADDING + knob_r)) * self._progress
+    knob_y = bg_rect.y + BG_HEIGHT / 2
+    rl.draw_circle(int(knob_x), int(knob_y), knob_r, knob_color)
+    # Custom: end
 
     # TODO: use click callback
     clicked = self._clicked

@@ -78,17 +78,17 @@
 }
 
 .storage-preserved {
-  background: #4caf50;
+  background: var(--success);
   z-index: 3;
 }
 
 .storage-routes {
-  background: #2196f3;
+  background: var(--accent);
   z-index: 2;
 }
 
 .storage-cache {
-  background: #ff9800;
+  background: var(--warning);
   z-index: 1;
 }
 
@@ -99,7 +99,7 @@
   width: 2px;
   background: var(--bp-error);
   z-index: 4;
-  box-shadow: 0 0 4px rgba(244, 67, 54, 0.5);
+  box-shadow: 0 0 4px rgba(var(--danger-rgb), 0.5);
 }
 
 .storage-legend {
@@ -125,15 +125,15 @@
 }
 
 .storage-dot-preserved {
-  background: #4caf50;
+  background: var(--success);
 }
 
 .storage-dot-routes {
-  background: #2196f3;
+  background: var(--accent);
 }
 
 .storage-dot-cache {
-  background: #ff9800;
+  background: var(--warning);
 }
 
 .storage-legend-text {

@@ -148,3 +148,10 @@ class MainLayout(Widget):
     # BluePilot: render debug panel overlay on top of onroad view
     if is_bluepilot() and self._current_mode == MainState.ONROAD and self._debug_panel.is_panel_visible:
       self._debug_panel.render(content_rect)
+
+
+# Custom: Console redesign. The 3X uses the Console shell (standby splash, rail navigation,
+# quick-controls sheet, charging page) in place of the stock sidebar/home/settings layout.
+from bluepilot.ui.console.main_layout import ConsoleMainLayout, MainState
+MainLayout = ConsoleMainLayout  # noqa: F811
+# Custom: end

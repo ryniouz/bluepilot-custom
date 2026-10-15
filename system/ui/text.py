@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 if BIG_UI:
   MARGIN = 50
@@ -79,7 +80,7 @@ class TextWindow(Widget):
       position = rl.Vector2(self._textarea_rect.x, self._textarea_rect.y + scroll + i * LINE_HEIGHT)
       if position.y + LINE_HEIGHT < self._textarea_rect.y or position.y > self._textarea_rect.y + self._textarea_rect.height:
         continue
-      rl.draw_text_ex(gui_app.font(), line, position, FONT_SIZE, 0, rl.WHITE)
+      rl.draw_text_ex(gui_app.font(), line, position, FONT_SIZE, 0, Console.TEXT_PRIMARY)
     rl.end_scissor_mode()
 
     button_bounds = rl.Rectangle(rect.width - MARGIN - BUTTON_SIZE.x - SPACING, rect.height - MARGIN - BUTTON_SIZE.y, BUTTON_SIZE.x, BUTTON_SIZE.y)
@@ -89,6 +90,10 @@ class TextWindow(Widget):
 if __name__ == "__main__":
   text = sys.argv[1] if len(sys.argv) > 1 else DEMO_TEXT
   gui_app.init_window("Text Viewer")
-  text_window = TextWindow(text)
+  # Custom: Console error screen
+  from bluepilot.ui.console.boot import ConsoleTextWindow, apply_saved_theme
+  apply_saved_theme()
+  text_window = ConsoleTextWindow(text)
+  # End Custom
   for _ in gui_app.render():
     text_window.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))

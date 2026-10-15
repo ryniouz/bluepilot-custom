@@ -94,6 +94,80 @@ def parse_release_notes(basedir: str) -> bytes:
     cloudlog.exception("failed to parse release notes")
   return b""
 
+# Custom: pull updates from Lucas's own repository (BPUpdateRepo) instead of upstream
+def use_update_repo(params: Params, cwd: str) -> None:
+  url = params.get("BPUpdateRepo")
+  if not url:
+    return
+  url = str(url).strip()
+  if not url.startswith("https://"):
+    cloudlog.warning(f"ignoring BPUpdateRepo, not an https url: {url}")
+    return
+  try:
+    current = run(["git", "remote", "get-url", "origin"], cwd).strip()
+  except subprocess.CalledProcessError:
+    current = ""
+  if current != url:
+    cloudlog.info(f"update remote: {current} -> {url}")
+    run(["git", "remote", "set-url", "origin", url], cwd)
+# End Custom
+
+
+# Custom: download progress for the Console Updates page (BPUpdateProgress), like a phone's update bar
+GIT_PROGRESS_RE = re.compile(r"(Receiving objects|Resolving deltas):\s+(\d+)%(?:.*?,\s*([\d.]+ \w?i?B)(?:\s*\|\s*([\d.]+ \w?i?B/s))?)?")
+STAGE_SPAN = {"download": (0, 70), "resolve": (70, 80), "apply": (80, 90), "finalize": (90, 100)}
+
+
+class UpdateProgress:
+  """Overall percent across the stages; written only when the whole number changes."""
+
+  def __init__(self, params: Params):
+    self.params = params
+    self.last: tuple[str, int, str] | None = None
+
+  def set(self, stage: str, frac: float, detail: str = "") -> None:
+    lo, hi = STAGE_SPAN.get(stage, (0, 100))
+    pct = int(lo + (hi - lo) * max(0.0, min(1.0, frac)))
+    if not detail and self.last is not None and self.last[0] == stage:
+      detail = self.last[2]  # git prints the size only now and then; keep the last one
+    if self.last is not None and (pct, detail) == self.last[1:] and stage == self.last[0]:
+      return
+    self.last = (stage, pct, detail)
+    try:
+      self.params.put("BPUpdateProgress", {"stage": stage, "pct": pct, "detail": detail})
+    except Exception:
+      pass
+
+
+def git_fetch_progress(cwd: str, branch: str, progress: UpdateProgress) -> str:
+  """git fetch origin <branch> with --progress, feeding git's percentages to the Updates page's bar."""
+  proc = subprocess.Popen(["git", "fetch", "--progress", "origin", branch], cwd=cwd, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, encoding="utf8", errors="replace")
+  out: list[str] = []
+  buf = ""
+  assert proc.stdout is not None
+  while True:
+    ch = proc.stdout.read(1)
+    if not ch:
+      break
+    if ch not in "\r\n":
+      buf += ch
+      continue
+    if buf:
+      out.append(buf)
+      m = GIT_PROGRESS_RE.search(buf)
+      if m:
+        size = (m.group(3) or "").replace("iB", "B")
+        speed = (m.group(4) or "").replace("iB", "B")
+        detail = size + (f" · {speed}" if speed else "")
+        progress.set("download" if m.group(1) == "Receiving objects" else "resolve", int(m.group(2)) / 100, detail)
+    buf = ""
+  if proc.wait() != 0:
+    raise subprocess.CalledProcessError(proc.returncode, ["git", "fetch", "origin", branch], "\n".join(out[-20:]))
+  return "\n".join(out[-5:])
+# End Custom
+
+
 def setup_git_options(cwd: str) -> None:
   # We sync FS object atimes (which NEOS doesn't use) and mtimes, but ctimes
   # are outside user control. Make sure Git is set up to ignore system ctimes,
@@ -229,6 +303,11 @@ class Updater:
 
   @property
   def target_branch(self) -> str:
+    # Custom: the Console Updates page keeps its branch choice across restarts
+    pinned = self.params.get("BPUpdateBranch")
+    if pinned:
+      return str(pinned)
+    # End Custom
     b: str | None = self.params.get("UpdaterTargetBranch")
     if b is None:
       b = self.get_branch(BASEDIR)
@@ -296,6 +375,10 @@ class Updater:
         commit = self.get_commit_hash(basedir)[:7]
         with open(os.path.join(basedir, "sunnypilot", "common", "version.h")) as f:
           version = f.read().split('"')[1]
+        # Custom: Citadel Auto OS's own version number (CITADEL_VERSION) when the tree has one
+        if os.path.isfile(os.path.join(basedir, "CITADEL_VERSION")):
+          with open(os.path.join(basedir, "CITADEL_VERSION")) as f:
+            version = f.read().strip() or version
 
         commit_unix_ts = run(["git", "show", "-s", "--format=%ct", "HEAD"], basedir).rstrip()
         dt = datetime.datetime.fromtimestamp(int(commit_unix_ts))
@@ -334,6 +417,8 @@ class Updater:
 
     excluded_branches = ('release2', 'release2-staging')
 
+    use_update_repo(self.params, OVERLAY_MERGED)  # Custom: updates come from BPUpdateRepo
+
     try:
       run(["git", "ls-remote", "origin", "HEAD"], OVERLAY_MERGED)
       self._has_internet = True
@@ -349,6 +434,14 @@ class Updater:
       x = re.fullmatch(ls_remotes_re, line.strip())
       if x is not None and x.group('branch_name') not in excluded_branches:
         self.branches[x.group('branch_name')] = x.group('commit_sha')
+
+    # Custom: the Updates page's fork version and upstream BluePilot checks (show only, never install)
+    try:
+      from bluepilot.system.update_check import check_all
+      check_all(self.params)
+    except Exception:
+      cloudlog.exception("updater.check_all")
+    # End Custom
 
     cur_branch = self.get_branch(OVERLAY_MERGED)
     cur_commit = self.get_commit_hash(OVERLAY_MERGED)
@@ -369,11 +462,14 @@ class Updater:
     self.params.put_bool("UpdateAvailable", False, block=True)
 
     setup_git_options(OVERLAY_MERGED)
+    use_update_repo(self.params, OVERLAY_MERGED)  # Custom: updates come from BPUpdateRepo
 
     run(["git", "config", "--replace-all", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], OVERLAY_MERGED)
 
     branch = self.target_branch
-    git_fetch_output = run(["git", "fetch", "origin", branch], OVERLAY_MERGED)
+    progress = UpdateProgress(self.params)  # Custom: the Updates page's progress bar
+    progress.set("download", 0.0)
+    git_fetch_output = git_fetch_progress(OVERLAY_MERGED, branch, progress)  # Custom: was run(["git", "fetch", "origin", branch])
     cloudlog.info("git fetch success: %s", git_fetch_output)
 
     cloudlog.info("git reset in progress")
@@ -386,7 +482,10 @@ class Updater:
       ["git", "submodule", "update", "--init", "--recursive"],
       ["git", "submodule", "foreach", "--recursive", "git", "reset", "--hard"],
     ]
-    r = [run(cmd, OVERLAY_MERGED) for cmd in cmds]
+    r = []
+    for i, cmd in enumerate(cmds):  # Custom: one step of the progress bar per command
+      progress.set("apply", i / len(cmds))
+      r.append(run(cmd, OVERLAY_MERGED))
     cloudlog.info("git reset success: %s", '\n'.join(r))
 
     # TODO: show agnos download progress
@@ -395,7 +494,9 @@ class Updater:
 
     # Create the finalized, ready-to-swap update
     self.params.put("UpdaterState", "finalizing update...", block=True)
+    progress.set("finalize", 0.0)  # Custom
     finalize_update()
+    progress.set("finalize", 1.0)  # Custom
     cloudlog.info("finalize success!")
 
 

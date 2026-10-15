@@ -5,6 +5,7 @@ from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.statsd import statlog
+from openpilot.selfdrive.car import lv_power  # Custom: Lightning 12 V management
 
 CAR_VOLTAGE_LOW_PASS_K = 0.011 # LPF gain for 45s tau (dt/tau / (dt/tau + 1))
 
@@ -28,6 +29,8 @@ class PowerMonitoring:
     self.car_voltage_mV = 12e3                  # Low-passed version of peripheralState voltage
     self.car_voltage_instant_mV = 12e3          # Last value of peripheralState voltage
     self.integration_lock = threading.Lock()
+    self.top_up_boot = False                    # Custom: this boot came from a Lightning 12 V top-up wake
+    self.top_up_last_ts: float | None = None    # Custom: last time that wake was reported
 
     car_battery_capacity_uWh = self.params.get("CarBatteryCapacity") or 0
 
@@ -117,7 +120,54 @@ class PowerMonitoring:
     except Exception:
       sp_max_time_val_s = MAX_TIME_OFFROAD_S
 
+    # Custom: 12 V power saver caps the offroad time
+    saver_s = lv_power.read_settings(self.params).saver_offroad_s
+    if saver_s is not None:
+      sp_max_time_val_s = saver_s if sp_max_time_val_s <= 0 else min(sp_max_time_val_s, saver_s)
+    # Custom: end
     return 0 < sp_max_time_val_s <= offroad_time
+
+  # Custom: offroad charging keep-awake and post-charge sleep delay
+  def charging_shutdown_state(self, now: float, offroad_timestamp: float) -> tuple[bool, bool]:
+    try:
+      charging = self.params.get_bool("BPChargingActive")
+      keep_awake = bool(self.params.get("BPChargeKeepAwake", return_default=True))
+      last = self.params.get("BPChargeLastActiveTs")
+      delay_s = 60. * float(self.params.get("BPChargeSleepDelayMin", return_default=True))
+    except Exception:
+      cloudlog.exception("charging shutdown params")
+      return False, False
+    fresh = last is not None and (now - float(last)) < 60.  # the monitor refreshes it every 10 s while charging
+    if charging and fresh:
+      return keep_awake, False
+    # BPChargeSleepDelayMin = 0: no post-charge rule, MaxTimeOffroad decides
+    charged_this_offroad = last is not None and float(last) >= offroad_timestamp
+    return False, delay_s > 0 and charged_this_offroad and (now - float(last)) >= delay_s
+  # Custom: end
+
+  # Custom: Lightning 12 V top-up wakes (selfdrive/car/lv_power.py)
+  def lv_top_up_wake(self, now: float | None = None) -> bool:
+    """hardwared: ignition is up because the truck is topping up its 12 V battery, not for a drive."""
+    now = time.monotonic() if now is None else now
+    try:
+      if not lv_power.read_settings(self.params).wake_filter:
+        return False
+      return lv_power.top_up_active(lv_power.read_state(self.params), now)
+    except Exception:
+      cloudlog.exception("lv top-up wake check")
+      return False
+
+  def top_up_wake_over(self, now: float, started_seen: bool) -> bool:
+    """A comma that only booted for a 12 V top-up wake powers down TOP_UP_SLEEP_S after the wake ends."""
+    if started_seen:
+      self.top_up_boot = False
+      return False
+    if self.lv_top_up_wake(now):
+      self.top_up_boot = True
+      self.top_up_last_ts = now
+      return False
+    return self.top_up_boot and self.top_up_last_ts is not None and now - self.top_up_last_ts >= lv_power.TOP_UP_SLEEP_S
+  # Custom: end
 
   # See if we need to shutdown
   def should_shutdown(self, ignition: bool, in_car: bool, offroad_timestamp: float | None, started_seen: bool):
@@ -127,15 +177,31 @@ class PowerMonitoring:
     now = time.monotonic()
     should_shutdown = False
     offroad_time = (now - offroad_timestamp)
-    low_voltage_shutdown = (self.car_voltage_mV < (VBATT_PAUSE_CHARGING * 1e3) and
+    # Custom: 12 V power saver raises the voltage cutoff; the 12 V SOC cutoff counts as low voltage
+    vbatt_cutoff = VBATT_PAUSE_CHARGING
+    lv = lv_power.read_settings(self.params)
+    vbatt_cutoff = max(vbatt_cutoff, lv.volts_cutoff) if lv.saver else vbatt_cutoff
+    low_soc = lv_power.soc_below_cutoff(lv, lv_power.read_state(self.params), now)
+    # Custom: end
+    low_voltage_shutdown = ((self.car_voltage_mV < (vbatt_cutoff * 1e3) or low_soc) and
                             offroad_time > VOLTAGE_SHUTDOWN_MIN_OFFROAD_TIME_S)
     should_shutdown |= self.max_time_offroad_exceeded(offroad_time)
     should_shutdown |= low_voltage_shutdown
     should_shutdown |= (self.car_battery_capacity_uWh <= 0)
+    # Custom: offroad charging (selfdrive/car/charging_monitor.py). Stay on while the truck charges,
+    # except for the 12 V cutoff; power down BPChargeSleepDelayMin after a charge in this offroad period ends.
+    charge_hold, charge_done = self.charging_shutdown_state(now, offroad_timestamp)
+    if charge_hold:
+      should_shutdown = low_voltage_shutdown
+    should_shutdown |= charge_done
+    # A 12 V top-up wake that booted the comma is not a reason to stay on once it ends.
+    top_up_over = self.top_up_wake_over(now, started_seen)
+    should_shutdown |= top_up_over
+    # Custom: end
     should_shutdown &= not ignition
     should_shutdown &= (not self.params.get_bool("DisablePowerDown"))
     should_shutdown &= in_car
     should_shutdown &= offroad_time > DELAY_SHUTDOWN_TIME_S
     should_shutdown |= self.params.get_bool("ForcePowerDown")
-    should_shutdown &= started_seen or (now > MIN_ON_TIME_S)
+    should_shutdown &= started_seen or (now > MIN_ON_TIME_S) or top_up_over  # Custom: top_up_over
     return should_shutdown

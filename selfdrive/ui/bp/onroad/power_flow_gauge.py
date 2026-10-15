@@ -17,6 +17,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from opendbc.sunnypilot.car.ford.carstate_ext import get_hev_engine_on_reason_text, get_hev_power_flow_text
 from openpilot.selfdrive.ui.bp.lib.ui_debug_logger import bp_ui_log
+from bluepilot.ui.lib.theme import Console, Onroad, accent_alpha, mix, with_alpha  # Custom: Console theme
 
 # --- Size presets (width_ratio, height) for each gauge_scale ---
 # Small (1) = previous large; Large (2) = new bigger tier; bar_ratio reduced for a thinner bar
@@ -30,44 +31,44 @@ SIZE_PRESETS_SIDEBAR = {
 }
 
 # Background (matching battery gauge style)
-BACKGROUND_BOX_COLOR = rl.Color(20, 20, 20, 100)
+BACKGROUND_BOX_COLOR = Onroad.PANEL
 BACKGROUND_ROUNDNESS = 0.3
 BACKGROUND_GLOW_EXPANSION = 4
 BACKGROUND_PADDING = 15
 
 # Bar styling
-BAR_BG_COLOR = rl.Color(52, 73, 94, 200)
-BAR_INSET_COLOR = rl.Color(0, 0, 0, 40)
-BAR_BORDER_COLOR = rl.Color(189, 195, 199, 120)
+BAR_BG_COLOR = Console.BG_TRACK
+BAR_INSET_COLOR = Console.TRANSPARENT
+BAR_BORDER_COLOR = Console.BORDER_DEFAULT
 BAR_BORDER_THICKNESS = 1.5
 BAR_HIGHLIGHT_ALPHA = 30  # Top-half highlight on active fill
 BAR_ROUND_RADIUS = 28.0  # Rounded track ends
 BAR_MARGIN = 8
 
 # Center line
-CENTER_LINE_COLOR = rl.Color(236, 240, 241, 180)
+CENTER_LINE_COLOR = Console.TEXT_MUTED
 
 # Scale markers
-MARKER_COLOR = rl.Color(200, 200, 200, 150)
-MARKER_COLOR_MAJOR = rl.Color(236, 240, 241, 200)
+MARKER_COLOR = Console.TEXT_GHOST
+MARKER_COLOR_MAJOR = Console.TEXT_MUTED
 
 # Power bar fill colors (flat)
-COLOR_REGEN = rl.Color(0, 220, 80, 255)
-COLOR_EV = rl.Color(30, 144, 255, 255)
-COLOR_ICE_LOW = rl.Color(200, 200, 200, 255)
-COLOR_ICE_HIGH = rl.Color(255, 140, 0, 255)
+COLOR_REGEN = Console.SUCCESS
+COLOR_EV = Console.ACCENT
+COLOR_ICE_LOW = Console.BORDER_STRONG
+COLOR_ICE_HIGH = Console.WARNING
 
 # Border colors by mode
-BORDER_COLOR_REGEN = rl.Color(0, 255, 127, 180)
-BORDER_COLOR_EV = rl.Color(30, 144, 255, 180)
-BORDER_COLOR_HYBRID = rl.Color(100, 149, 237, 180)
-BORDER_COLOR_DEFAULT = rl.Color(70, 130, 180, 160)
+BORDER_COLOR_REGEN = with_alpha(Console.SUCCESS, 180)
+BORDER_COLOR_EV = accent_alpha(180)
+BORDER_COLOR_HYBRID = with_alpha(Console.INFO, 180)
+BORDER_COLOR_DEFAULT = Console.BORDER_DEFAULT
 
 # EV bracket colors
-BRACKET_COLOR_NORMAL = rl.Color(243, 156, 18, 200)
+BRACKET_COLOR_NORMAL = with_alpha(Console.WARNING, 200)
 
 # Text
-TEXT_COLOR = rl.Color(236, 240, 241, 220)
+TEXT_COLOR = Console.TEXT_PRIMARY
 
 # Sizing reference
 FULL_CONTENT_WIDTH = 2100.0
@@ -241,7 +242,7 @@ class PowerFlowGauge(Widget):
     )
     rl.draw_rectangle_rounded(
       glow_rect, BACKGROUND_ROUNDNESS, 10,
-      rl.Color(20, 20, 20, int(BACKGROUND_BOX_COLOR.a * 0.3)),
+      Console.TRANSPARENT,
     )
     rl.draw_rectangle_rounded(rect, BACKGROUND_ROUNDNESS, 10, BACKGROUND_BOX_COLOR)
 
@@ -360,7 +361,7 @@ class PowerFlowGauge(Widget):
       )
       rl.draw_rectangle_rounded(
         fill_rect_full, roundness, 10,
-        rl.Color(255, 255, 255, BAR_HIGHLIGHT_ALPHA),
+        Console.TRANSPARENT,
       )
 
     # Center line
@@ -404,10 +405,7 @@ class PowerFlowGauge(Widget):
       bracket_color = BRACKET_COLOR_NORMAL
     else:
       t = min((proximity - 80.0) / 20.0, 1.0)
-      bracket_color = rl.Color(
-        int(243 - t * 43), int(156 - t * 156), 18,
-        int(200 + t * 55),
-      )
+      bracket_color = mix(BRACKET_COLOR_NORMAL, Console.DANGER, t)  # Custom: Console warning -> danger
 
     bracket_width = int(12 * scale)
     bracket_depth = int(8 * scale)

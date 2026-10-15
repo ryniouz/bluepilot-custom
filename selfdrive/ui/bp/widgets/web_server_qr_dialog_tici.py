@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.application import FontWeight, gui_app
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.button import IconButton
 from openpilot.system.ui.widgets.toggle import Toggle
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
 
 class WebServerQRDialogTici(Widget):
@@ -123,7 +124,7 @@ class WebServerQRDialogTici(Widget):
       gui_app.pop_widget()
 
   def _render(self, rect: rl.Rectangle) -> int:
-    rl.clear_background(rl.Color(224, 224, 224, 255))
+    rl.clear_background(Console.TEXT_SECONDARY)
 
     try:
       self._generate_qr_code()
@@ -149,7 +150,7 @@ class WebServerQRDialogTici(Widget):
     title_font = gui_app.font(FontWeight.NORMAL)
     left_width = int(content_rect.width * 0.5 - 15)
     
-    rl.draw_text_ex(title_font, title, rl.Vector2(content_rect.x, y), 75, 0.0, rl.BLACK)
+    rl.draw_text_ex(title_font, title, rl.Vector2(content_rect.x, y), 75, 0.0, Console.BG_PAGE)
     y += 100
 
     # Two columns: QR code and controls
@@ -170,7 +171,7 @@ class WebServerQRDialogTici(Widget):
         url,
         font_size=40,
         font_weight=FontWeight.MEDIUM,
-        color=rl.BLACK
+        color=Console.BG_PAGE
       )
       
       gui_label(
@@ -178,7 +179,7 @@ class WebServerQRDialogTici(Widget):
         "Scan to connect",
         font_size=35,
         font_weight=FontWeight.MEDIUM,
-        color=rl.Color(100, 100, 100, 255)
+        color=Console.TEXT_GHOST
       )
 
     # Toggle on left
@@ -193,7 +194,7 @@ class WebServerQRDialogTici(Widget):
       "Enable Web Routes Server",
       font_size=45,
       font_weight=FontWeight.MEDIUM,
-      color=rl.BLACK
+      color=Console.BG_PAGE
     )
 
     return -1
@@ -203,10 +204,10 @@ class WebServerQRDialogTici(Widget):
     if not self._qr_texture:
       msg = "No WiFi connection" if not has_url else "QR Code Error"
       try:
-        rl.draw_rectangle_rounded(rect, 0.1, 20, rl.Color(240, 240, 240, 255))
+        rl.draw_rectangle_rounded(rect, 0.1, 20, Console.TEXT_PRIMARY)
         error_font = gui_app.font(FontWeight.BOLD)
         msg_y = rect.y + max(0, rect.height // 2 - 15)
-        rl.draw_text_ex(error_font, msg, rl.Vector2(rect.x + 20, msg_y), 28, 0.0, rl.RED)
+        rl.draw_text_ex(error_font, msg, rl.Vector2(rect.x + 20, msg_y), 28, 0.0, Console.DANGER)
       except Exception as e:
         cloudlog.warning(f"QR dialog draw error: {e}")
       return
@@ -214,7 +215,7 @@ class WebServerQRDialogTici(Widget):
     if rect.height <= 0 or rect.width <= 0 or self._qr_texture.height <= 0:
       return
     source = rl.Rectangle(0, 0, self._qr_texture.width, self._qr_texture.height)
-    rl.draw_texture_pro(self._qr_texture, source, rect, rl.Vector2(0, 0), 0, rl.WHITE)
+    rl.draw_texture_pro(self._qr_texture, source, rect, rl.Vector2(0, 0), 0, Console.TEXT_PRIMARY)
 
   def __del__(self):
     if self._qr_texture and self._qr_texture.id != 0:

@@ -21,8 +21,9 @@ from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer, UI_CONFIG, F
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from bluepilot.ui.lib.theme import Console  # Custom: Console theme
 
-SLA_ACTIVE_COLOR = rl.Color(0x91, 0x9b, 0x95, 0xff)
+SLA_ACTIVE_COLOR = Console.TEXT_MUTED
 
 
 class HudRendererSP(HudRenderer):
@@ -90,8 +91,8 @@ class HudRendererSP(HudRenderer):
     if self.is_cruise_set:
       set_speed_color = COLORS.WHITE
       if long_plan_sp.speedLimit.assist.active:
-        set_speed_color = SLA_ACTIVE_COLOR if long_override else rl.Color(0, 0xff, 0, 0xff)
-        max_color = SLA_ACTIVE_COLOR if long_override else rl.Color(0x80, 0xd8, 0xa6, 0xff)
+        set_speed_color = SLA_ACTIVE_COLOR if long_override else Console.SUCCESS
+        max_color = SLA_ACTIVE_COLOR if long_override else Console.SUCCESS
       else:
         if ui_state.status == UIStatus.ENGAGED:
           max_color = COLORS.ENGAGED

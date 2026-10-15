@@ -101,6 +101,11 @@ def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
 
   return always_run(started, params, CP)
 
+# Custom: data export bridge
+def bridge_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("BPBridgeEnabled")
+# End Custom
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -131,6 +136,10 @@ procs = [
   PythonProcess("soundd", "selfdrive.ui.bp.soundd_bp" if is_bluepilot() else "selfdrive.ui.soundd", driverview),
   # End BluePilot
   PythonProcess("locationd", "selfdrive.locationd.locationd", only_onroad),
+  # Custom: offroad charging monitor and OBD adapter link (Lightning control and CAN)
+  PythonProcess("bp_charging_monitor", "selfdrive.car.charging_monitor", only_offroad),
+  PythonProcess("bp_obdd", "selfdrive.car.obd.obdd", always_run),  # idles unless BPObdEnabled
+  # Custom: end
   NativeProcess("_pandad", "selfdrive/pandad", ["./pandad"], always_run, enabled=False),
   PythonProcess("calibrationd", "selfdrive.locationd.calibrationd", only_onroad),
   PythonProcess("torqued", "selfdrive.locationd.torqued", only_onroad),
@@ -199,6 +208,10 @@ if is_bluepilot():
   procs += [
     PythonProcess("bp_portal", "bluepilot.backend.bp_portal", _bp_portal_enabled),
     PythonProcess("bp_route_preprocessor", "bluepilot.backend.routes.preprocessor", _bp_route_preprocessor_enabled),
+    # Custom: data export bridge (drives, live state, keep-until-synced, Citadel uploads)
+    PythonProcess("bp_bridge", "bluepilot.bridge.bp_bridge", bridge_enabled),
+    # Custom: Bluetooth on/off (BPBluetoothEnabled), BlueZ install and adapter bring-up; idles on stock AGNOS
+    PythonProcess("bp_btd", "bluepilot.system.bluetooth.btd", always_run),
   ]
 
 if os.path.exists("./github_runner.sh"):
@@ -217,5 +230,12 @@ if os.path.exists("../../third_party/copyparty/copyparty-sfx.py"):
   copyparty_args += ["-z"]
   copyparty_args += ["-q"]
   procs += [NativeProcess("copyparty-sfx", "third_party/copyparty", ["./copyparty-sfx.py", *copyparty_args], and_(only_offroad, use_copyparty))]
+
+# Custom: sunnylink is off in Citadel Auto OS, which links through its own services. Its daemons never start, so
+# the device neither registers with nor reports to sunnylink, and its backups don't run. The source stays for
+# upstream merges. comma connect (athenad, uploader) is untouched.
+SUNNYLINK_PROCS = {"manage_sunnylinkd", "sunnylink_registration_manager", "statsd_sp", "backup_manager", "sunnylink_uploader"}
+procs = [p for p in procs if p.name not in SUNNYLINK_PROCS]
+# End Custom
 
 managed_processes = {p.name: p for p in procs}

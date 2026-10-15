@@ -58,7 +58,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IsDriverViewEnabled", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsEngaged", {PERSISTENT, BOOL}},
     {"IsLdwEnabled", {PERSISTENT | BACKUP, BOOL}},
-    {"IsMetric", {PERSISTENT | BACKUP, BOOL}},
+    {"IsMetric", {PERSISTENT | BACKUP, BOOL, "1"}},  // Custom: Canadian units (km, km/h) by default
     {"IsOffroad", {CLEAR_ON_MANAGER_START, BOOL}},
     {"IsOnroad", {PERSISTENT, BOOL}},
     {"IsRhdDetected", {PERSISTENT, BOOL}},
@@ -345,6 +345,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BPThemeAutoSeasonal", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPRainbowLines", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPShowConfidenceBall", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPAutoSetSpeed", {PERSISTENT | BACKUP, BOOL, "0"}},  // Custom: Resume/Set uses the preferred speed for the detected limit
+    {"BPAutoSetTable", {PERSISTENT | BACKUP, STRING, "{\"50\":65,\"60\":75,\"80\":90,\"90\":110,\"100\":120}"}},  // Custom: limit km/h -> set km/h
+    {"BPAutoSetActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION | CLEAR_ON_OFFROAD_TRANSITION, INT, "0"}},  // Custom: km/h Auto set put the cruise on, 0 = not holding one (selfdrive/car/auto_set.py)
+    {"BPRoadView", {PERSISTENT | BACKUP, INT, "8567"}},  // Custom: road view preset Standard (bits 13-15) + the old default switches
     {"BPAnimateSteeringWheel", {PERSISTENT | BACKUP, BOOL, "1"}},
     // BluePilot: No static defaults; the first active UI persists its matching device styles (C4=0, C3X=1).
     {"BPSteeringWheelIconStyle", {PERSISTENT | BACKUP, INT}},
@@ -354,8 +358,41 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BpShowLateralControl", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPDisableLaneLineStatusColor", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BPUIDebugLog", {PERSISTENT, BOOL, "0"}},
+    {"BPSettingsMode", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPBluetoothEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPBluetoothStatus", {CLEAR_ON_MANAGER_START, STRING}},
     {"Blindspot", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlinkerPauseLaneChange", {PERSISTENT | BACKUP, BOOL, "0"}},
+
+    // Custom: Lightning control and CAN (stream B)
+    {"BPLightningTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // Lightning tune profile, selected by fingerprint
+    {"BPTowProfile", {PERSISTENT | BACKUP, INT, "0"}},              // 0 auto (trailer or Tow/Haul), 1 off, 2 always on
+    {"BPDriveModeTune", {PERSISTENT | BACKUP, BOOL, "1"}},          // follow the drive mode (sport, off-road, slippery)
+    {"BPOnePedalMode", {PERSISTENT | BACKUP, INT, "2"}},            // 0 off, 1 on, 2 estimate from coast-down
+    {"BPLowSocAlertPct", {PERSISTENT | BACKUP, INT, "20"}},
+    {"BPCriticalSocAlertPct", {PERSISTENT | BACKUP, INT, "10"}},
+    {"BPTireLowPressureKpa", {PERSISTENT | BACKUP, INT, "240"}},
+    {"BPLowVoltAlertV", {PERSISTENT | BACKUP, FLOAT, "11.8"}},
+    {"BPChargeKeepAwake", {PERSISTENT | BACKUP, BOOL, "1"}},        // stay on offroad while the truck charges
+    {"BPChargeSleepDelayMin", {PERSISTENT | BACKUP, INT, "30"}},    // power down this long after an offroad charge ends; 0 = use MaxTimeOffroad
+    {"BPChargingActive", {CLEAR_ON_MANAGER_START, BOOL, "0"}},      // written by charging_monitor
+    {"BPChargeLastActiveTs", {CLEAR_ON_MANAGER_START, FLOAT}},      // time.monotonic() of the last charging sample
+    {"BPGuestMode", {PERSISTENT, BOOL, "0"}},                        // factory driver assist: card goes passive (noOutput) at the next car start
+    {"BPGuestModeOneTrip", {PERSISTENT | BACKUP, BOOL, "1"}},       // turn Guest Mode off again after one drive
+    {"BPGuestModeActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},  // this drive is running as Guest Mode (UI)
+    {"BPGuestModeUsed", {PERSISTENT, BOOL, "0"}},                    // set by card on a guest drive; cleared at the next offroad start
+    {"BPLockedPlatform", {PERSISTENT | BACKUP, STRING, "FORD_F_150_LIGHTNING_MK1"}},  // only control this platform; anything else stays passive. Empty = any car
+    {"BPPlatformMismatch", {CLEAR_ON_MANAGER_START, STRING}},       // fingerprint of a car the lock refused (for the UI)
+    {"BPObdEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},             // OBD adapter link on/off (read-only PID polling)
+    {"BPObdTransport", {PERSISTENT | BACKUP, STRING, "wifi"}},      // wifi, usb, bluetooth or simulated
+    {"BPObdAddress", {PERSISTENT | BACKUP, STRING, ""}},            // wifi host[:port], usb /dev path, bluetooth MAC[#channel]
+    {"BPObdPollWhenOff", {PERSISTENT | BACKUP, BOOL, "0"}},         // also poll while the truck is off and not charging (keeps modules awake)
+    {"BPLvSaver", {PERSISTENT | BACKUP, BOOL, "0"}},                // 12 V power saving: short offroad time, higher 12 V cutoffs
+    {"BPLvSaverOffroadMin", {PERSISTENT | BACKUP, INT, "10"}},      // power-saving offroad time, minutes
+    {"BPLvShutdownSoc", {PERSISTENT | BACKUP, INT, "0"}},           // power down offroad below this 12 V SOC (%); 0 = off
+    {"BPLvWakeFilter", {PERSISTENT | BACKUP, BOOL, "1"}},           // a Lightning 12 V top-up wake is not a drive
+    {"BPLvState", {CLEAR_ON_MANAGER_START, JSON}},                   // written by charging_monitor: 12 V SOC/voltage, top-up wake, timestamps
+    // Custom: end
 
     // BluePilot: Portal (Web Routes Server)
     {"EnableWebRoutesServer", {PERSISTENT | BACKUP, BOOL, "0"}},
@@ -374,6 +411,56 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // BluePilot: UI params
     {"BPLastSeenVersion", {PERSISTENT, STRING}},
 
+    // Custom: Console UI params (stream A, Comma Console UI)
+    {"BPConsoleAccent", {PERSISTENT | BACKUP, STRING, "blue"}},
+    {"BPConsoleMode", {PERSISTENT | BACKUP, STRING, "auto"}},  // auto, day, night
+    {"BPLayoutPreset", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPConsoleScale", {PERSISTENT | BACKUP, INT, "1"}},  // UI size: 0 small, 1 standard, 2 large
+    {"BPAutoHomeWifi", {PERSISTENT | BACKUP, BOOL, "1"}},  // join a saved home network when parked at home
+    {"BPAutoHotspotHome", {PERSISTENT | BACKUP, BOOL, "1"}},  // turn the hotspot off at home
+    {"BPAutoHotspotAway", {PERSISTENT | BACKUP, BOOL, "0"}},  // turn the hotspot on when driving away from home
+    {"BPEvHud", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPEvHudTireAlert", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargingScreen", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPChargeSleepMin", {PERSISTENT | BACKUP, INT, "30"}},  // display off after this many minutes of ignition-off charging, 0 = never
+    {"BPChargeOffDcMin", {PERSISTENT | BACKUP, INT, "60"}},  // same, DC fast charging with the truck off
+    {"BPChargeOnAcMin", {PERSISTENT | BACKUP, INT, "0"}},    // unused since Lucas 22:46: someone inside never dims (kept for old settings)
+    {"BPChargeOnDcMin", {PERSISTENT | BACKUP, INT, "0"}},    // same, DC fast charging
+    {"BPChargeOnThen", {PERSISTENT | BACKUP, INT, "0"}},     // after that with the truck on: 0 dim, 1 display off
+    {"BPChargeOffThen", {PERSISTENT | BACKUP, INT, "0"}},    // after that with the truck off: 0 dim, 1 display off
+    {"BPChargeMinimal", {PERSISTENT | BACKUP, BOOL, "1"}},   // truck off: the minimal dark charging screen
+    {"BPLastEvSnapshot", {PERSISTENT, JSON}},
+    {"BPCanadianUnitsSet", {PERSISTENT, BOOL, "0"}},  // one-time switch of IsMetric to km for this build
+    {"BPUpdateRepo", {PERSISTENT | BACKUP, STRING, "https://github.com/ryniouz/bluepilot-custom.git"}},  // updated.py fetches from here
+    {"BPUpdateBranch", {PERSISTENT | BACKUP, STRING}},  // pinned update branch; empty = UpdaterTargetBranch / current
+    {"BPUpdateProgress", {CLEAR_ON_MANAGER_START, JSON}},  // {"stage","pct","detail"} while updated downloads (Console Updates bar)
+    {"BPForkStatus", {PERSISTENT, JSON}},  // last check of BPUpdateRepo: version and commit of the update branch
+    {"BPUpstreamStatus", {PERSISTENT, JSON}},  // last check of upstream BluePilot: newest release, bp-dev commits since our base
+    {"BPLteUsage", {PERSISTENT, STRING}},  // JSON: this month's LTE bytes
+    {"BPHomeWifi", {PERSISTENT | BACKUP, STRING}},  // JSON list of home Wi-Fi SSIDs
+    {"BPLastLocation", {PERSISTENT, STRING}},  // JSON lat/lon of the last good GPS fix
+    {"BPHomeLocation", {PERSISTENT | BACKUP, STRING}},  // JSON lat/lon of home
+    {"BPObdDongle", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the chosen Bluetooth OBD dongle
+    {"BPPhoneLink", {PERSISTENT | BACKUP, STRING}},  // JSON mac/name of the phone picked for the planned Bluetooth link
+    // Custom: end
+
     // WiFi Management
     {"WifiFavoriteSSID", {PERSISTENT | BACKUP, STRING}},
+
+    // Custom: data export bridge (bluepilot/bridge)
+    {"BPBridgeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPBridgePort", {PERSISTENT | BACKUP, INT, "8090"}},
+    {"BPBridgeToken", {PERSISTENT, STRING}},
+    {"BPBridgeNotifyUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPKeepUntilSynced", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRoadTripMode", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"BPRoadTripVideo", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPServerUrl", {PERSISTENT | BACKUP, STRING}},
+    {"BPCellLimitMB", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellLimitAction", {PERSISTENT | BACKUP, INT, "0"}},
+    {"BPCellResetDay", {PERSISTENT | BACKUP, INT, "1"}},
+    {"BPRoadTripCellular", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPCommaConnectWifiOnly", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"BPRemoteLink", {PERSISTENT | BACKUP, BOOL, "1"}},             // Citadel can reach the bridge API from away
+    // End Custom
 };

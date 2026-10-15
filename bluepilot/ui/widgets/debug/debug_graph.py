@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from bluepilot.ui.widgets.debug.debug_colors import DebugColors
+from bluepilot.ui.lib.theme import Console, with_alpha  # Custom: Console theme
 
 
 @dataclass
@@ -163,7 +164,7 @@ class TimeSeriesGraph(Widget):
     container = rl.Rectangle(rect.x + 8, rect.y + 8, rect.width - 16, rect.height - 16)
     rl.draw_rectangle_rounded(container, 0.04, 10, DebugColors.GRAPH_CONTAINER_MID)
     rl.draw_rectangle_rounded_lines_ex(container, 0.04, 10, 1.5,
-                                       rl.Color(70, 130, 180, 120))
+                                       with_alpha(Console.INFO, 120))
 
   def _draw_grid(self, gx: int, gy: int, gw: int, gh: int):
     """Draw horizontal grid lines."""

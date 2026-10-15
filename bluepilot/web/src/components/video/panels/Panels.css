@@ -9,12 +9,8 @@
 }
 
 .bottom-panel {
-  background: linear-gradient(
-    160deg,
-    rgba(36, 36, 36, 0.95),
-    rgba(18, 18, 18, 0.92)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border: 1px solid rgba(var(--ink-rgb), 0.08);
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
@@ -27,14 +23,14 @@
   justify-content: space-between;
   padding: 10px 16px;
   cursor: pointer;
-  background: rgba(54, 54, 54, 0.85);
+  background: var(--bg-high);
   transition: background 0.2s, border-color 0.2s;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.06);
 }
 
 .panel-header:hover {
-  background: rgba(66, 66, 66, 0.9);
-  border-bottom-color: rgba(33, 150, 243, 0.35);
+  background: var(--border-default);
+  border-bottom-color: rgba(var(--accent-rgb), 0.35);
 }
 
 .panel-title {
@@ -47,7 +43,7 @@
 .panel-icon {
   color: var(--bp-accent-blue);
   opacity: 0.9;
-  filter: drop-shadow(0 4px 12px rgba(33, 150, 243, 0.4));
+  filter: drop-shadow(0 4px 12px rgba(var(--accent-rgb), 0.4));
 }
 
 .panel-title-text {
@@ -86,25 +82,25 @@
 }
 
 .panel-action-btn:not(.btn-danger) {
-  background: rgba(33, 150, 243, 0.18);
-  border-color: rgba(33, 150, 243, 0.35);
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.35);
   color: var(--bp-text-primary);
 }
 
 .panel-action-btn:not(.btn-danger):hover {
-  background: rgba(33, 150, 243, 0.28);
-  border-color: rgba(33, 150, 243, 0.55);
+  background: rgba(var(--accent-rgb), 0.28);
+  border-color: rgba(var(--accent-rgb), 0.55);
 }
 
 .panel-action-btn.btn-danger {
-  background: rgba(244, 67, 54, 0.15);
-  border-color: rgba(244, 67, 54, 0.35);
+  background: rgba(var(--danger-rgb), 0.15);
+  border-color: rgba(var(--danger-rgb), 0.35);
   color: var(--bp-error);
 }
 
 .panel-action-btn.btn-danger:hover {
-  background: rgba(244, 67, 54, 0.3);
-  border-color: rgba(244, 67, 54, 0.55);
+  background: rgba(var(--danger-rgb), 0.3);
+  border-color: rgba(var(--danger-rgb), 0.55);
 }
 
 .panel-content {
@@ -113,7 +109,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  background: rgba(22, 22, 22, 0.9);
+  background: var(--bg-page);
 }
 
 .panel-content.hidden {
@@ -125,11 +121,11 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(48, 48, 48, 0.92);
+  background: var(--bg-raised);
   backdrop-filter: blur(14px);
   padding: 20px;
   margin: -24px -24px 20px -24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.08);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
 }
@@ -187,7 +183,7 @@
 .log-filter-select:focus {
   outline: none;
   border-color: var(--bp-accent-blue);
-  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
 .log-search-input {
@@ -205,7 +201,7 @@
 .log-search-input:focus {
   outline: none;
   border-color: var(--bp-accent-blue);
-  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
 .log-sync-label {
@@ -248,7 +244,7 @@
 }
 
 .log-messages {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -263,11 +259,11 @@
 }
 
 .log-message:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
 }
 
 .log-message-active {
-  background: rgba(33, 150, 243, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   border-left: 3px solid var(--bp-accent-blue);
 }
 
@@ -287,18 +283,18 @@
 }
 
 .log-level.error {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
+  background: rgba(var(--danger-rgb), 0.2);
+  color: var(--danger);
 }
 
 .log-level.warning {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ff9800;
+  background: rgba(var(--warning-rgb), 0.2);
+  color: var(--warning);
 }
 
 .log-level.info {
-  background: rgba(33, 150, 243, 0.2);
-  color: #2196f3;
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--accent);
 }
 
 .log-text {
@@ -322,11 +318,11 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(48, 48, 48, 0.92);
+  background: var(--bg-raised);
   backdrop-filter: blur(14px);
   padding: 20px;
   margin: -24px -24px 20px -24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.08);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
 }
@@ -354,7 +350,7 @@
 .cereal-message-select:focus {
   outline: none;
   border-color: var(--bp-accent-blue);
-  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
 .cereal-sync-label {
@@ -413,7 +409,7 @@
 .cereal-data-table thead {
   position: sticky;
   top: 0;
-  background: rgba(48, 48, 48, 0.95);
+  background: var(--bg-raised);
   z-index: 5;
 }
 
@@ -423,24 +419,24 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--bp-text-secondary);
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 2px solid rgba(var(--ink-rgb), 0.1);
 }
 
 .cereal-data-table td {
   padding: 10px 12px;
   font-size: 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.05);
 }
 
 .cereal-field-name {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   color: var(--bp-accent-blue);
   font-weight: 600;
   width: 40%;
 }
 
 .cereal-field-value {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   color: var(--bp-text-primary);
 }
 
@@ -456,7 +452,7 @@
   background: rgba(48, 48, 48, 0.5);
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--ink-rgb), 0.05);
 }
 
 .vehicle-info-label {
@@ -471,7 +467,7 @@
   font-size: 14px;
   color: var(--bp-text-primary);
   font-weight: 600;
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
 }
 
 .firmware-section-title {
@@ -484,7 +480,7 @@
 .firmware-table-wrapper {
   background: rgba(48, 48, 48, 0.5);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--ink-rgb), 0.05);
   overflow: hidden;
 }
 
@@ -500,15 +496,15 @@
   font-weight: 600;
   color: var(--bp-text-secondary);
   background: rgba(36, 36, 36, 0.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
 }
 
 .firmware-table td {
   padding: 10px 12px;
   font-size: 13px;
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   color: var(--bp-text-primary);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.05);
 }
 
 .firmware-table tr:last-child td {
@@ -517,7 +513,7 @@
 
 /* FFmpeg Debug Panel */
 .debug-messages {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
   color: var(--bp-text-primary);
@@ -555,24 +551,24 @@
 }
 
 .debug-message:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
 }
 
 .debug-message.log-type-start {
-  border-left-color: #4caf50;
+  border-left-color: var(--success);
 }
 
 .debug-message.log-type-end {
-  border-left-color: #9e9e9e;
+  border-left-color: var(--text-muted);
 }
 
 .debug-message.log-type-error {
-  border-left-color: #f44336;
-  background: rgba(244, 67, 54, 0.05);
+  border-left-color: var(--danger);
+  background: rgba(var(--danger-rgb), 0.05);
 }
 
 .debug-message.log-type-output {
-  border-left-color: #2196f3;
+  border-left-color: var(--accent);
 }
 
 .debug-timestamp {
@@ -590,33 +586,33 @@
 }
 
 .log-type-start .debug-log-type {
-  background: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
+  background: rgba(var(--success-rgb), 0.2);
+  color: var(--success);
 }
 
 .log-type-end .debug-log-type {
   background: rgba(158, 158, 158, 0.2);
-  color: #9e9e9e;
+  color: var(--text-muted);
 }
 
 .log-type-error .debug-log-type {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
+  background: rgba(var(--danger-rgb), 0.2);
+  color: var(--danger);
 }
 
 .log-type-output .debug-log-type {
-  background: rgba(33, 150, 243, 0.2);
-  color: #2196f3;
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--accent);
 }
 
 .debug-pid {
-  color: #ff9800;
+  color: var(--warning);
   font-size: 11px;
   flex-shrink: 0;
 }
 
 .debug-route-info {
-  color: #9c27b0;
+  color: var(--purple);
   font-size: 11px;
   flex-shrink: 0;
 }
@@ -646,7 +642,7 @@
 .spinner-small {
   width: 24px;
   height: 24px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid rgba(var(--ink-rgb), 0.1);
   border-top-color: var(--bp-accent-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -678,7 +674,7 @@
 
 /* Standard foreground colors (30-37) */
 .ansi-black {
-  color: #2e3436;
+  color: var(--bg-high);
 }
 
 .ansi-red {
@@ -706,12 +702,12 @@
 }
 
 .ansi-white {
-  color: #d3d7cf;
+  color: var(--text-secondary);
 }
 
 /* Bright foreground colors (90-97) */
 .ansi-bright-black {
-  color: #555753;
+  color: var(--text-ghost);
 }
 
 .ansi-bright-red {
@@ -739,12 +735,12 @@
 }
 
 .ansi-bright-white {
-  color: #eeeeec;
+  color: var(--text-primary);
 }
 
 /* Background colors (40-47) */
 .ansi-bg-black {
-  background-color: #2e3436;
+  background-color: var(--bg-high);
 }
 
 .ansi-bg-red {
@@ -772,12 +768,12 @@
 }
 
 .ansi-bg-white {
-  background-color: #d3d7cf;
+  background-color: var(--text-secondary);
 }
 
 /* Bright background colors (100-107) */
 .ansi-bg-bright-black {
-  background-color: #555753;
+  background-color: var(--text-ghost);
 }
 
 .ansi-bg-bright-red {
@@ -805,5 +801,5 @@
 }
 
 .ansi-bg-bright-white {
-  background-color: #eeeeec;
+  background-color: var(--text-primary);
 }

@@ -31,6 +31,7 @@ from opendbc.car.ford.values import CarControllerParams, FordFlags
 from opendbc.sunnypilot.car.ford.values_ext import BP_ANGLE_LIMITS, CURVATURE_MAX, FordSafetyFlagsSP
 from opendbc.sunnypilot.car.ford.human_turn import HumanTurnDetector
 from selfdrive.modeld.constants import ModelConstants
+from opendbc.sunnypilot.car.ford.lightning import STOCK_TUNE  # Custom: Lightning tune profile
 
 
 class PrimaryLateralControl(IntEnum):
@@ -56,7 +57,8 @@ LateralResult = namedtuple('LateralResult', [
 
 
 def apply_ford_curvature_limits_ext(apply_curvature, apply_curvature_last, current_curvature,
-                                     v_ego_raw, steering_angle, lat_active, CP):
+                                     v_ego_raw, steering_angle, lat_active, CP,
+                                     lat_accel_scale=1.0):  # Custom: lat_accel_scale (<= 1, profile)
   """Extended version of apply_ford_curvature_limits that returns
   (apply_curvature, max_curvature, curvature_deviation_limited).
 
@@ -94,11 +96,18 @@ def apply_ford_curvature_limits_ext(apply_curvature, apply_curvature_last, curre
 
   # Ford CAN FD lateral acceleration limit (more torque available than CAN)
   if CP.flags & FordFlags.CANFD:
-    curvature_accel_limit = MAX_LATERAL_ACCEL / (max(v_ego_raw, 1) ** 2)
+    # Custom: profiles may only lower the cap
+    curvature_accel_limit = MAX_LATERAL_ACCEL * min(lat_accel_scale, 1.0) / (max(v_ego_raw, 1) ** 2)
     apply_curvature = float(np.clip(apply_curvature, -curvature_accel_limit, curvature_accel_limit))
     max_curvature = np.minimum(max_curvature, abs(curvature_accel_limit))
 
   return apply_curvature, max_curvature, curvature_deviation_limited
+
+
+# Custom: Lightning tune profile, owned by CarController (stock values when absent)
+def _tune(obj):
+  return getattr(obj, "tune", STOCK_TUNE)
+# Custom: end
 
 
 class LateralCurvExt:
@@ -344,6 +353,7 @@ class LateralCurvExt:
       # Lane change curvature smoothing
       lane_change_factor = interp(CS.out.vEgoRaw, self.lane_change_factor_bp,
                                    [self.lane_change_factor_low, self.lane_change_factor_high_curv])
+      lane_change_factor *= min(_tune(self).lane_change_factor_scale, 1.0)  # Custom: profile
 
       if self.lane_change and self.model is not None:
         if self.model.meta.laneChangeDirection == 1 and requested_curvature < 0:
@@ -369,7 +379,8 @@ class LateralCurvExt:
       # Apply curvature limits (extended version returning max_curvature)
       apply_curvature, max_curvature, curvature_deviation_limited = apply_ford_curvature_limits_ext(
         requested_curvature, apply_curvature_last, current_curvature,
-        CS.out.vEgoRaw, 0, CC.latActive, CP)
+        CS.out.vEgoRaw, 0, CC.latActive, CP,
+        _tune(self).lat_accel_scale)  # Custom
 
       # Lateral uncertainty for torque bar visualization
       lateralUncertainty = self._calculate_lateral_uncertainty(requested_curvature, apply_curvature, max_curvature)
@@ -468,6 +479,7 @@ class LateralCurvExt:
 
       # Rate limit path angle for comfort
       path_angle_roc = interp(abs(CS.out.vEgoRaw), self.LC_path_angle_ROC_bp, self.LC_path_angle_ROC_v)
+      path_angle_roc *= min(_tune(self).path_angle_roc_scale, 1.0)  # Custom: profile
       path_angle_low_c = clip(path_angle_low_c, self.path_angle_last - path_angle_roc, self.path_angle_last + path_angle_roc)
 
       # Reset PID if driver applies consistent steering pressure
