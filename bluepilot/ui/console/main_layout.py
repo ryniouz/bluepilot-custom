@@ -3,7 +3,7 @@ Console main layout for the comma 3X.
 
   STANDBY   parked splash (clock, charge, readiness); any tap opens the shell
   SHELL     Citadel layout: section tabs across the top, page rail on the left
-  ONROAD    full-camera driving view; a tap opens the quick-controls sheet
+  ONROAD    full-camera driving view; a tap on the power dock opens the quick-controls sheet
   CHARGING  charging page; takes over while the truck is plugged in
 
 Replaces the stock sidebar + home + settings arrangement. Every settings panel is still the
@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-import pyray as rl
 
 import cereal.messaging as messaging
 from openpilot.selfdrive.ui.ui_state import device, ui_state
@@ -82,7 +81,7 @@ class ConsoleMainLayout(Widget):
     self._charging_page = ChargingPage()
     self._charging_page.on_open_full = self.open_charging
     self._stats_page = StatsPage()
-    self._shell.register_page(Dest.ENERGY, Page(tr("Charging"), "plug", self._charging_page, key="charging_page",
+    self._shell.register_page(Dest.ENERGY, Page(tr("Charging"), "charging", self._charging_page, key="charging_page",
                                                 subtitle=self._charging_page.subtitle, sub_dot=self._charging_page.sub_dot,
                                                 action=self._charging_page.action, on_action=self.open_charging,
                                                 framed=False), index=0)
@@ -198,10 +197,12 @@ class ConsoleMainLayout(Widget):
       return
     if self._quick.in_gesture:  # the release of a drag on the dock or handle is not a tap
       return
-    pos = rl.get_mouse_position()
+    # where the finger lifted (this frame's release event, else the last touch event)
+    rel = next((e.pos for e in reversed(gui_app.mouse_events) if e.left_released), None)
+    pos = rel if rel is not None else gui_app.last_mouse_event.pos
     if self._quick.visible:
       self._quick.handle_tap(pos)
-    else:
+    elif self._quick.opens_from(pos):
       self._quick.open()
 
   def open_charging(self):

@@ -51,7 +51,7 @@ class Dest(IntEnum):
 SECTIONS = [
   (Dest.HOME, "Home", "home"),
   (Dest.DRIVE, "Drive", "wheel"),
-  (Dest.ENERGY, "Energy", "bolt"),
+  (Dest.ENERGY, "Energy", "energy"),
   (Dest.DRIVES, "Drives", "route"),
   (Dest.SCREEN, "Screen", "screen"),
   (Dest.CONNECT, "Connect", "wifi"),
@@ -150,7 +150,7 @@ class ConsoleShell(Widget):
                                          subtitle=tr("Screen"), framed=False, aliases=old_keys("DISPLAY")))
     # Road view and the BluePilot driving-view rows (Onroad display has the sunnypilot ones)
     from bluepilot.ui.console.pages.driving_screen import DrivingScreenPage
-    self.register_page(Dest.SCREEN, Page(tr("Road view"), "car", DrivingScreenPage(), key="road_view", framed=False), index=2)
+    self.register_page(Dest.SCREEN, Page(tr("Road view"), "road", DrivingScreenPage(), key="road_view", framed=False), index=2)
 
     from bluepilot.ui.console.pages.connectivity import ConnectivityPage
     net = self._panels.get(PT.NETWORK) if hasattr(PT, "NETWORK") else None

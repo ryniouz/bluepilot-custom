@@ -190,7 +190,7 @@ class VehiclePage(CardPage):
                         "truck's factory systems take over. Recording still works."), 3)
 
   def _power_card(self, r: rl.Rectangle):
-    y = self._title(r, tr("Charging"), "plug")
+    y = self._title(r, tr("Charging"), "charging")
     if not has_param(self._params, "BPChargeKeepAwake"):
       return self._missing(r, y)
     awake = bool(self._get("BPChargeKeepAwake", True))

@@ -8,7 +8,6 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.hud_renderer import HudRendererSP
 from openpilot.selfdrive.ui.bp.onroad.exp_button_bp import ExpButtonBP
 from openpilot.selfdrive.ui.bp.onroad.road_view import road_prefs
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
-from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
 from openpilot.system.ui.lib.multilang import tr
 from bluepilot.ui.console import draw as D
 from bluepilot.ui.lib.theme import is_day, Console, Onroad, Radius, draw_panel, roundness
@@ -35,7 +34,8 @@ CLUSTER_SPEED = 140          # current speed numeral
 CLUSTER_SPEED_BIG = 230      # ... with Road view's Large speed
 CLUSTER_UNIT_BIG = 44
 CLUSTER_H_BIG = 352
-SIGN_IN_MAX_H = 200          # the speed limit sign inside the card
+SIGN_ROW_H = 150             # the speed limit row at the bottom of the card
+SIGN_ROW_PAD = 16
 CLUSTER_UNIT = 36
 CLUSTER_SET = 72             # set speed numeral
 STATE_BAND_H = 58         # engagement band across the top of the speed card
@@ -77,6 +77,7 @@ class HudRendererBP(HudRendererSP):
     self._signals_shown = False
     self.guest = False             # set by the road view each frame (Guest Mode drive)
     self.attention = ""            # AttentionBar state, set by the road view each frame
+    self.alert_active = False      # an openpilot alert card is showing (set by the road view)
 
   def set_gradient_rect(self, rect: rl.Rectangle):
     """Set full-width rect for header gradient (when HUD renders offset for confidence ball)."""
@@ -168,6 +169,17 @@ class HudRendererBP(HudRendererSP):
         band_l, band_r = self.notify_band(rect)
         w, h = notice_size(title, sub, band_r - band_l)
         notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, bar, icon, go=go)
+
+    # Signalling into an occupied lane: a boxed red warning card goes with the red edge bar on that side (the
+    # openpilot alert says it instead while one shows)
+    blocked = self._bs_markers.blocked_side()
+    if blocked is not None and not self.alert_active:
+      title = tr("Car in the blind spot")
+      sub = tr("Left lane is occupied") if blocked == "left" else tr("Right lane is occupied")
+      band_l, band_r = self.notify_band(rect)
+      w, h = notice_size(title, sub, band_r - band_l)
+      notice(rl.Rectangle(band_l + (band_r - band_l - w) / 2, self.notify_top(rect), w, h), title, sub, Console.DANGER_FILL,
+             f"car_{blocked}", boxed=True)
       self.rocket_fuel.render(rect, ui_state.sm)
 
   def _draw_lateral_control_overlay(self, center_x: float, center_y: float) -> None:
@@ -262,36 +274,29 @@ class HudRendererBP(HudRendererSP):
     return (tr("Ready") if self.is_cruise_set else tr("Off")), Onroad.DISENGAGED
 
   def _draw_cluster(self, rect: rl.Rectangle) -> rl.Rectangle:
-    """Speed card: state word with dot, current speed with unit, set speed in its own column."""
+    """Speed tile (Lucas 2026-10-15): one fixed-size card with the engagement state on top, the current speed and
+    set speed in the middle, and the speed limit sign underneath. Every column is sized for its widest value
+    ("888" km/h, a three-digit set speed, a sign), so nothing in or around the card moves when the speed goes
+    from two to three digits, cruise comes and goes, or a limit appears."""
     long_plan_sp = ui_state.sm['longitudinalPlanSP']
     long_override = ui_state.sm['carControl'].cruiseControl.override
     sla_active = long_plan_sp.speedLimit.assist.active
     self._get_icbm_status()
 
     hide_speed = self._hide_v_ego_ui
-    # Road view "Large speed": a much bigger own speed (the card grows with it)
+    # Road view "Large speed": a much bigger own speed (the card is a fixed, larger size then)
     big = road_prefs.big_speed and not hide_speed
     sp_size, unit_size = (CLUSTER_SPEED_BIG, CLUSTER_UNIT_BIG) if big else (CLUSTER_SPEED, CLUSTER_UNIT)
-    card_h = CLUSTER_H_BIG if big else CLUSTER_H
+    top_h = CLUSTER_H_BIG if big else CLUSTER_H
     speed_text = str(round(self.speed))
     unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
-    speed_w = 0.0 if hide_speed else max(measure_text_cached(self._font_bold, "88", sp_size).x,
-                                         measure_text_cached(self._font_bold, speed_text, sp_size).x)
+    speed_w = 0.0 if hide_speed else measure_text_cached(self._font_bold, "888", sp_size).x
     unit_w = 0.0 if hide_speed else measure_text_cached(self._font_medium, unit_text, unit_size).x
     speed_col = 0.0 if hide_speed else speed_w + 14 + unit_w
-
-    show_set = self.is_cruise_available and not self.guest
-    set_col = CLUSTER_SET_W if show_set else 0.0
-    inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if (speed_col and set_col) else 0) + set_col
-    # Custom: the speed limit sign sits in the same card, after the set speed (Lucas 22:42)
-    sl = self.speed_limit_renderer
-    show_sign = ui_state.speed_limit_mode != SpeedLimitMode.off and sl.has_limit
-    sign_h = min(SIGN_IN_MAX_H, card_h - STATE_BAND_H - 6 - CLUSTER_PAD - 16)
-    sign_w = sign_h * SIGN_W / SIGN_H
-    base_w = inner_w
-    if show_sign:
-      inner_w += (CLUSTER_PAD + 2 + CLUSTER_PAD if inner_w else 0) + sign_w
+    set_w = max(CLUSTER_SET_W, measure_text_cached(self._font_bold, "188", CLUSTER_SET).x)
+    inner_w = speed_col + (CLUSTER_PAD + 2 + CLUSTER_PAD if speed_col else 0) + set_w
     w = max(CLUSTER_MIN_W, inner_w + 2 * CLUSTER_PAD)
+    card_h = top_h + SIGN_ROW_H
     x, y = rect.x + CLUSTER_MARGIN, rect.y + CLUSTER_MARGIN
     card = rl.Rectangle(x, y, w, card_h)
     draw_panel(card, Onroad.PANEL, CLUSTER_RADIUS)
@@ -303,15 +308,20 @@ class HudRendererBP(HudRendererSP):
     if sla_active and self.is_cruise_set:
       word, color = tr("Limit assist"), (Console.WARNING if long_override else Console.INFO)
     active = not self.guest and (ui_state.status != UIStatus.DISENGAGED or (sla_active and self.is_cruise_set))
+    alarm = self.attention in ("blocked", "override")
+    fill = color if (active or alarm) else Console.BG_RAISED
     band = rl.Rectangle(x, y, w, STATE_BAND_H)
-    rl.draw_rectangle_rounded(band, roundness(band, CLUSTER_RADIUS), 10, color if active else Console.BG_RAISED)
-    rl.draw_rectangle_rec(rl.Rectangle(x, y + STATE_BAND_H - CLUSTER_RADIUS, w, CLUSTER_RADIUS), color if active else Console.BG_RAISED)
+    rl.draw_rectangle_rounded(band, roundness(band, CLUSTER_RADIUS), 10, fill)
+    rl.draw_rectangle_rec(rl.Rectangle(x, y + STATE_BAND_H - CLUSTER_RADIUS, w, CLUSTER_RADIUS), fill)
     # day status hues are light, so the band takes dark ink there
-    ink = (Console.FRAME_INK if is_day() else Console.ON_ACCENT) if active else Console.TEXT_SECONDARY
+    ink = (Console.FRAME_INK if is_day() else Console.ON_ACCENT) if (active or alarm) else Console.TEXT_SECONDARY
     icon = "gauge" if ui_state.status == UIStatus.LONG_ONLY else "wheel"
-    D.icon(icon, x + CLUSTER_PAD - 2, y + (STATE_BAND_H - 32) / 2, 32, ink)
-    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 42, y + (STATE_BAND_H - CLUSTER_LABEL) / 2 - 1),
+    D.icon(icon, x + CLUSTER_PAD - 2, y + (STATE_BAND_H - 34) / 2, 34, ink)
+    rl.draw_text_ex(self._font_semi_bold, word, rl.Vector2(x + CLUSTER_PAD + 44, y + (STATE_BAND_H - CLUSTER_LABEL) / 2 - 1),
                     CLUSTER_LABEL, 0, ink)
+    if self.attention == "blocked":
+      # the red box: a red outline around the whole tile while steering is blocked (with the left-edge bar)
+      rl.draw_rectangle_rounded_lines_ex(card, roundness(card, CLUSTER_RADIUS), 10, 4, Console.DANGER_FILL)
 
     body_y = y + STATE_BAND_H + 6
     cx = x + CLUSTER_PAD
@@ -319,47 +329,69 @@ class HudRendererBP(HudRendererSP):
       # BluePilot: speed turns red while the brake lights are on (ShowBrakeStatus)
       speed_color = Console.DANGER if self._brakes_on else Console.TEXT_PRIMARY
       sw = measure_text_cached(self._font_bold, speed_text, sp_size).x
+      # right-aligned in its fixed column, so the unit and everything after it stay put
       rl.draw_text_ex(self._font_bold, speed_text, rl.Vector2(cx + speed_w - sw, body_y), sp_size, 0, speed_color)
       rl.draw_text_ex(self._font_medium, unit_text, rl.Vector2(cx + speed_w + 14, body_y + sp_size * 0.80 - unit_size * 0.80),
                       unit_size, 0, Console.TEXT_MUTED)
       self.speed_right = cx + speed_col
       cx += speed_col + CLUSTER_PAD
-      if show_set:
-        rl.draw_rectangle(int(cx), int(body_y + 18), 2, int(card_h - (body_y - y) - CLUSTER_PAD - 18), Console.BORDER_DEFAULT)
-        cx += 2 + CLUSTER_PAD
+      rl.draw_rectangle(int(cx), int(body_y + 18), 2, int(top_h - (body_y - y) - CLUSTER_PAD - 18), Console.BORDER_DEFAULT)
+      cx += 2 + CLUSTER_PAD
     else:
       self.speed_right = 0
 
-    if show_set:
-      if self.show_icbm_status:
-        label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
-      elif self._auto_set_on():
-        # Lightning control's Auto set: "AUTO" in accent while it holds a speed it chose for the limit
-        # (BPAutoSetActive > 0), muted while it's on and waiting for Resume/Set
-        label = tr("AUTO")
-        label_color = Console.ACCENT_TEXT if self._auto_set_active > 0 else Console.TEXT_MUTED
-      else:
-        label, label_color = tr("MAX"), Console.TEXT_MUTED
-      sy = body_y + (card_h - CLUSTER_H) / 2  # the set speed sits mid-card next to a large speed
-      rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(cx, sy + 14), CLUSTER_LABEL, 0, label_color)
-      set_text = CRUISE_DISABLED_CHAR if not self.is_cruise_set else str(round(self.set_speed))
-      set_color = Console.TEXT_PRIMARY if self.is_cruise_set else Console.TEXT_GHOST
-      rl.draw_text_ex(self._font_bold, set_text, rl.Vector2(cx, sy + 14 + CLUSTER_LABEL + 4), CLUSTER_SET, 0, set_color)
-      # Squared state bar under the set speed, in the engagement colour
-      bar = rl.Rectangle(cx, y + card_h - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, CLUSTER_SET_W, SET_SPEED_STATE_BAR_H)
-      rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, self._set_speed_state_color(long_override, sla_active))
-
-    sign_y = body_y + 4 + (card_h - STATE_BAND_H - 6 - CLUSTER_PAD - 4 - sign_h) / 2
-    if show_sign:
-      sx = x + w - CLUSTER_PAD - sign_w
-      if base_w:
-        rl.draw_rectangle(int(sx - CLUSTER_PAD - 2), int(body_y + 18), 2, int(card_h - (body_y - y) - CLUSTER_PAD - 18),
-                          Console.BORDER_DEFAULT)
-      sl.target = rl.Rectangle(sx, sign_y, sign_w, sign_h)
+    # Set speed column, always reserved: a dash when cruise is not available
+    show_set = self.is_cruise_available and not self.guest
+    if self.show_icbm_status and show_set:
+      label, label_color = str(round(self.speed_cluster)), Console.ACCENT_TEXT
+    elif show_set and self._auto_set_on():
+      # Lightning control's Auto set: "AUTO" in accent while it holds a speed it chose for the limit
+      # (BPAutoSetActive > 0), muted while it's on and waiting for Resume/Set
+      label = tr("AUTO")
+      label_color = Console.ACCENT_TEXT if self._auto_set_active > 0 else Console.TEXT_MUTED
     else:
-      sl.target = rl.Rectangle(x + w - CLUSTER_PAD, sign_y, 0, sign_h)  # nothing drawn; the ahead chip still aligns
-    sl.chip_y = y + card_h + 16
+      label, label_color = tr("MAX"), (Console.TEXT_MUTED if show_set else Console.TEXT_GHOST)
+    sy = body_y + (top_h - CLUSTER_H) / 2  # the set speed sits mid-row next to a large speed
+    rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(cx, sy + 14), CLUSTER_LABEL, 0, label_color)
+    set_text = CRUISE_DISABLED_CHAR if not (show_set and self.is_cruise_set) else str(round(self.set_speed))
+    set_color = Console.TEXT_PRIMARY if (show_set and self.is_cruise_set) else Console.TEXT_GHOST
+    rl.draw_text_ex(self._font_bold, set_text, rl.Vector2(cx, sy + 14 + CLUSTER_LABEL + 4), CLUSTER_SET, 0, set_color)
+    # Squared state bar under the set speed, in the engagement colour
+    bar = rl.Rectangle(cx, y + top_h - CLUSTER_PAD - SET_SPEED_STATE_BAR_H, set_w, SET_SPEED_STATE_BAR_H)
+    rl.draw_rectangle_rounded(bar, roundness(bar, Radius.XS), 4, self._set_speed_state_color(long_override, sla_active) if show_set
+                              else Console.BG_TRACK)
+
+    # Speed limit row under the speeds, inside the same card: the Canadian sign and what it is
+    row_y = y + top_h
+    rl.draw_rectangle(int(x + CLUSTER_PAD), int(row_y), int(w - 2 * CLUSTER_PAD), 2, Console.BORDER_DEFAULT)
+    sl = self.speed_limit_renderer
+    sign_h = SIGN_ROW_H - 2 * SIGN_ROW_PAD
+    sign_w = sign_h * SIGN_W / SIGN_H
+    sign = rl.Rectangle(x + CLUSTER_PAD, row_y + SIGN_ROW_PAD, sign_w, sign_h)
+    tx = sign.x + sign_w + 24
+    text_w = x + w - CLUSTER_PAD - tx
+    sl.target = sign
+    if sl.has_limit:
+      title, title_c = tr("Speed limit"), Console.TEXT_SECONDARY
+      sub, sub_c = sl.detail_text(), Console.TEXT_MUTED
+    else:
+      self._ghost_sign(sign)
+      title, title_c = tr("No limit sign"), Console.TEXT_MUTED
+      sub, sub_c = "", Console.TEXT_GHOST
+    ty = row_y + SIGN_ROW_PAD + (sign_h - (CLUSTER_LABEL + (34 if sub else 0))) / 2 - 2
+    rl.draw_text_ex(self._font_semi_bold, D.fit(title, CLUSTER_LABEL, text_w, semi=True), rl.Vector2(tx, ty), CLUSTER_LABEL, 0, title_c)
+    if sub:
+      rl.draw_text_ex(self._font_medium, D.fit(sub, 26, text_w), rl.Vector2(tx, ty + CLUSTER_LABEL + 8), 26, 0, sub_c)
     return card
+
+  def _ghost_sign(self, r: rl.Rectangle) -> None:
+    """Where the sign goes when no limit is known: a faint outline with a dash, so the tile keeps its shape."""
+    k = r.height / SIGN_H
+    ghost = Console.TEXT_GHOST
+    rl.draw_rectangle_rounded_lines_ex(r, roundness(r, 18 * k), 10, 2, ghost)
+    dw = measure_text_cached(self._font_bold, CRUISE_DISABLED_CHAR, 60 * k)
+    rl.draw_text_ex(self._font_bold, CRUISE_DISABLED_CHAR, rl.Vector2(r.x + (r.width - dw.x) / 2, r.y + (r.height - dw.y) / 2),
+                    60 * k, 0, ghost)
 
   def _auto_set_on(self) -> bool:
     """BPAutoSetSpeed and BPAutoSetActive, read about twice a second."""

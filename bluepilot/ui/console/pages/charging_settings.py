@@ -67,7 +67,7 @@ class ChargingSettingsPage(FormPage):
     keep = lambda *r: [x for x in r if x is not None]  # noqa: E731
     on = p.bool("BPChargingScreen", True) if p.has("BPChargingScreen") else True
     if p.has("BPChargingScreen"):
-      out.append(Section(tr("Charging screen"), "plug", [
+      out.append(Section(tr("Charging screen"), "charging", [
         Toggle(tr("Show while charging"), tr("Opens when you plug in and stop"), on, lambda: self.set_screen(not on)),
         Note(tr("A tap minimizes it. Home's Charging card brings it back.")),
       ]))

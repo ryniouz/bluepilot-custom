@@ -8,7 +8,7 @@ lead card show.
 
 Opening: drag the dock (or, in Minimal mode where there is no dock, the small handle bar at the
 bottom) upward and the dock itself grows into the sheet, following the finger; let go past a third of the way and it settles
-open, otherwise it drops back. A tap on the handle, the dock or the camera opens it too. Dragging
+open, otherwise it drops back. A tap on the handle or the dock opens it too; a tap anywhere else on the road does not. Dragging
 the sheet down (from anywhere on it) closes it, as do a tap outside it, its close button, or a few seconds
 without a touch, so the road stays clear.
 """
@@ -87,6 +87,7 @@ class QuickControls:
     self._sheet: rl.Rectangle | None = None
     self._origin: rl.Rectangle | None = None   # the dock (or handle) the sheet grows out of
     self._page = "main"      # or "road"
+    self._last_rect: rl.Rectangle | None = None
     self._hits: list[tuple[rl.Rectangle, Callable[[], None]]] = []
     self.on_bookmark: Callable[[], None] | None = None
     self.on_diagnostics: Callable[[], None] | None = None
@@ -191,6 +192,7 @@ class QuickControls:
     D.text(label, x + 34, h.y + (HANDLE_H - D.LABEL) / 2 - 2, D.LABEL, ink, semi=True)
 
   def render(self, rect: rl.Rectangle):
+    self._last_rect = rect
     now = time.monotonic()
     self._update_drag(rect, now)
     if self._drag is None or not self._drag[2]:
@@ -387,6 +389,18 @@ class QuickControls:
     except Exception:
       pass
     ui_state.layout_preset = int(v)
+
+  def opens_from(self, pos) -> bool:
+    """Only the power dock (or Minimal mode's handle bar) opens the panel (Lucas 2026-10-15): a tap anywhere else
+    on the driving screen leaves it closed."""
+    if getattr(ui_state, "qc_blocked", False):
+      return False
+    dock = getattr(ui_state, "qc_dock", None)
+    if dock is not None:
+      return D.hit(dock, pos)
+    h = self._handle_rect(rl.Rectangle(0, 0, rl.get_screen_width(), rl.get_screen_height())) if self._last_rect is None else \
+      self._handle_rect(self._last_rect)
+    return h is not None and D.hit(rl.Rectangle(h.x - 40, h.y - 40, h.width + 80, h.height + 40 + HANDLE_BOTTOM), pos)
 
   def handle_tap(self, pos) -> bool:
     """Returns True when the tap was consumed by the sheet (including closing it)."""

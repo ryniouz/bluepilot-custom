@@ -82,11 +82,11 @@ ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
   (("bookmark",), "bookmark"),
   (("unknown vehicle", "car unrecognized"), "car"),
   (("dashcam", "branch is not tested", "joystick", "maneuver", "audio feedback"), "bell"),
-  (("risk of collision", "brake!", "aeb"), "warning"),
+  (("risk of collision", "brake!", "aeb", "collision"), "collision"),
   (("touch steering wheel",), "hands"),
   (("system unresponsive",), "cpu"),
   (("distract", "unresponsive", "no face", "pay attention", "eyes on road"), "eye"),
-  (("blindspot", "blind spot"), "car_rear"),
+  (("blindspot", "blind spot", "car detected"), "car_rear"),
   (("lane change", "changing lanes"), "lane"),
   (("turning left",), "lane_left"),
   (("turning right",), "lane_right"),
@@ -128,6 +128,8 @@ class AlertRendererBP(AlertRenderer):
     self.notify_band: tuple[float, float] | None = None
     self.notify_top: float | None = None
     self.guest = False
+    self.attention = ""            # AttentionBar state from the road view: "blocked" turns the card red
+    self.attention_alert = False
 
   def _render(self, rect: rl.Rectangle):
     from openpilot.selfdrive.ui.ui_state import ui_state
@@ -195,14 +197,20 @@ class AlertRendererBP(AlertRenderer):
   def _draw_card(self, rect: rl.Rectangle, alert: Alert) -> None:
     status = alert.status
     critical = status == AlertStatus.critical
-    accent = STATUS_COLOR.get(status, Console.ACCENT)
+    # Steering blocked (Lucas 2026-10-15): the card that explains it takes the red line and the red box, matching the
+    # red left-edge bar and the speed tile's red outline
+    boxed = self.attention == "blocked" and not critical
+    accent = Console.DANGER_FILL if boxed else STATUS_COLOR.get(status, Console.ACCENT)
     r = roundness(rect, ALERT_RADIUS)
     if critical:
       ground, ink, sub_ink, edge = with_alpha(Onroad.ALERT_CRITICAL, 0xE0), Onroad.ALERT_TEXT, SUB_TEXT, with_alpha(Onroad.ALERT_TEXT, 0x40)
     else:
       ground, ink, sub_ink, edge = Onroad.PANEL, Console.TEXT_PRIMARY, Console.TEXT_SECONDARY, Console.BORDER_DEFAULT
     rl.draw_rectangle_rounded(rect, r, 10, ground)
-    rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 2, edge)
+    if boxed:
+      rl.draw_rectangle_rounded(rect, r, 10, with_alpha(Console.DANGER_FILL, 0x1C))
+      edge = with_alpha(Console.DANGER_FILL, 0xE0)
+    rl.draw_rectangle_rounded_lines_ex(rect, r, 10, 3 if boxed else 2, edge)
 
     # Status bar, then the icon on its own in the status colour (white on the red card)
     bar = Onroad.ALERT_TEXT if critical else accent

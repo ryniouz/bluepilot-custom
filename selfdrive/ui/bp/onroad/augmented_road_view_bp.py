@@ -163,6 +163,8 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
     # Custom: red accent bar on the left edge for steering override, blocked steering and critical
     # alerts (no full-screen border); the speed card's status band names the state
     self._hud_renderer.attention = "" if self._guest else self._attention.update()
+    self._hud_renderer.alert_active = self.alert_renderer.attention_alert = alert is not None and alert.size != log.SelfdriveState.AlertSize.full
+    self.alert_renderer.attention = self._hud_renderer.attention
     if not self._guest:
       self._attention.render(self._content_rect)
 

@@ -38,7 +38,7 @@ CAP = 24
 GUTTER = 96           # left of each lane, for its scale
 DRAG_PX = 16          # movement before a press counts as a drag instead of a tap
 SETS_H = 84
-GROUP_ICONS = {"Battery": "battery", "Driving": "wheel", "Charging": "plug", "Vehicle": "car", "Tires": "gauge",
+GROUP_ICONS = {"Battery": "battery", "Driving": "wheel", "Charging": "charging", "Vehicle": "car", "Tires": "gauge",
                "Thermal": "thermo", "Other": "list"}
 # One-tap graph sets: the first few of these that the truck is sending
 GRAPH_SETS = [

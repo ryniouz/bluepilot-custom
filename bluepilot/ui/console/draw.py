@@ -9,6 +9,7 @@ and accent changes apply without re-creating anything.
 from __future__ import annotations
 
 import math
+import os
 
 import pyray as rl
 
@@ -197,10 +198,49 @@ def _arc(cx, cy, r, a0, a1, ox, oy, s, w, color):
   rl.draw_ring(rl.Vector2(ox + cx * s, oy + cy * s), r * s - w / 2, r * s + w / 2, a0, a1, 32, color)
 
 
+# Pack icons (Lucas 2026-10-15): pre-rendered white masks from assets/icons (build_icons.py lists where each comes from:
+# Phosphor for alerts and warnings, Fluent for collision, Tabler for road, connectivity and navigation, a drawn Ford
+# F-150 wheel and pickup). A name found there wins over the line drawing below.
+ICON_STROKE = 1.5                 # one stroke weight for every icon, on the 24-unit grid
+_ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icons")
+_ICON_SIZES = (48, 96, 192)
+_ICON_TEX: dict = {}
+
+
+def _pack_texture(name: str, size: float):
+  px = next((p for p in _ICON_SIZES if p >= size * 0.95), _ICON_SIZES[-1])
+  key = (name, px)
+  if key not in _ICON_TEX:
+    path = os.path.join(_ICON_DIR, str(px), name + ".png")
+    tex = None
+    if os.path.exists(path):
+      tex = rl.load_texture(path)
+      rl.gen_texture_mipmaps(tex)
+      rl.set_texture_filter(tex, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+    _ICON_TEX[key] = tex
+  return _ICON_TEX[key]
+
+
+def has_pack_icon(name: str) -> bool:
+  return os.path.exists(os.path.join(_ICON_DIR, "48", name + ".png"))
+
+
+def pack_icon(name: str, x: float, y: float, size: float, color: rl.Color) -> bool:
+  """Draw a pack icon's mask tinted with color; False when there is none by that name."""
+  tex = _pack_texture(name, size)
+  if tex is None:
+    return False
+  rl.draw_texture_pro(tex, rl.Rectangle(0, 0, tex.width, tex.height), rl.Rectangle(x, y, size, size), rl.Vector2(0, 0), 0, color)
+  return True
+
+
 def icon(name: str, x: float, y: float, size: float, color: rl.Color):
-  """Draw a Console line icon with its 24-unit box at (x, y) scaled to size px."""
+  """Draw a Console icon with its 24-unit box at (x, y) scaled to size px: the pack icon when there is one,
+  otherwise the Console line drawing."""
+  if pack_icon(name, x, y, size, color):
+    return
   s = size / 24.0
-  w = max(2.0, 2.0 * s)
+  w = max(2.0, ICON_STROKE * s)
   if name == "home":
     _line([(3, 10.5), (12, 3), (21, 10.5), (21, 21), (3, 21), (3, 10.5)], x, y, s, w, color)
     _line([(9, 21), (9, 15), (15, 15), (15, 21)], x, y, s, w, color)

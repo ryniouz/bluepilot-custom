@@ -77,7 +77,7 @@ class TruckDataPage(CardPage):
     c3.width -= GAP * 2 / 3
 
     self._group(c1, tr("HV battery"), "battery", BATTERY, vals, extra=self._spread_row(vals))
-    self._stack(c2, [(tr("Charger"), "plug", CHARGER)], vals)
+    self._stack(c2, [(tr("Charger"), "charging", CHARGER)], vals)
     others = [(v.name, v.label or v.name) for k, v in sorted(vals.items()) if k not in KNOWN]
     low_volt = tr("12 V battery") if D.text_w(tr("12 V battery"), D.H2, semi=True) + 64 + 2 * D.CARD_PAD <= c3.width else tr("12 V")
     col3 = [(tr("Tires"), "gauge", TIRES), (low_volt, "bolt", LOW_VOLT)] + ([(tr("Other"), "list", others)] if others else [])
