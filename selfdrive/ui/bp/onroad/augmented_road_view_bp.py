@@ -170,6 +170,7 @@ class AugmentedRoadViewBP(CameraViewBP, AugmentedRoadView, BlindspotRendererMixi
       self._attention.render(self._content_rect)
 
     self._hud_renderer.render(ui_rect)
+    self.model_renderer.avoid_rect = self._hud_renderer.cluster_rect  # Custom: blind-spot tint stops under the speed card
 
     # Custom: lead vehicle card under the experimental button (Road view settings choose its rows)
     lead = None if self._guest else self.model_renderer.lead_info

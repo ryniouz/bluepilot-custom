@@ -73,6 +73,7 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
   def __init__(self):
     super().__init__()
     self._lc_fx = LaneChangeFx()
+    self.avoid_rect: rl.Rectangle | None = None  # Custom: the speed card, set by the road view; road tints stay below it
     self._bp_params = Params()
     self._rainbow_v = 1.0
 
@@ -414,7 +415,16 @@ class ModelRendererBP(RadRacerRoadMixin, ModelRenderer):
       gradient = Gradient(start=(0.0, 1.0), end=(0.0, 0.0), stops=[0.0, 0.7, 1.0],
                           colors=[with_alpha(Console.DANGER_FILL, int(255 * alpha)), with_alpha(Console.DANGER_FILL, int(200 * alpha)),
                                   with_alpha(Console.DANGER_FILL, 0)])
-      draw_polygon(self._rect, poly, gradient=gradient)
+      # fade over the tint's own length (the gradient shader is in gl_FragCoord, bottom-left origin, so the
+      # box is given flipped), and stop it under the speed card so it never shows through the translucent tile
+      lo, hi = poly.min(axis=0), poly.max(axis=0)
+      box = rl.Rectangle(float(lo[0]), float(gui_app.height - hi[1]), float(max(hi[0] - lo[0], 1.0)),
+                         float(max(hi[1] - lo[1], 1.0)))
+      card = self.avoid_rect
+      top = int(card.y + card.height) if card is not None and card.width > 0 else 0
+      rl.begin_scissor_mode(0, top, int(gui_app.width), int(gui_app.height) - top)
+      draw_polygon(box, poly, gradient=gradient)
+      rl.end_scissor_mode()
 
   def _get_ll_color(self, prob: float, is_current_lane: bool) -> rl.Color:
     """Get lane line color based on UI status with confidence-based brightness.
